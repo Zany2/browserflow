@@ -1,0 +1,9 @@
+gfcli:
+  gen:
+    dao:
+      - link: "pgsql:postgres:daixk@tcp(192.168.19.104:5432)/browserflow"
+        jsonCase: "Snake"
+        typeMapping:
+          decimal:
+            type:   decimal.Decimal
+            import: github.com/shopspring/decimal

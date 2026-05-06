@@ -1,0 +1,62 @@
+// Center block 居中容器
+.center-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+// Adaptive table 自适应表格，允许内容换行并避免列表出现横向滚动
+.adaptive-table {
+  width: 100%;
+  min-width: 0;
+}
+
+.adaptive-table .el-table__inner-wrapper,
+.adaptive-table .el-scrollbar,
+.adaptive-table .el-scrollbar__wrap,
+.adaptive-table .el-scrollbar__view {
+  min-width: 0;
+}
+
+.adaptive-table .el-table__header,
+.adaptive-table .el-table__body {
+  width: 100% !important;
+  table-layout: fixed;
+}
+
+.adaptive-table .cell {
+  min-width: 0;
+  overflow: visible;
+  padding-right: 6px;
+  padding-left: 6px;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.adaptive-table .el-tooltip {
+  white-space: normal;
+}
+
+.adaptive-table .cell * {
+  max-width: 100%;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  word-break: break-word;
+}
+
+.adaptive-table .el-button + .el-button {
+  margin-left: 6px;
+}
+
+.adaptive-table .el-button {
+  white-space: normal;
+}
+
+.adaptive-table .nowrap-column .cell,
+.adaptive-table .nowrap-column .cell * {
+  white-space: nowrap !important;
+  word-break: normal;
+}

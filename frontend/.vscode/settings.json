@@ -1,0 +1,16 @@
+{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "jsconfig.json": "jsconfig.*.json",
+    "vite.config.*": "vite.config.*, .eslint*, eslint*, .oxlint*, .prettier*, .editorconfig",
+    "package.json": "package-lock.json, .eslint*, eslint*, .oxlint*, .prettier*, .editorconfig"
+  },
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit"
+  },
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "vetur.validation.template": false,
+  "vetur.validation.script": false,
+  "vetur.validation.style": false
+}
