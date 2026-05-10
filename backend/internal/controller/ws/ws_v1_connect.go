@@ -100,7 +100,7 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 			if strings.ToLower(strings.TrimSpace(agent.Role)) == "client_agent" {
 				continue
 			}
-			statuses = append(statuses, model.AgentStatus{BrowserID: agent.BrowserID, Online: true, AutomaInstalled: agent.AutomaInstalled, ConnectedAt: agent.ConnectedAt, LastSeenAt: agent.LastSeenAt})
+			statuses = append(statuses, model.AgentStatus{BrowserID: agent.BrowserID, Online: true, AutomaInstalled: agent.AutomaInstalled, AutomaVersion: agent.AutomaVersion, ConnectedAt: agent.ConnectedAt, LastSeenAt: agent.LastSeenAt})
 		}
 		return statuses
 	}
@@ -109,12 +109,20 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 			return
 		}
 		state.AgentMu.Lock()
-		delete(state.AgentConnections, registeredAgentID)
-		statuses := agentStatuses()
-		for listener := range state.AgentStatusListeners {
-			select {
-			case listener <- statuses:
-			default:
+		currentAgent := state.AgentConnections[registeredAgentID]
+		if currentAgent != nil && currentAgent.Client == client {
+			currentAgentRole := strings.ToLower(strings.TrimSpace(currentAgent.Role))
+			// Disconnect cleanup 只清理当前断开的连接，避免刷新重连时旧连接误删新连接
+			delete(state.AgentConnections, registeredAgentID)
+			statuses := agentStatuses()
+			for listener := range state.AgentStatusListeners {
+				select {
+				case listener <- statuses:
+				default:
+				}
+			}
+			if currentAgentRole == "browser_agent" {
+				scheduleBrowserRuntimeProbe(registeredAgentID)
 			}
 		}
 		state.AgentMu.Unlock()
@@ -209,6 +217,11 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 			}
 		case "agent_register":
 			if strings.TrimSpace(in.BrowserID) == "" {
+				state.BrowserMu.Lock()
+				in.BrowserID = strings.TrimSpace(state.BrowserCurrentInstanceID)
+				state.BrowserMu.Unlock()
+			}
+			if strings.TrimSpace(in.BrowserID) == "" {
 				err = writeJSON(model.WSResponse{Type: "error", Error: "browser agent missing browser_id"})
 				break
 			}
@@ -218,9 +231,9 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 				role = "browser_agent"
 			}
 			state.AgentMu.Lock()
-			state.AgentConnections[in.BrowserID] = &state.AgentConnection{BrowserID: in.BrowserID, Role: role, Token: in.Token, Client: client, AutomaInstalled: in.AutomaInstalled, ConnectedAt: now, LastSeenAt: now}
+			state.AgentConnections[in.BrowserID] = &state.AgentConnection{BrowserID: in.BrowserID, Role: role, Token: in.Token, Client: client, AutomaInstalled: in.AutomaInstalled, AutomaVersion: strings.TrimSpace(in.AutomaVersion), ConnectedAt: now, LastSeenAt: now}
 			registeredAgentID = in.BrowserID
-			status := model.AgentStatus{BrowserID: in.BrowserID, Online: true, AutomaInstalled: in.AutomaInstalled, ConnectedAt: now, LastSeenAt: now}
+			status := model.AgentStatus{BrowserID: in.BrowserID, Online: true, AutomaInstalled: in.AutomaInstalled, AutomaVersion: strings.TrimSpace(in.AutomaVersion), ConnectedAt: now, LastSeenAt: now}
 			statuses := agentStatuses()
 			for listener := range state.AgentStatusListeners {
 				select {
@@ -238,6 +251,7 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 			state.AgentMu.Lock()
 			if agent := state.AgentConnections[browserID]; agent != nil {
 				agent.AutomaInstalled = in.AutomaInstalled
+				agent.AutomaVersion = strings.TrimSpace(in.AutomaVersion)
 				agent.LastSeenAt = time.Now()
 			}
 			statuses := agentStatuses()
@@ -275,4 +289,65 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 	}
 	request.ExitAll()
 	return nil, nil
+}
+
+// scheduleBrowserRuntimeProbe checks browser runtime after agent disconnect. Agent 断开后延迟探测浏览器是否仍存活。
+func scheduleBrowserRuntimeProbe(browserID string) {
+	browserID = strings.TrimSpace(browserID)
+	if browserID == "" {
+		return
+	}
+
+	go func() {
+		time.Sleep(6 * time.Second)
+
+		state.AgentMu.Lock()
+		_, online := state.AgentConnections[browserID]
+		state.AgentMu.Unlock()
+		if online {
+			return
+		}
+
+		state.BrowserMu.Lock()
+		runtime := state.BrowserInstances[browserID]
+		state.BrowserMu.Unlock()
+		if runtime == nil || runtime.Browser == nil {
+			return
+		}
+
+		// Agent page probe 长时间没有执行端且页面不存在时，才认为被管理浏览器已不可用
+		if browserRuntimeHasAgentPage(runtime) {
+			return
+		}
+
+		removedRuntime, _, removed := state.RemoveBrowserRuntime(browserID, runtime)
+		if removed {
+			state.CleanupBrowserRuntime(removedRuntime)
+		}
+	}()
+}
+
+func browserRuntimeHasAgentPage(runtime *state.BrowserRuntime) bool {
+	if runtime == nil || runtime.Browser == nil {
+		return false
+	}
+
+	browser := runtime.Browser.Timeout(1 * time.Second)
+	defer browser.CancelTimeout()
+	pages, err := browser.Pages()
+	if err != nil {
+		return false
+	}
+
+	for _, page := range pages {
+		info, infoErr := page.Info()
+		if infoErr != nil {
+			continue
+		}
+		pageURL := strings.TrimSpace(info.URL)
+		if pageURL != "" && strings.Contains(pageURL, "#/browser-agent") {
+			return true
+		}
+	}
+	return false
 }

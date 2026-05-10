@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"context"
-	"fmt"
+	"github.com/gogf/gf/v2/os/gctx"
 	"os"
 	"time"
 
@@ -90,7 +90,7 @@ var (
 					defer cancel()
 
 					if cleanupErr := workflowcache.ClearBrowserflowKeys(cleanupCtx); cleanupErr != nil {
-						fmt.Println("清理 Redis 客户端缓存失败", cleanupErr.Error())
+						g.Log().Line().Error(gctx.New(), "清理 Redis 客户端缓存失败 ", cleanupErr.Error())
 					}
 				})
 			}

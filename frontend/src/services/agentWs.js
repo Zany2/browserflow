@@ -1,6 +1,10 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 // HEARTBEAT_INTERVAL_MS heartbeat interval 心跳发送间隔
 const HEARTBEAT_INTERVAL_MS = 15000
+// AUTOMA_STATUS_INTERVAL_MS status check interval Automa 安装状态检测间隔
+const AUTOMA_STATUS_INTERVAL_MS = 5000
+// AUTOMA_REFRESH_FAIL_LIMIT refresh page after consecutive failed probes 连续失败后刷新页面
+const AUTOMA_REFRESH_FAIL_LIMIT = 3
 // WORKFLOW_INVENTORY_INTERVAL_MS inventory check interval 工作流清单检查间隔
 const WORKFLOW_INVENTORY_INTERVAL_MS = 60000
 // AUTOMA_VERSION_PROBE_INTERVAL_MS version fallback probe interval 版本兜底探测间隔
@@ -38,10 +42,15 @@ export function createAgentSocket({
   let lastAutomaStatusHash = ''
   let lastWorkflowInventoryHash = ''
   let lastAutomaVersionProbeAt = 0
+  let lastKnownAutomaInstalled = false
   let lastKnownAutomaVersion = ''
+  // automaProbeFailCount consecutive failed bridge probes 连续桥接探测失败次数
+  let automaProbeFailCount = 0
+  // automaRefreshTimer pending page refresh timer 待执行页面刷新定时器
+  let automaRefreshTimer = null
   let currentClientIp = ''
 
-  const getCurrentAutomaInstalled = () => Boolean(getAutomaInstalled?.())
+  const getCurrentAutomaInstalled = () => Boolean(getAutomaInstalled?.() || lastKnownAutomaInstalled)
 
   const getCurrentAutomaInfo = async () => {
     const rawInfo = getAutomaInfo ? await getAutomaInfo() : {}
@@ -61,6 +70,7 @@ export function createAgentSocket({
     if (!installed) {
       lastKnownAutomaVersion = ''
     }
+    lastKnownAutomaInstalled = installed
 
     return {
       installed,
@@ -120,7 +130,7 @@ export function createAgentSocket({
   const sendAutomaStatus = async () => {
     const automaInfo = await getCurrentAutomaInfo()
     const automaStatusHash = getAutomaStatusHash(automaInfo)
-    if (automaStatusHash === lastAutomaStatusHash) return
+    const statusChanged = automaStatusHash !== lastAutomaStatusHash
 
     lastAutomaStatusHash = automaStatusHash
     sendJSON({
@@ -130,9 +140,10 @@ export function createAgentSocket({
       automa_installed: automaInfo.installed,
       automa_version: automaInfo.version,
     })
-    if (automaInfo.installed) {
+    trackAutomaProbeResult(automaInfo, { refreshOnFailure: true })
+    if (statusChanged && automaInfo.installed) {
       resetWorkflowInventoryCache()
-      sendWorkflowInventory()
+      sendWorkflowInventory({ automaInstalled: automaInfo.installed })
     }
   }
 
@@ -157,11 +168,16 @@ export function createAgentSocket({
   }
 
   // sendWorkflowInventory reports client workflow cache 上报客户端工作流清单缓存
-  const sendWorkflowInventory = async ({ force = false } = {}) => {
+  const sendWorkflowInventory = async ({ force = false, automaInstalled = null } = {}) => {
     if (!enableWorkflowInventory) {
       return { workflow_count: 0, skipped: true }
     }
-    if (!getWorkflows || !getCurrentAutomaInstalled()) {
+    if (!getWorkflows) {
+      return { workflow_count: 0, skipped: true }
+    }
+
+    const installed = automaInstalled ?? (await getCurrentAutomaInfo()).installed
+    if (!installed) {
       return { workflow_count: 0, skipped: true }
     }
 
@@ -199,6 +215,26 @@ export function createAgentSocket({
   // resetWorkflowInventoryCache forces inventory resend after reconnect. 重连后强制重新上报工作流清单
   const resetWorkflowInventoryCache = () => {
     lastWorkflowInventoryHash = ''
+  }
+
+  // trackAutomaProbeResult handles bridge probe state 处理桥接探测结果
+  const trackAutomaProbeResult = (automaInfo, { refreshOnFailure = false } = {}) => {
+    if (automaInfo?.installed) {
+      automaProbeFailCount = 0
+      if (automaRefreshTimer) {
+        window.clearTimeout(automaRefreshTimer)
+        automaRefreshTimer = null
+      }
+      return
+    }
+
+    automaProbeFailCount += 1
+    if (!refreshOnFailure || automaProbeFailCount < AUTOMA_REFRESH_FAIL_LIMIT || automaRefreshTimer) return
+
+    // Reload after status report so backend sees unavailable first 状态上报后刷新，确保后端先收到不可用
+    automaRefreshTimer = window.setTimeout(() => {
+      window.location.reload()
+    }, 100)
   }
 
   const handleMessage = async (event) => {
@@ -326,7 +362,7 @@ export function createAgentSocket({
       clearSocketTimers()
       resetWorkflowInventoryCache()
       registerAgent()
-      statusTimer = window.setInterval(sendAutomaStatus, 2000)
+      statusTimer = window.setInterval(sendAutomaStatus, AUTOMA_STATUS_INTERVAL_MS)
       if (enableHeartbeat) {
         heartbeatTimer = window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS)
       }
@@ -358,6 +394,7 @@ export function createAgentSocket({
   return () => {
     stopped = true
     if (reconnectTimer) window.clearTimeout(reconnectTimer)
+    if (automaRefreshTimer) window.clearTimeout(automaRefreshTimer)
     clearSocketTimers()
     socket?.close()
   }

@@ -4,6 +4,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from '@/router'
+import { setAppConfirmContext } from '@/components/AppConfirm'
 
 import 'element-plus/dist/index.css'
 import '@/styles/reset.scss'
@@ -17,4 +18,9 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 }
 
 // Bootstrap 应用入口，使用中文语言包注册 Element Plus
-app.use(router).use(ElementPlus, { locale: zhCn }).mount('#app')
+app.use(router).use(ElementPlus, { locale: zhCn })
+
+// App confirm context 让动态确认框复用主应用上下文
+setAppConfirmContext(app._context)
+
+app.mount('#app')

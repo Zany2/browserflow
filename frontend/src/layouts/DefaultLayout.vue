@@ -47,9 +47,9 @@ const navSections = [
     key: 'desktop',
     items: [
       { to: '/browser', label: '浏览器' },
+      { to: '/workflows', label: '工作流' },
       { to: '/llm', label: '大模型' },
       { to: '/chat', label: '对话' },
-      { to: '/workflows', label: '工作流' },
     ],
   },
   {

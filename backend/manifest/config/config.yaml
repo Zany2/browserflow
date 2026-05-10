@@ -7,7 +7,7 @@ server:
 
 # 应用运行模式：windows 本地版，server 服务器调度版
 app:
-  mode: "server"
+  mode: "windows"
 
 # 日志配置
 logger:

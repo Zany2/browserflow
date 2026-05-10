@@ -21,7 +21,6 @@ import (
 	"github.com/go-rod/rod/lib/launcher/flags"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/util/guid"
 )
 
 // BrowserInstanceStart starts browser instance 启动浏览器实例
@@ -72,8 +71,10 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 	state.BrowserMu.Unlock()
 
 	var runtime *state.BrowserRuntime
-	agentToken := "agent_" + guid.S()
-	agentURL := fmt.Sprintf("%s/#/browser-agent?browserId=%s&token=%s", strings.TrimRight(frontendURL, "/"), url.QueryEscape(instance.ID), url.QueryEscape(agentToken))
+	agentURL := fmt.Sprintf("%s/#/browser-agent", strings.TrimRight(frontendURL, "/"))
+	state.BrowserMu.Lock()
+	state.BrowserCurrentInstanceID = instance.ID
+	state.BrowserMu.Unlock()
 	if instance.Type == "remote" {
 		controlURL := strings.TrimSpace(instance.ControlURL)
 		if controlURL == "" {
@@ -121,7 +122,7 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 		if userAgent := strings.TrimSpace(instance.UserAgent); userAgent != "" {
 			agentPage = agentPage.MustSetUserAgent(&proto.NetworkSetUserAgentOverride{UserAgent: userAgent})
 		}
-		runtime = &state.BrowserRuntime{Instance: instance, Browser: browser, StartTime: time.Now(), ControlURL: controlURL, AgentURL: agentURL, AgentToken: agentToken}
+		runtime = &state.BrowserRuntime{Instance: instance, Browser: browser, StartTime: time.Now(), ControlURL: controlURL, AgentURL: agentURL}
 	} else {
 		launcherInstance := launcher.New()
 		binPath := strings.TrimSpace(instance.BinPath)
@@ -273,7 +274,7 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 			}
 			return nil, err
 		}
-		runtime = &state.BrowserRuntime{Instance: instance, Browser: browser, Launcher: launcherInstance, StartTime: time.Now(), ControlURL: controlURL, AgentURL: agentURL, AgentToken: agentToken}
+		runtime = &state.BrowserRuntime{Instance: instance, Browser: browser, Launcher: launcherInstance, StartTime: time.Now(), ControlURL: controlURL, AgentURL: agentURL}
 	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -292,5 +293,6 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 		}
 	}
 	state.BrowserMu.Unlock()
+	watchBrowserRuntime(instance.ID, runtime)
 	return &v1.BrowserInstanceStartRes{Status: &status}, nil
 }

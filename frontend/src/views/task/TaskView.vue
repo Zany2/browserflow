@@ -231,7 +231,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { Plus, RefreshRight } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
@@ -418,7 +419,7 @@ async function handleSaveTask() {
 
     const savedTask = mergeSavedTask(data?.task, payload, taskForm.id)
     upsertTask(savedTask)
-    ElMessage.success(taskForm.id ? '任务已保存' : '任务已新增')
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: taskForm.id ? '任务已保存' : '任务已新增' })
     taskDialogVisible.value = false
   } finally {
     saving.value = false
@@ -434,10 +435,17 @@ function handleDialogClosed() {
 }
 
 async function handleDeleteTask(row) {
-  await ElMessageBox.confirm('确认删除这个任务吗？', '删除任务', { type: 'warning' })
+  const confirmed = await appConfirm({
+    title: '删除任务',
+    message: '确认删除这个任务吗？',
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
   await deleteTask(row.id)
   tasks.value = tasks.value.filter((item) => item.id !== row.id)
-  ElMessage.success('任务已删除')
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已删除' })
 }
 
 async function handleExecuteTask(row) {
@@ -446,7 +454,7 @@ async function handleExecuteTask(row) {
     client_ip: row.client_ip || '',
     params: row.params || {},
   })
-  ElMessage.success('任务已下发')
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已下发' })
 }
 
 function handleWorkflowChange(workflowId) {
@@ -484,15 +492,15 @@ function removeParam(index) {
 
 function buildTaskPayload() {
   if (!taskForm.name.trim()) {
-    ElMessage.warning('请输入任务名称')
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请输入任务名称' })
     return null
   }
   if (!taskForm.workflow_id.trim()) {
-    ElMessage.warning('请选择需要执行的工作流')
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请选择需要执行的工作流' })
     return null
   }
   if (!taskForm.client_id.trim()) {
-    ElMessage.warning('请选择需要执行的客户端')
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请选择需要执行的客户端' })
     return null
   }
 
@@ -523,11 +531,11 @@ function buildParamObject() {
 
     if (!key && !value) continue
     if (!key) {
-      ElMessage.warning('参数 key 不能为空')
+      appMessage({ type: APP_MESSAGE_TYPE.warning, message: '参数 key 不能为空' })
       return null
     }
     if (Object.prototype.hasOwnProperty.call(params, key)) {
-      ElMessage.warning(`参数 key 重复：${key}`)
+      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 key 重复：${key}` })
       return null
     }
 

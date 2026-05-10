@@ -65,21 +65,27 @@
             <template #default="{ row }">
               <div class="instance-name">
                 <span class="instance-name__text" :title="row.name">{{ row.name }}</span>
+                <el-tag v-if="row.is_current" size="small" type="primary">当前</el-tag>
                 <el-tag v-if="row.is_active" size="small" type="success">运行</el-tag>
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="Automa" width="82" align="center" class-name="action-column">
+          <el-table-column label="Automa" width="106" align="center" class-name="action-column">
             <template #default="{ row }">
-              <el-tag :type="getAutomaTagType(row)" effect="plain">
-                {{ getAutomaStatusText(row) }}
-              </el-tag>
+              <div class="automa-status">
+                <el-tag :type="getAutomaTagType(row)" effect="plain">
+                  {{ getAutomaStatusText(row) }}
+                </el-tag>
+                <span v-if="getAutomaVersionText(row)" class="automa-version">
+                  {{ getAutomaVersionText(row) }}
+                </span>
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="默认" width="60" align="center" class-name="action-column">
             <template #default="{ row }">
               <el-tag v-if="row.is_default" type="success" effect="plain">默认</el-tag>
-              <span v-else>-</span>
+              <span v-else></span>
             </template>
           </el-table-column>
           <el-table-column label="类型" width="66">
@@ -87,11 +93,11 @@
               {{ row.type === 'remote' ? '远程' : '本地' }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
+          <el-table-column label="操作" width="138" class-name="operation-column">
             <template #default="{ row }">
-              <el-button link type="primary" @click.stop="handleStart(row)">启动</el-button>
-              <el-button link @click.stop="handleStop(row)">停止</el-button>
-              <el-button link @click.stop="handleSwitch(row)">切换</el-button>
+              <el-button link type="primary" :disabled="row.is_active" @click.stop="handleStart(row)">启动</el-button>
+              <el-button link type="danger" :disabled="!row.is_active" @click.stop="handleStop(row)">停止</el-button>
+              <el-button link type="success" :disabled="!row.is_active || row.is_current" @click.stop="handleSwitch(row)">切换</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -184,9 +190,8 @@
 
           <el-form-item>
             <el-button type="primary" :loading="saving" @click="handleSave">{{ saveButtonText }}</el-button>
-            <el-button :disabled="!form.id" :loading="starting" @click="handleStart(form)">启动</el-button>
+            <el-button :disabled="!form.id" :loading="starting" @click="handleStart(form, true)">启动</el-button>
             <el-button :disabled="!form.id" @click="handleStop(form)">停止</el-button>
-            <el-button :disabled="!currentAgentOnline" @click="handleSyncWorkflows">同步工作流</el-button>
             <el-button :disabled="!form.id" @click="handleDelete">删除</el-button>
           </el-form-item>
         </el-form>
@@ -236,7 +241,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { Check, Plus, RefreshRight } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
 import {
   createBrowserInstance,
@@ -248,7 +254,6 @@ import {
   stopBrowserInstance,
   subscribeAgentStatus,
   subscribeBrowserStatus,
-  syncAutomaWorkflows,
   switchBrowserInstance,
   updateBrowserInstance,
 } from '@/services/browser'
@@ -266,6 +271,7 @@ const launchArgsText = ref('')
 const agents = ref([])
 const runtimeNow = ref(Date.now())
 const runtimeClockTimer = ref(null)
+const browserStatusRefreshing = ref(false)
 const stopBrowserStatusSubscribe = ref(null)
 const stopAgentStatusSubscribe = ref(null)
 const status = ref({
@@ -354,13 +360,28 @@ function startRuntimeRefresh() {
   runtimeClockTimer.value = window.setInterval(() => {
     runtimeNow.value = Date.now()
   }, 1000)
-  stopBrowserStatusSubscribe.value = subscribeBrowserStatus((nextStatus) => {
-    status.value = nextStatus || status.value
-    markActiveInstances()
-  }, (error) => ElMessage.error(error.message))
+  stopBrowserStatusSubscribe.value = subscribeBrowserStatus(handleBrowserStatusChanged, (error) =>
+    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message }),
+  )
   stopAgentStatusSubscribe.value = subscribeAgentStatus((nextAgents) => {
     agents.value = nextAgents || []
-  }, (error) => ElMessage.error(error.message))
+  }, (error) => appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message }))
+}
+
+async function handleBrowserStatusChanged(nextStatus) {
+  status.value = nextStatus || status.value
+  markActiveInstances()
+  if (browserStatusRefreshing.value) return
+
+  browserStatusRefreshing.value = true
+  try {
+    // Runtime list refresh 运行态变化后重新拉列表，确保非当前实例关闭也能同步状态
+    await loadAll()
+  } catch (error) {
+    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
+  } finally {
+    browserStatusRefreshing.value = false
+  }
 }
 
 function stopRuntimeRefresh() {
@@ -394,7 +415,7 @@ async function handleSave() {
     const data = form.id
       ? await updateBrowserInstance(form.id, payload)
       : await createBrowserInstance(payload)
-    ElMessage.success(isCreate ? '新增成功' : '保存成功')
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: isCreate ? '新增成功' : '保存成功' })
     await loadAll()
     selectInstance(data.instance)
   } finally {
@@ -414,7 +435,10 @@ async function handleDefaultChange(checked) {
       ...buildPayload(),
       is_default: nextDefault,
     })
-    ElMessage.success(nextDefault ? '已设为默认配置' : '已取消默认配置')
+    appMessage({
+      type: APP_MESSAGE_TYPE.success,
+      message: nextDefault ? '已设为默认配置' : '已取消默认配置',
+    })
     await loadAll()
     const current = instances.value.find((instance) => instance.id === form.id)
     if (current) selectInstance(current)
@@ -426,17 +450,24 @@ async function handleDefaultChange(checked) {
   }
 }
 
-async function handleStart(row) {
+async function handleStart(row, saveBeforeStart = false) {
   if (!row.id) {
-    ElMessage.warning('请先保存浏览器配置')
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先保存浏览器配置' })
     return
   }
 
   starting.value = true
   try {
+    if (saveBeforeStart) {
+      // Save before launch 编辑区启动前先保存表单，避免刷新后丢失未持久化配置
+      const data = await updateBrowserInstance(form.id, buildPayload())
+      if (data.instance) {
+        selectInstance(data.instance)
+      }
+    }
     const data = await startBrowserInstance(row.id)
     status.value = data.status || status.value
-    ElMessage.success('浏览器已启动')
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '浏览器已启动' })
     await loadAll()
   } finally {
     starting.value = false
@@ -447,35 +478,34 @@ async function handleStop(row) {
   if (!row.id) return
   const data = await stopBrowserInstance(row.id)
   status.value = data.status || status.value
-  ElMessage.success('浏览器已停止')
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '浏览器已停止' })
   await loadAll()
 }
 
 async function handleSwitch(row) {
   const data = await switchBrowserInstance(row.id)
   status.value = data.status || status.value
-  ElMessage.success('已切换当前浏览器')
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '已切换当前浏览器' })
   await loadAll()
-}
-
-async function handleSyncWorkflows() {
-  const browserId = status.value.current_instance_id
-  if (!browserId) return
-
-  await syncAutomaWorkflows(browserId)
-  ElMessage.success('工作流同步命令已发送')
 }
 
 async function copyRuntimeValue(value) {
   if (!value) return
 
   await navigator.clipboard.writeText(value)
-  ElMessage.success('已复制')
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '已复制' })
 }
 
 async function handleDelete() {
   if (!form.id) return
-  await ElMessageBox.confirm('确认删除这个浏览器配置吗？', '删除配置', { type: 'warning' })
+  const confirmed = await appConfirm({
+    title: '删除配置',
+    message: '确认删除这个浏览器配置吗？',
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
   await deleteBrowserInstance(form.id)
   removeInstancesFromState([form.id])
   handleNew()
@@ -503,9 +533,14 @@ async function handleDeleteSelectedInstances() {
   const ids = selectedInstanceIds.value.slice()
   if (ids.length === 0) return
 
-  await ElMessageBox.confirm(`确认删除选中的 ${ids.length} 个浏览器配置吗？`, '批量删除配置', {
-    type: 'warning',
+  const confirmed = await appConfirm({
+    title: '批量删除配置',
+    message: `确认删除选中的 ${ids.length} 个浏览器配置吗？`,
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
   })
+  if (!confirmed) return
+
   // Batch delete 批量删除，复用现有单个删除接口
   await Promise.all(ids.map((id) => deleteBrowserInstance(id)))
   removeInstancesFromState(ids)
@@ -551,7 +586,14 @@ function getAgentByBrowserId(browserId) {
 function getAutomaStatusText(instance) {
   const agent = getAgentByBrowserId(instance.id)
   if (!agent?.online) return '离线'
-  return agent.automa_installed ? '已安装' : '未检测'
+  if (!agent.automa_installed) return '不可用'
+  return '已安装'
+}
+
+function getAutomaVersionText(instance) {
+  const agent = getAgentByBrowserId(instance.id)
+  if (!agent?.online || !agent.automa_installed) return ''
+  return agent.automa_version || ''
 }
 
 function getAutomaTagType(instance) {
@@ -572,9 +614,12 @@ function buildPayload() {
 
 function markActiveInstances() {
   const currentId = status.value.current_instance_id
+  const hasCurrent = Boolean(status.value.running && currentId)
   instances.value = instances.value.map((instance) => ({
     ...instance,
-    is_active: Boolean(currentId && instance.id === currentId),
+    // Active state 保留后端返回的运行状态，同时确保当前实例被标记为运行
+    is_active: hasCurrent ? Boolean(instance.is_active || instance.id === currentId) : false,
+    is_current: Boolean(hasCurrent && instance.id === currentId),
   }))
 }
 
@@ -664,6 +709,12 @@ function createEmptyForm() {
   min-height: 0;
 }
 
+.instance-panel :deep(.el-table .cell) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .panel-title {
   display: flex;
   align-items: center;
@@ -688,6 +739,7 @@ function createEmptyForm() {
 }
 
 .instance-name__text {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -695,6 +747,42 @@ function createEmptyForm() {
 }
 
 .instance-name :deep(.el-tag) {
+  flex-shrink: 0;
+}
+
+.automa-status {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  line-height: 1;
+}
+
+.automa-version {
+  max-width: 88px;
+  overflow: hidden;
+  color: #909399;
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instance-panel :deep(.el-button + .el-button) {
+  margin-left: 6px;
+}
+
+.instance-panel :deep(.operation-column .cell) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.instance-panel :deep(.operation-column .el-button) {
   flex-shrink: 0;
 }
 

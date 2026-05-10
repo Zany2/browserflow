@@ -1,14 +1,23 @@
 import { AUTOMA_EVENTS } from '@/constants/automa'
 
+const AUTOMA_INSTALL_PROBE_TIMEOUT_MS = 1500
+const AUTOMA_INSTALL_PROBE_RETRY_INTERVAL_MS = 200
+const AUTOMA_INSTALL_PROBE_CACHE_MS = 4000
+
+let lastInstallProbeAt = 0
+let lastInstallProbeResult = false
+let installProbePromise = null
+
 // isAutomaInstalled checks extension marker 检查扩展注入标记
 export function isAutomaInstalled() {
-  return Boolean(document.body?.dataset?.atmExtInstalled)
+  return Boolean(getInjectedAutomaMarker())
 }
 
 // getAutomaVersion reads extension version from injected markers 读取扩展注入的版本标记
 export function getAutomaVersion() {
   const dataset = document.body?.dataset || {}
   const versionKeys = [
+    'atmExtInstalled',
     'atmExtVersion',
     'atmVersion',
     'automaVersion',
@@ -26,10 +35,13 @@ export function getAutomaVersion() {
 }
 
 // getAutomaInfo returns current extension metadata 返回当前扩展元信息
-export function getAutomaInfo() {
+export async function getAutomaInfo() {
+  const version = getAutomaVersion()
+  const bridgeReady = await probeAutomaBridgeInstalled()
+
   return {
-    installed: isAutomaInstalled(),
-    version: getAutomaVersion(),
+    installed: bridgeReady,
+    version: bridgeReady ? version : '',
   }
 }
 
@@ -163,6 +175,39 @@ function dispatchBridgeEvent(detail) {
 
 function createBridgeRequestId() {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function getInjectedAutomaMarker() {
+  return String(document.body?.dataset?.atmExtInstalled || '').trim()
+}
+
+async function probeAutomaBridgeInstalled() {
+  if (installProbePromise) {
+    return installProbePromise
+  }
+
+  const now = Date.now()
+  if (now - lastInstallProbeAt < AUTOMA_INSTALL_PROBE_CACHE_MS) {
+    return lastInstallProbeResult
+  }
+
+  // Bridge probe 使用工作流桥接响应判断扩展是否仍然可用
+  installProbePromise = getAutomaWorkflows({
+    timeout: AUTOMA_INSTALL_PROBE_TIMEOUT_MS,
+    retryInterval: AUTOMA_INSTALL_PROBE_RETRY_INTERVAL_MS,
+  })
+    .then(() => true)
+    .catch(() => false)
+    .then((installed) => {
+      lastInstallProbeAt = Date.now()
+      lastInstallProbeResult = installed
+      return installed
+    })
+    .finally(() => {
+      installProbePromise = null
+    })
+
+  return installProbePromise
 }
 
 function normalizeWorkflows(workflows) {

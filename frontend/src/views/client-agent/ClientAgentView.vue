@@ -188,7 +188,6 @@ import {
   getAutomaWorkflows,
   getAutomaInfo,
   importAutomaWorkflow,
-  isAutomaInstalled,
   openAutomaWorkflow,
   runAutomaWorkflow,
 } from '@/services/automaBridge'
@@ -263,8 +262,9 @@ watch(syncPageSize, () => {
   loadFirstSyncPage()
 })
 
-function refreshAutomaState() {
-  automaInstalled.value = isAutomaInstalled()
+async function refreshAutomaState() {
+  const automaInfo = await getAutomaInfo()
+  automaInstalled.value = automaInfo.installed
 }
 
 function connectSocket() {

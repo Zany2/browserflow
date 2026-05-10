@@ -17,20 +17,16 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import {
   getAutomaInfo,
   getAutomaWorkflows,
-  isAutomaInstalled,
   openAutomaWorkflow,
   runAutomaWorkflow,
 } from '@/services/automaBridge'
 import { createAgentSocket } from '@/services/agentWs'
 
-const route = useRoute()
-const browserId = String(route.query.browserId || '')
-const token = String(route.query.token || '')
+const browserId = ref('')
 const status = ref('connecting')
 const lastCommand = ref('')
 const lastResult = ref('')
@@ -38,18 +34,19 @@ const closeSocket = ref(null)
 
 onMounted(() => {
   closeSocket.value = createAgentSocket({
-    browserId,
-    token,
-    getAutomaInstalled: isAutomaInstalled,
+    browserId: browserId.value,
     getAutomaInfo,
     getWorkflows: getAutomaWorkflows,
     onCommand: handleCommand,
     onStatus: (nextStatus) => {
       status.value = nextStatus
     },
+    onRegistered: (payload) => {
+      browserId.value = payload?.browser_id || ''
+    },
     onError: (error) => {
       lastResult.value = error.message
-      ElMessage.error(error.message)
+      appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
     },
   })
 })

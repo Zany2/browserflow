@@ -36,6 +36,7 @@ type AgentConnection struct {
 	Token           string    // Token agent auth token 执行端认证令牌
 	Client          *WSClient // Client websocket client WebSocket 客户端
 	AutomaInstalled bool      // AutomaInstalled plugin installed status 插件安装状态
+	AutomaVersion   string    // AutomaVersion plugin version 插件版本
 	ConnectedAt     time.Time // ConnectedAt connection time 连接建立时间
 	LastSeenAt      time.Time // LastSeenAt last active time 最近活跃时间
 }

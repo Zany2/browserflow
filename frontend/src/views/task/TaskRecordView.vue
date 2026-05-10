@@ -159,7 +159,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
@@ -285,7 +285,7 @@ async function handleRetryRecord(row) {
     client_ip: row.client_ip || '',
     params: row.params || {},
   })
-  ElMessage.success('任务已重新下发')
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已重新下发' })
   await loadRecords()
 }
 

@@ -91,6 +91,22 @@
         </template>
       </el-table-column>
 
+      <el-table-column label="触发器参数" min-width="220">
+        <template #default="{ row }">
+          <div v-if="getTriggerParameters(row).length > 0" class="trigger-params">
+            <el-tag
+              v-for="(param, index) in getTriggerParameters(row)"
+              :key="getTriggerParamKey(param, index)"
+              class="trigger-param-tag"
+              effect="plain"
+              :title="getTriggerParamTitle(param)"
+            >
+              {{ formatTriggerParam(param) }}
+            </el-tag>
+          </div>
+        </template>
+      </el-table-column>
+
       <el-table-column label="节点数" width="70" align="center">
         <template #default="{ row }">
           {{ getNodeCount(row) }}
@@ -308,6 +324,67 @@ function clearFilterSearchTimer() {
   filterSearchTimer = 0
 }
 
+function getTriggerParameters(workflow) {
+  // Trigger parameters 优先读取顶层触发器，兜底读取流程图 trigger 节点
+  const triggerData = workflow?.trigger || getTriggerNode(workflow)?.data || {}
+  return Array.isArray(triggerData.parameters) ? triggerData.parameters : []
+}
+
+function getTriggerNode(workflow) {
+  // Trigger node Automa 新版流程图中触发器通常是 label 为 trigger 的节点
+  if (workflow?.drawflow?.nodes) {
+    return workflow.drawflow.nodes.find((node) => node?.label === 'trigger') || null
+  }
+
+  // Legacy drawflow 兼容 Automa 旧版 drawflow.Home.data 结构
+  const legacyNodes = workflow?.drawflow?.drawflow?.Home?.data
+  if (legacyNodes) {
+    return Object.values(legacyNodes).find((node) => node?.name === 'trigger') || null
+  }
+
+  return null
+}
+
+function getTriggerParamKey(param, index) {
+  // Param key 使用索引兜底，避免同名参数 key 冲突
+  return `${param?.name || ''}_${param?.type || ''}_${param?.placeholder || ''}_${index}`
+}
+
+function getTriggerParamTitle(param) {
+  const parts = [
+    `名称：${param?.name || '-'}`,
+    `类型：${formatTriggerParamType(param?.type)}`,
+    `默认值：${formatTriggerParamDefaultValue(param?.defaultValue)}`,
+  ]
+  if (param?.placeholder) parts.push(`占位提示：${param.placeholder}`)
+  if (param?.description) parts.push(`说明：${param.description}`)
+  if (param?.data?.required) parts.push('必填：是')
+  return parts.join('\n')
+}
+
+function formatTriggerParam(param) {
+  const name = param?.name || '未命名'
+  const type = formatTriggerParamType(param?.type)
+  const defaultValue = formatTriggerParamDefaultValue(param?.defaultValue)
+  return defaultValue ? `${name} / ${type} = ${defaultValue}` : `${name} / ${type}`
+}
+
+function formatTriggerParamType(type) {
+  const typeMap = {
+    string: '文本',
+    number: '数字',
+    json: 'JSON',
+    checkbox: '勾选框',
+  }
+  return typeMap[type] || type || '未知'
+}
+
+function formatTriggerParamDefaultValue(value) {
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
 function getNodeCount(workflow) {
   return workflow.drawflow?.nodes?.length || 0
 }
@@ -449,6 +526,25 @@ function padDatePart(value) {
   display: block;
   overflow: hidden;
   color: #909399;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger-params {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.trigger-param-tag {
+  max-width: 100%;
+}
+
+.trigger-param-tag :deep(.el-tag__content) {
+  max-width: 180px;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

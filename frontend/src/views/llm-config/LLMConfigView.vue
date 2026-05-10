@@ -132,8 +132,9 @@
             label="名称"
             min-width="110"
             class-name="ellipsis-column"
+            show-overflow-tooltip
           />
-          <el-table-column label="提供商" width="90" class-name="ellipsis-column">
+          <el-table-column label="提供商" width="90" class-name="ellipsis-column" show-overflow-tooltip>
             <template #default="{ row }">
               {{ getProviderName(row.provider) }}
             </template>
@@ -143,12 +144,14 @@
             label="模型名称"
             min-width="110"
             class-name="ellipsis-column"
+            show-overflow-tooltip
           />
           <el-table-column
             prop="base_url"
             label="Base URL"
             min-width="140"
             class-name="ellipsis-column"
+            show-overflow-tooltip
           />
           <el-table-column label="默认" width="70" align="center" class-name="action-column">
             <template #default="{ row }">
@@ -189,7 +192,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
 import {
   createLLMConfig,
@@ -296,7 +300,7 @@ async function handleSaveConfig() {
   saving.value = true
   try {
     await createLLMConfig({ ...configForm })
-    ElMessage.success('保存成功')
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '保存成功' })
     resetConfigForm()
     await loadConfigs()
   } finally {
@@ -309,17 +313,24 @@ async function handleTestConfig() {
   try {
     const data = await testLLMConfig({ ...configForm })
     if (data.success === false) {
-      ElMessage.error(data.message || '连接失败')
+      appMessage({ type: APP_MESSAGE_TYPE.error, message: data.message || '连接失败' })
       return
     }
-    ElMessage.success(data.message || '连接成功')
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: data.message || '连接成功' })
   } finally {
     testing.value = false
   }
 }
 
 async function handleDeleteConfig(configId) {
-  await ElMessageBox.confirm('确认删除这个模型配置吗？', '删除配置', { type: 'warning' })
+  const confirmed = await appConfirm({
+    title: '删除配置',
+    message: '确认删除这个模型配置吗？',
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
   await deleteLLMConfig(configId)
   removeConfigsFromState([configId])
   await loadConfigs()
@@ -334,7 +345,7 @@ async function handleToggleConfigStatus(config, checked) {
   try {
     // Status update 状态更新，复用完整配置更新接口避免新增后端路由
     await updateLLMConfig(config.id, { ...config, is_active: nextActive })
-    ElMessage.success(nextActive ? '已启用' : '已停用')
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: nextActive ? '已启用' : '已停用' })
   } catch (error) {
     config.is_active = previousActive
     throw error
@@ -359,9 +370,14 @@ async function handleDeleteSelectedConfigs() {
   const ids = selectedConfigIds.value.slice()
   if (ids.length === 0) return
 
-  await ElMessageBox.confirm(`确认删除选中的 ${ids.length} 个模型配置吗？`, '批量删除配置', {
-    type: 'warning',
+  const confirmed = await appConfirm({
+    title: '批量删除配置',
+    message: `确认删除选中的 ${ids.length} 个模型配置吗？`,
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
   })
+  if (!confirmed) return
+
   await deleteLLMConfigs(ids)
   removeConfigsFromState(ids)
   await loadConfigs()

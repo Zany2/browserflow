@@ -124,6 +124,7 @@ type AgentStatus struct {
 	BrowserID       string    `json:"browser_id"`
 	Online          bool      `json:"online"`
 	AutomaInstalled bool      `json:"automa_installed"`
+	AutomaVersion   string    `json:"automa_version"`
 	ConnectedAt     time.Time `json:"connected_at"`
 	LastSeenAt      time.Time `json:"last_seen_at"`
 }

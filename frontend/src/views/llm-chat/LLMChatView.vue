@@ -15,7 +15,6 @@
             :value="config.id"
           />
         </el-select>
-        <el-button :icon="Setting" @click="configDialogVisible = true" />
       </div>
 
       <div class="session-toolbar">
@@ -75,14 +74,6 @@
     </aside>
 
     <main class="chat-panel">
-      <header class="chat-header">
-        <div>
-          <h2>{{ currentModelName }}</h2>
-          <p>仿照 BrowserWing 的会话体验，支持模型配置、会话持久化和流式输出。</p>
-        </div>
-        <el-button :icon="Setting" @click="configDialogVisible = true">模型配置</el-button>
-      </header>
-
       <div ref="messageListRef" class="message-list">
         <el-empty v-if="!currentSession" description="请选择或新建一个会话" />
         <template v-else>
@@ -130,81 +121,23 @@
         </el-button>
       </footer>
     </main>
-
-    <AppDialog v-model="configDialogVisible" title="大模型配置" width="720px">
-      <el-form label-width="96px" :model="configForm">
-        <el-form-item label="配置名称">
-          <el-input v-model="configForm.name" placeholder="例如：deepseek" />
-        </el-form-item>
-        <el-form-item label="提供商">
-          <el-select v-model="configForm.provider" filterable @change="handleProviderChange">
-            <el-option
-              v-for="provider in providerCatalog"
-              :key="provider.id"
-              :label="provider.name"
-              :value="provider.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="模型名称">
-          <el-input v-model="configForm.model" placeholder="请输入模型名称，例如：deepseek-chat" />
-        </el-form-item>
-        <el-form-item label="API Key">
-          <el-input v-model="configForm.api_key" show-password placeholder="Ollama 可不填" />
-        </el-form-item>
-        <el-form-item label="Base URL">
-          <el-input v-model="configForm.base_url" placeholder="可不填，不填时后端根据提供商使用默认 Base URL" />
-        </el-form-item>
-        <el-form-item>
-          <el-checkbox v-model="configForm.is_default">设为默认</el-checkbox>
-          <el-checkbox v-model="configForm.is_active">启用</el-checkbox>
-        </el-form-item>
-      </el-form>
-
-      <el-table class="config-table adaptive-table" :data="configs" border>
-        <el-table-column prop="name" label="名称" min-width="110" />
-        <el-table-column prop="provider" label="提供商" width="90" />
-        <el-table-column prop="model" label="模型" min-width="130" />
-        <el-table-column label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'">
-              {{ row.is_active ? '启用' : '停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="70">
-          <template #default="{ row }">
-            <el-button link type="danger" @click="handleDeleteConfig(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <template #footer>
-        <el-button @click="configDialogVisible = false">关闭</el-button>
-        <el-button @click="handleTestConfig">测试连接</el-button>
-        <el-button type="primary" @click="handleSaveConfig">保存配置</el-button>
-      </template>
-    </AppDialog>
   </section>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { Delete, Plus, Promotion, Setting } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import AppDialog from '@/components/AppDialog.vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { Delete, Plus, Promotion } from '@element-plus/icons-vue'
+import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
 import {
   createChatSession,
-  createLLMConfig,
   deleteChatSession,
   deleteChatSessions,
-  deleteLLMConfig,
   listChatSessions,
   listLLMConfigs,
   listLLMProviders,
   streamChatMessage,
-  testLLMConfig,
 } from '@/services/llmChat'
 
 const configs = ref([])
@@ -218,18 +151,7 @@ const sessionPageSize = ref(10)
 const sessionPageSizes = [10, 30, 60]
 const inputMessage = ref('')
 const streaming = ref(false)
-const configDialogVisible = ref(false)
 const messageListRef = ref(null)
-
-const configForm = reactive({
-  name: '',
-  provider: 'openai',
-  api_key: '',
-  model: '',
-  base_url: '',
-  is_default: false,
-  is_active: true,
-})
 
 const activeConfigs = computed(() => configs.value.filter((config) => config.is_active))
 const canSend = computed(() => Boolean(currentSession.value && inputMessage.value.trim() && !streaming.value))
@@ -247,13 +169,6 @@ const isAllSessionsSelected = computed(
 const isSessionSelectionIndeterminate = computed(
   () => selectedPagedSessionIds.value.length > 0 && selectedPagedSessionIds.value.length < pagedSessionIds.value.length,
 )
-const currentProvider = computed(() =>
-  providerCatalog.value.find((provider) => provider.id === configForm.provider),
-)
-const currentModelName = computed(() => {
-  const config = configs.value.find((item) => item.id === currentSession.value?.llm_config_id)
-  return config ? getConfigLabel(config) : '未选择模型'
-})
 
 watch(
   () => currentSession.value?.messages?.length,
@@ -300,8 +215,7 @@ async function loadSessions(preferredSessionId = currentSession.value?.id) {
 
 async function handleCreateSession() {
   if (!selectedConfigId.value) {
-    configDialogVisible.value = true
-    ElMessage.warning('请先配置并启用大模型')
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先在大模型配置页面配置并启用模型' })
     return
   }
 
@@ -312,7 +226,14 @@ async function handleCreateSession() {
 }
 
 async function handleDeleteSession(sessionId) {
-  await ElMessageBox.confirm('确认删除这个会话吗？', '删除会话', { type: 'warning' })
+  const confirmed = await appConfirm({
+    title: '删除会话',
+    message: '确认删除这个会话吗？',
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
   await deleteChatSession(sessionId)
   removeSessionsFromState([sessionId])
 }
@@ -338,9 +259,14 @@ async function handleDeleteSelectedSessions() {
   const ids = selectedSessionIds.value.slice()
   if (ids.length === 0) return
 
-  await ElMessageBox.confirm(`确认删除选中的 ${ids.length} 个会话吗？`, '批量删除会话', {
-    type: 'warning',
+  const confirmed = await appConfirm({
+    title: '批量删除会话',
+    message: `确认删除选中的 ${ids.length} 个会话吗？`,
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
   })
+  if (!confirmed) return
+
   await deleteChatSessions(ids)
   removeSessionsFromState(ids)
 }
@@ -371,7 +297,7 @@ function getSessionTime(session) {
 async function handleSendMessage() {
   if (!currentSession.value || streaming.value) return
   if (!inputMessage.value.trim()) {
-    ElMessage.warning('请输入对话内容')
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请输入对话内容' })
     return
   }
 
@@ -408,7 +334,7 @@ async function handleSendMessage() {
     })
     await loadSessions(sessionId)
   } catch (error) {
-    ElMessage.error(error.message)
+    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
     await loadSessions(sessionId).catch(() => {})
   } finally {
     streaming.value = false
@@ -421,47 +347,6 @@ function handleInputEnter(event) {
 
   event.preventDefault()
   handleSendMessage()
-}
-
-async function handleSaveConfig() {
-  await createLLMConfig({ ...configForm })
-  ElMessage.success('保存成功')
-  resetConfigForm()
-  await loadConfigs()
-}
-
-function handleProviderChange() {
-  if (!currentProvider.value) return
-  if (!configForm.name) {
-    configForm.name = currentProvider.value.name || ''
-  }
-}
-
-async function handleTestConfig() {
-  const data = await testLLMConfig({ ...configForm })
-  if (data.success === false) {
-    ElMessage.error(data.message || '连接失败')
-    return
-  }
-  ElMessage.success(data.message || '连接成功')
-}
-
-async function handleDeleteConfig(configId) {
-  await ElMessageBox.confirm('确认删除这个模型配置吗？', '删除配置', { type: 'warning' })
-  await deleteLLMConfig(configId)
-  await loadConfigs()
-}
-
-function resetConfigForm() {
-  Object.assign(configForm, {
-    name: '',
-    provider: 'openai',
-    api_key: '',
-    model: '',
-    base_url: '',
-    is_default: false,
-    is_active: true,
-  })
 }
 
 function getSessionTitle(session) {
@@ -515,7 +400,6 @@ async function scrollToBottom() {
 }
 
 .panel-header,
-.chat-header,
 .chat-input-bar {
   display: flex;
   align-items: center;
@@ -526,19 +410,15 @@ async function scrollToBottom() {
 }
 
 .panel-header,
-.chat-header {
+.panel-header {
   justify-content: flex-end;
 }
 
-.panel-header h1,
-.chat-header > div {
+.panel-header h1 {
   display: none;
 }
 
 .config-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
-  gap: 8px;
   padding: 12px;
   border-bottom: 1px solid #e4e7ed;
 }
@@ -716,10 +596,6 @@ async function scrollToBottom() {
 
 .send-button {
   height: 76px;
-}
-
-.config-table {
-  margin-top: 16px;
 }
 
 @keyframes pulse {
