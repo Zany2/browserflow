@@ -218,6 +218,30 @@ type WorkflowCacheRes struct {
 	Snapshot *model.AutomaWorkflowSnapshot `json:"snapshot,omitempty" dc:"本地工作流快照"`
 }
 
+// WorkflowAgentListReq reads workflows from browser agent 从浏览器执行端读取工作流
+type WorkflowAgentListReq struct {
+	g.Meta    `path:"/agent/workflows" method:"get" tags:"工作流" summary:"从浏览器执行端读取工作流"`
+	BrowserID string `json:"browser_id" in:"query" dc:"浏览器实例ID"`
+}
+
+// WorkflowAgentListRes browser agent workflow list 浏览器执行端工作流列表
+type WorkflowAgentListRes struct {
+	BrowserID string           `json:"browser_id" dc:"浏览器实例ID"`
+	Workflows []map[string]any `json:"workflows" dc:"工作流列表"`
+	Total     int              `json:"total" dc:"工作流总数"`
+}
+
+// WorkflowAgentExportSkillReq exports browser agent workflows as Skill 导出浏览器执行端工作流为 Skill
+type WorkflowAgentExportSkillReq struct {
+	g.Meta      `path:"/agent/export/skill" method:"post" tags:"工作流" summary:"导出浏览器执行端工作流为 Skill"`
+	BrowserID   string   `json:"browser_id" dc:"浏览器实例ID"`
+	Scope       string   `json:"scope" d:"filtered" v:"in:selected,filtered,all#导出范围只能是selected、filtered或all" dc:"导出范围"`
+	WorkflowIDs []string `json:"workflow_ids" dc:"需要导出的工作流ID列表"`
+}
+
+// WorkflowAgentExportSkillRes skill export response Skill 导出响应
+type WorkflowAgentExportSkillRes struct{}
+
 // WorkflowRunReq 运行工作流
 type WorkflowRunReq struct {
 	g.Meta    `path:"/{id}/run" method:"post" tags:"工作流" summary:"运行工作流"`

@@ -44,6 +44,8 @@ export function createAgentSocket({
   let lastAutomaVersionProbeAt = 0
   let lastKnownAutomaInstalled = false
   let lastKnownAutomaVersion = ''
+  // activeBrowserId keeps backend-assigned id after first registration 保留后端确认后的浏览器 ID
+  let activeBrowserId = String(browserId || '').trim()
   // automaProbeFailCount consecutive failed bridge probes 连续桥接探测失败次数
   let automaProbeFailCount = 0
   // automaRefreshTimer pending page refresh timer 待执行页面刷新定时器
@@ -118,8 +120,8 @@ export function createAgentSocket({
     sendJSON({
       type: 'agent_register',
       role,
-      browser_id: browserId,
-      client_id: browserId,
+      browser_id: activeBrowserId,
+      client_id: activeBrowserId,
       ...clientInfo,
       token,
       automa_installed: automaInfo.installed,
@@ -135,8 +137,8 @@ export function createAgentSocket({
     lastAutomaStatusHash = automaStatusHash
     sendJSON({
       type: 'agent_status_update',
-      browser_id: browserId,
-      client_id: browserId,
+      browser_id: activeBrowserId,
+      client_id: activeBrowserId,
       automa_installed: automaInfo.installed,
       automa_version: automaInfo.version,
     })
@@ -152,8 +154,8 @@ export function createAgentSocket({
     if (!enableHeartbeat) return
     sendJSON({
       type: 'heartbeat',
-      browser_id: browserId,
-      client_id: browserId,
+      browser_id: activeBrowserId,
+      client_id: activeBrowserId,
       client_ip: currentClientIp,
       client_time: Date.now(),
     })
@@ -161,8 +163,8 @@ export function createAgentSocket({
 
   const sendResult = (payload) => {
     sendJSON({
-      browser_id: browserId,
-      client_id: browserId,
+      browser_id: activeBrowserId,
+      client_id: activeBrowserId,
       ...payload,
     })
   }
@@ -199,8 +201,8 @@ export function createAgentSocket({
       lastWorkflowInventoryHash = inventoryHash
       sendJSON({
         type: 'workflow_inventory',
-        browser_id: browserId,
-        client_id: browserId,
+        browser_id: activeBrowserId,
+        client_id: activeBrowserId,
         workflows: workflowList,
         client_time: Date.now(),
       })
@@ -258,6 +260,7 @@ export function createAgentSocket({
     updateCurrentClientIp(payload)
 
     if (payload.type === 'agent_registered') {
+      activeBrowserId = String(payload.browser_id || payload.client_id || activeBrowserId).trim()
       emitStatus('online')
       onRegistered?.(payload)
       sendWorkflowInventory()

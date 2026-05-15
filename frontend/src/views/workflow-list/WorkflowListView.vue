@@ -44,7 +44,29 @@
         </el-select>
       </div>
 
+      <!-- Export scope 导出范围，决定使用选中、筛选还是全部工作流 -->
+      <div class="filter-item filter-item--export-scope">
+        <span class="filter-label">导出范围：</span>
+        <el-select v-model="exportScope" placeholder="导出范围">
+          <el-option
+            v-for="item in exportScopeOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </div>
+
       <el-button class="reset-button" @click="resetFilters">重置</el-button>
+      <el-button
+        class="export-skill-button"
+        :icon="Download"
+        :loading="skillExporting"
+        :disabled="exportTargetWorkflows.length === 0"
+        @click="handleExportSkill"
+      >
+        导出 Skill
+      </el-button>
     </div>
 
     <!-- Error message 错误提示，展示扩展未响应或调用失败原因 -->
@@ -64,12 +86,14 @@
       :data="pagedWorkflows"
       border
       height="100%"
-      row-key="id"
+      :row-key="getWorkflowId"
       empty-text="暂无工作流"
+      @selection-change="handleSelectionChange"
     >
+      <el-table-column type="selection" width="40" align="center" reserve-selection />
       <el-table-column prop="name" label="工作流名称" min-width="220">
         <template #default="{ row }">
-          <button class="workflow-name__link" type="button" @click="openWorkflow(row.id)">
+          <button class="workflow-name__link" type="button" @click="openWorkflow(getWorkflowId(row))">
             {{ row.name || '' }}
           </button>
         </template>
@@ -133,7 +157,7 @@
 
       <el-table-column label="操作" width="90" align="center">
         <template #default="{ row }">
-          <el-button type="primary" link @click="executeWorkflow(row.id)">
+          <el-button type="primary" link @click="executeWorkflow(getWorkflowId(row))">
             执行
           </el-button>
         </template>
@@ -151,11 +175,17 @@
 </template>
 
 <script setup>
-import { SortDown, SortUp } from '@element-plus/icons-vue'
+import { Download, SortDown, SortUp } from '@element-plus/icons-vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
-import { useAutoma } from '@/composables/useAutoma'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
+import {
+  exportAgentAutomaSkill,
+  listAgentAutomaWorkflows,
+  openAgentAutomaWorkflow,
+  runAgentAutomaWorkflow,
+} from '@/services/automa'
 
 const PAGE_SIZE = 10
 const SORT_STORAGE_KEY = 'workflow-sorts'
@@ -181,16 +211,20 @@ const sortOptions = [
   { label: '上次更新', value: 'updatedAt' },
   { label: '最常用', value: 'mostUsed' },
 ]
+const exportScopeOptions = [
+  { label: '已选工作流', value: 'selected' },
+  { label: '当前筛选结果', value: 'filtered' },
+  { label: '全部工作流', value: 'all' },
+]
 
-// Automa state 扩展状态，页面只关心列表、加载态和执行方法
-const {
-  error,
-  loading,
-  workflows,
-  loadWorkflows,
-  openWorkflow,
-  executeWorkflow,
-} = useAutoma()
+// Agent state 工作流页面只通过后端读取浏览器执行端，不直接桥接管理端 Automa
+const error = ref('')
+const loading = ref(false)
+const skillExporting = ref(false)
+const workflows = ref([])
+const exportScope = ref('filtered')
+const selectedWorkflows = ref([])
+const agentBrowserId = ref('')
 
 const filteredWorkflows = computed(() => {
   const keyword = searchKeyword.value.trim().toLocaleLowerCase()
@@ -222,6 +256,12 @@ const sortedWorkflows = computed(() => {
 const pagedWorkflows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return sortedWorkflows.value.slice(start, start + pageSize.value)
+})
+
+const exportTargetWorkflows = computed(() => {
+  if (exportScope.value === 'selected') return selectedWorkflows.value
+  if (exportScope.value === 'all') return workflows.value
+  return sortedWorkflows.value
 })
 
 const toggleSortOrder = () => {
@@ -273,6 +313,99 @@ onBeforeUnmount(() => {
   clearFilterSearchTimer()
 })
 
+async function loadWorkflows() {
+  loading.value = true
+  error.value = ''
+
+  try {
+    // Agent list 工作流列表来自当前启动浏览器中的 browser-agent
+    const data = await listAgentAutomaWorkflows()
+    workflows.value = normalizeAgentWorkflows(data)
+    selectedWorkflows.value = []
+    agentBrowserId.value = data?.browser_id || ''
+  } catch (err) {
+    workflows.value = []
+    selectedWorkflows.value = []
+    agentBrowserId.value = ''
+    error.value = err.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function openWorkflow(workflowId) {
+  if (!workflowId) return
+  error.value = ''
+
+  try {
+    // Agent open 打开命令经后端转发到对应浏览器执行端
+    await openAgentAutomaWorkflow(workflowId, agentBrowserId.value)
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function executeWorkflow(workflowId) {
+  if (!workflowId) return
+  error.value = ''
+
+  try {
+    // Agent run 执行命令经后端转发到对应浏览器执行端
+    await runAgentAutomaWorkflow(workflowId, agentBrowserId.value)
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function handleExportSkill() {
+  if (exportTargetWorkflows.value.length === 0) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '暂无可导出的工作流' })
+    return
+  }
+
+  skillExporting.value = true
+  error.value = ''
+
+  try {
+    // Export scope 按用户选择决定导出范围，后端再按 scope 做最终解释
+    const workflowIds = exportTargetWorkflows.value.map(getWorkflowId).filter(Boolean)
+    const blob = await exportAgentAutomaSkill({
+      browserId: agentBrowserId.value,
+      scope: exportScope.value,
+      workflowIds,
+    })
+    downloadBlob(blob, 'SKILL.md')
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: 'Skill 已导出' })
+  } catch (err) {
+    error.value = err.message
+    appMessage({ type: APP_MESSAGE_TYPE.error, message: err.message || '导出 Skill 失败' })
+  } finally {
+    skillExporting.value = false
+  }
+}
+
+function downloadBlob(blob, filename) {
+  // Download file 创建临时链接触发浏览器下载
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function handleSelectionChange(rows) {
+  // Selected rows 保留当前已选工作流，供“已选工作流”导出范围使用
+  selectedWorkflows.value = Array.isArray(rows) ? rows : []
+}
+
+function normalizeAgentWorkflows(data) {
+  const list = data?.workflows || data?.list || data || []
+  return Array.isArray(list) ? list : []
+}
+
 function sortWorkflows({ data, key, order = 'asc' }) {
   const runCounts = getRunCounts()
 
@@ -292,7 +425,7 @@ function sortWorkflows({ data, key, order = 'asc' }) {
 }
 
 function getSortValue(workflow, key, runCounts) {
-  if (key === 'mostUsed') return runCounts[workflow.id] || 0
+  if (key === 'mostUsed') return runCounts[getWorkflowId(workflow)] || 0
   return workflow[key] ?? ''
 }
 
@@ -389,6 +522,10 @@ function getNodeCount(workflow) {
   return workflow.drawflow?.nodes?.length || 0
 }
 
+function getWorkflowId(workflow) {
+  return workflow?.id || workflow?.workflowId || workflow?.workflow_id || workflow?.automaId || workflow?.automa_id || ''
+}
+
 function getDataColumnCount(workflow) {
   return workflow.dataColumns?.length || workflow.table?.length || 0
 }
@@ -457,6 +594,10 @@ function padDatePart(value) {
   flex: 0 1 190px;
 }
 
+.filter-item--export-scope {
+  flex: 0 1 220px;
+}
+
 .filter-label {
   flex-shrink: 0;
   color: #606266;
@@ -465,6 +606,7 @@ function padDatePart(value) {
 
 .filter-item--name :deep(.el-input),
 .filter-item--status :deep(.el-select),
+.filter-item--export-scope :deep(.el-select),
 .filter-item--time :deep(.el-date-editor) {
   width: 100%;
   min-width: 0;
@@ -472,6 +614,10 @@ function padDatePart(value) {
 
 .reset-button {
   margin-left: auto;
+  flex-shrink: 0;
+}
+
+.export-skill-button {
   flex-shrink: 0;
 }
 
@@ -568,12 +714,14 @@ function padDatePart(value) {
   .filter-item--name,
   .filter-item--time,
   .filter-item--status,
+  .filter-item--export-scope,
   .workflow-sort {
     width: 100%;
     max-width: none;
   }
 
-  .reset-button {
+  .reset-button,
+  .export-skill-button {
     margin-left: 0;
   }
 

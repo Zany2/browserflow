@@ -1,5 +1,7 @@
 ﻿import request from '@/api/request'
 
+import { API_BASE_URL } from '@/api/request'
+
 const AUTOMA_SOURCE = {
   import: 1,
   manual: 1,
@@ -11,6 +13,15 @@ export function listAutomaWorkflows(params = {}) {
   return request({
     url: '/workflows',
     params: normalizeListParams(params),
+    showSuccessMessage: false,
+  })
+}
+
+export function listAgentAutomaWorkflows(params = {}) {
+  return request({
+    url: '/workflows/agent/workflows',
+    params,
+    showErrorMessage: false,
     showSuccessMessage: false,
   })
 }
@@ -144,6 +155,62 @@ export function syncAutomaWorkflowsByIp(sourceIp, workflowIds, workflows = []) {
     },
     showSuccessMessage: false,
   })
+}
+
+export function openAgentAutomaWorkflow(id, browserId = '') {
+  return request({
+    url: `/workflows/${id}/open`,
+    method: 'POST',
+    data: {
+      browser_id: browserId,
+    },
+    showErrorMessage: false,
+    showSuccessMessage: false,
+  })
+}
+
+export function runAgentAutomaWorkflow(id, browserId = '', variables = {}) {
+  return request({
+    url: `/workflows/${id}/run`,
+    method: 'POST',
+    data: {
+      browser_id: browserId,
+      variables,
+    },
+    showErrorMessage: false,
+    showSuccessMessage: false,
+  })
+}
+
+export async function exportAgentAutomaSkill({
+  browserId = '',
+  scope = 'filtered',
+  workflowIds = [],
+} = {}) {
+  const response = await fetch(`${API_BASE_URL}/workflows/agent/export/skill`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      browser_id: browserId,
+      scope,
+      workflow_ids: workflowIds,
+    }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+
+  // Error json 后端业务失败时仍返回统一 JSON，需要先解析提示信息
+  if (contentType.includes('application/json')) {
+    const result = await response.json().catch(() => null)
+    throw new Error(result?.message || '导出 Skill 失败')
+  }
+
+  if (!response.ok) {
+    throw new Error(`导出 Skill 失败，HTTP 状态码：${response.status}`)
+  }
+
+  return response.blob()
 }
 
 function normalizeListParams(params) {

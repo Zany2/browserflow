@@ -92,7 +92,7 @@ func (c *ControllerV1) BrowserStart(ctx context.Context, req *v1.BrowserStartReq
 	state.BrowserMu.Unlock()
 
 	var runtime *state.BrowserRuntime
-	agentURL := fmt.Sprintf("%s/#/browser-agent", strings.TrimRight(frontendURL, "/"))
+	agentURL := fmt.Sprintf("%s/#/browser-agent?browser_id=%s", strings.TrimRight(frontendURL, "/"), url.QueryEscape(instance.ID))
 	state.BrowserMu.Lock()
 	state.BrowserCurrentInstanceID = instance.ID
 	state.BrowserMu.Unlock()

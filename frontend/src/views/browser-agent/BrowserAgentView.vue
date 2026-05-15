@@ -17,6 +17,7 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import {
   getAutomaInfo,
@@ -26,7 +27,8 @@ import {
 } from '@/services/automaBridge'
 import { createAgentSocket } from '@/services/agentWs'
 
-const browserId = ref('')
+const route = useRoute()
+const browserId = ref(resolveBrowserId())
 const status = ref('connecting')
 const lastCommand = ref('')
 const lastResult = ref('')
@@ -85,6 +87,11 @@ async function handleCommand(command, payload) {
   }
 
   throw new Error(`不支持的 Agent 命令: ${command}`)
+}
+
+function resolveBrowserId() {
+  // Browser id is bound when backend opens this agent page 浏览器 ID 由后端打开执行端页面时写入
+  return String(route.query.browser_id || route.query.browserId || '').trim()
 }
 </script>
 

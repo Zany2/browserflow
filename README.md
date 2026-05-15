@@ -17,7 +17,7 @@
   简体中文 · <a href="./README_EN.md">English</a>
 </p>
 
-> **把浏览器实例、Automa 工作流、任务调度和本地大模型对话放进同一个管理台。** BrowserFlow 支持本地 Windows 桌面模式和服务端调度模式，可通过 Automa bridge 读取、同步并执行浏览器工作流。
+> **双模式浏览器自动化平台。** BrowserFlow 支持 Windows 本地浏览器控制和 Server 服务端任务调度，集成 Automa 工作流、浏览器/客户端执行端、任务下发、执行记录和大模型 Skill 调用能力。
 
 ```bash
 # 启动后端
@@ -26,32 +26,99 @@ cd backend && go run .
 # 启动前端
 cd frontend && npm install && npm run dev
 
-# 打开
+# 打开管理台
 http://localhost:5173
 ```
 
-## Highlights
+## 项目定位
 
-**面向 Automa 和浏览器执行端的轻量管理平台**
+BrowserFlow 把 Automa 工作流从“只能在单个浏览器里手动点”扩展成一个可管理、可同步、可调度、可被大模型调用的自动化平台。
+
+它有两种运行方式：
+
+- **Windows 模式**：后端在本机启动受控浏览器，打开 Browser Agent，读取并执行当前浏览器中的 Automa 工作流。
+- **Server 模式**：后端部署在服务器上作为调度中心，局域网或互联网内的 Windows 电脑打开 Client Agent 页面后接入，服务端统一管理客户端、工作流、任务和执行记录。
+
+## 核心能力
 
 - **双运行模式**：`windows` 本地桌面模式和 `server` 服务端调度模式共用一套前后端。
-- **浏览器实例管理**：创建、启动、停止和切换本地或远程浏览器实例。
-- **Browser Agent**：受控浏览器通过 WebSocket 接收命令，并上报 Automa 安装状态和版本。
-- **Automa Bridge**：通过页面事件桥接当前浏览器中的 Automa 扩展，读取本地工作流并触发执行。
-- **工作流管理**：支持文件导入、客户端同步、同步候选对比和后端记录管理。
-- **任务调度**：服务端模式下可向在线客户端下发任务并记录执行结果。
-- **大模型与对话**：本地模式下维护模型配置，并基于启用模型创建对话会话。
-- **模式感知路由**：前端根据后端运行模式自动禁用不适用页面。
+- **Automa Bridge**：通过页面事件和浏览器扩展通信，读取、导入、打开并触发 Automa 工作流。
+- **Browser Agent**：Windows 模式下绑定后端启动的浏览器实例，通过 WebSocket 接收工作流命令。
+- **Client Agent**：Server 模式下由任意 Windows 客户端打开网页接入，接收服务端任务并调用本机 Automa 执行。
+- **工作流管理**：支持文件导入、客户端同步、同步候选对比、可同步开关和服务端工作流记录管理。
+- **任务调度**：Server 模式下可把工作流、客户端、参数和 Cron 表达式组合成任务。
+- **执行记录**：记录任务下发、客户端回执、成功/失败状态、参数和结果数据。
+- **大模型 Skill**：可将工作流或任务封装为大模型可调用的 Skill，执行前校验后端、执行端、Automa 插件和参数。
+- **模式感知路由**：前端根据后端运行模式自动隐藏或禁用不适用页面。
 
-## Requirements
+## 运行模式
 
-- Go 1.25+
-- Node.js 和 npm
-- Chrome 或 Chromium
-- 使用 Automa 功能时，需要在目标浏览器中安装并启用 Automa 扩展
-- Server 模式使用客户端缓存、工作流同步等能力时，需要可用的 PostgreSQL 和 Redis 配置
+| 能力 | Windows 模式 | Server 模式 |
+| --- | --- | --- |
+| 运行位置 | 本机 Windows | 后端在服务器，执行端在 Windows 客户端 |
+| 执行端页面 | `/browser-agent` | `/client-agent` |
+| 工作流来源 | 当前受控浏览器中的 Automa | 客户端同步到服务端，或服务端导入 |
+| 执行方式 | 后端向指定 Browser Agent 下发命令 | 服务端向指定 Client Agent 下发任务 |
+| 适合场景 | 单机自动化、本地调试、大模型本机工具 | 多客户端管理、远程任务调度、集中执行记录 |
 
-## Quick Start
+### Windows 模式
+
+Windows 模式适合在一台电脑上控制本地浏览器。
+
+可用页面：
+
+- 浏览器
+- 工作流
+- 大模型
+- 对话
+- Browser Agent
+
+典型流程：
+
+1. 后端启动本地浏览器实例。
+2. 浏览器自动打开 `/browser-agent`。
+3. Browser Agent 生成或接收 `Browser ID`，并与后端建立 WebSocket 连接。
+4. 后端通过 Browser Agent 读取当前浏览器 Automa 工作流列表。
+5. 用户可以打开、执行或导出工作流 Skill。
+
+### Server 模式
+
+Server 模式适合把后端部署到服务器，由多台 Windows 客户端接入执行任务。
+
+可用页面：
+
+- 工作流管理
+- 任务配置
+- 执行记录
+- 客户端
+- Client Agent
+
+典型流程：
+
+1. 服务器启动 BrowserFlow 后端和前端。
+2. Windows 客户端在浏览器中打开管理站点的 `/client-agent` 页面。
+3. Client Agent 生成稳定的 `client_*` 标识，注册到服务端 WebSocket。
+4. 服务端记录客户端 IP、在线状态、浏览器信息、Automa 插件状态和版本。
+5. 管理端从客户端同步 Automa 工作流到服务端，或手动导入工作流文件。
+6. 管理端创建任务，绑定工作流、执行客户端、参数和可选 Cron 表达式。
+7. 服务端下发任务到在线客户端，客户端调用本机 Automa 执行并回传结果。
+8. 服务端更新执行记录，供管理端或大模型查询。
+
+## Skill 使用约定
+
+BrowserFlow 的 Skill 应该把“能不能执行”检查写清楚，避免大模型直接盲发请求。
+
+执行工作流或任务前建议按顺序检查：
+
+1. **后端是否启动**：请求 `/api/v1/app/runtime`，确认服务可访问且运行模式符合 Skill 目标。
+2. **执行端是否在线**：Windows 模式检查目标 Browser Agent；Server 模式检查目标 Client Agent 或客户端 IP 是否在线。
+3. **Automa 插件是否可用**：检查 `automa_installed`、插件状态或客户端上报的插件信息。
+4. **参数是否完整**：如果工作流/任务需要变量，Skill 必须要求大模型提供对应参数。
+5. **再发起执行请求**：Windows 模式可调用工作流运行接口；Server 模式更适合调用任务执行接口，由服务端调度到指定客户端。
+
+当前任务执行回执表示命令已成功下发并由客户端回传处理结果。若要持续等待 Automa 工作流真正完成、失败或返回导出数据，需要进一步接入 Automa 执行状态事件或扩展回调。
+
+## 快速开始
 
 ### 1. 配置运行模式
 
@@ -74,7 +141,7 @@ cd backend
 go run .
 ```
 
-默认服务地址：
+默认后端地址：
 
 ```text
 http://localhost:8001
@@ -102,87 +169,7 @@ http://localhost:5173
 
 开发环境中，Vite 会把 `/api` 转发到 `http://localhost:8001`。
 
-## Runtime Modes
-
-### Windows Mode
-
-适合本机使用，关注本地浏览器、当前浏览器 Automa 工作流和本地大模型对话。
-
-可用页面：
-
-- 浏览器
-- 工作流
-- 大模型
-- 对话
-
-禁用页面：
-
-- 工作流管理
-- 任务
-- 任务记录
-- 客户端
-- Client Agent
-
-### Server Mode
-
-适合作为调度中心，关注客户端、服务端工作流记录、任务下发和任务结果。
-
-可用页面：
-
-- 工作流管理
-- 任务
-- 任务记录
-- 客户端
-- Client Agent
-
-禁用页面：
-
-- 浏览器
-- 大模型
-- 对话
-- Browser Agent
-
-## Usage Guide
-
-### Browser Agent
-
-`/browser-agent` 通常由后端启动的受控浏览器自动打开。它负责：
-
-1. 与后端建立 WebSocket 长连接。
-2. 周期检测 Automa bridge 是否可用。
-3. 上报 `automa_installed` 和 `automa_version`。
-4. 接收后端下发的工作流列表、打开和执行命令。
-5. 当连续检测不到 Automa bridge 时刷新页面，让新安装的扩展重新注入。
-
-### Workflows
-
-BrowserFlow 中有两个容易混淆的工作流入口：
-
-- `/workflows`：Windows 模式页面，数据来自**当前打开管理页面的浏览器**中的 Automa bridge。
-- `/automa`：Server 模式页面，数据来自后端保存的工作流记录或同步缓存。
-
-### Automa Bridge Events
-
-| 事件 | 方向 | 说明 |
-| --- | --- | --- |
-| `__automa-ext__` | 前端到扩展 | 统一 bridge 请求入口 |
-| `__automa-ext__get-workflows` | 扩展到前端 | 返回本地 Automa 工作流列表 |
-| `__automa-ext__add-workflow` | 扩展到前端 | 返回工作流导入结果 |
-| `automa:execute-workflow` | 前端到扩展 | 触发 Automa 执行工作流 |
-
-> 如果页面已经打开后才安装 Automa 扩展，content script 通常不会自动注入到已打开页面。Browser Agent 的自刷新逻辑就是为了解决这个场景。
-
-### LLM Chat
-
-Windows 模式下：
-
-1. 在“大模型”页面配置提供商、模型、API Key 和 Base URL。
-2. 启用一个或多个模型配置。
-3. 在“对话”页面选择已启用模型并创建会话。
-
-对话页只使用已有配置，不提供新增模型配置入口。
-
-## Configuration
+## 配置
 
 主配置文件：
 
@@ -204,6 +191,15 @@ localStorage:
 
 frontend:
   url: "http://localhost:5173"
+
+database:
+  default:
+    link: "pgsql:USER:PASSWORD@tcp(HOST:5432)/browserflow"
+
+redis:
+  default:
+    address: HOST:6379
+    db: 0
 ```
 
 | 配置项 | 说明 |
@@ -212,8 +208,44 @@ frontend:
 | `app.mode` | 运行模式，支持 `windows` 和 `server` |
 | `localStorage.path` | 本地 bbolt 数据文件路径 |
 | `frontend.url` | 后端启动受控浏览器时打开的前端地址 |
+| `database.default.link` | Server 模式任务、客户端等 SQL 数据存储配置 |
+| `redis.default` | Server 模式客户端在线状态和工作流清单缓存配置 |
 
-## Project Structure
+## 环境要求
+
+- Go 1.25+
+- Node.js 和 npm
+- Chrome 或 Chromium
+- 使用 Automa 功能时，目标浏览器需要安装并启用 Automa 扩展
+- Server 模式使用客户端管理、任务调度或工作流缓存时，需要可用的 PostgreSQL 和 Redis
+
+## 关键页面
+
+| 页面 | 模式 | 说明 |
+| --- | --- | --- |
+| `/browser` | Windows | 管理本地受控浏览器实例 |
+| `/workflows` | Windows | 查看当前 Browser Agent 中的 Automa 工作流，并支持导出 Skill |
+| `/llm` | Windows | 配置大模型提供商、模型、API Key 和 Base URL |
+| `/chat` | Windows | 使用已启用模型进行本地对话 |
+| `/browser-agent` | Windows | 浏览器执行端页面，通常由后端自动打开 |
+| `/automa` | Server | 管理服务端工作流记录，支持导入和客户端同步 |
+| `/tasks` | Server | 创建和维护任务配置 |
+| `/task-records` | Server | 查看任务执行记录和结果 |
+| `/clients` | Server | 查看客户端在线、插件、浏览器和拉黑状态 |
+| `/client-agent` | Server | Windows 客户端执行端页面 |
+
+## Automa Bridge 事件
+
+| 事件 | 方向 | 说明 |
+| --- | --- | --- |
+| `__automa-ext__` | 前端到扩展 | 统一 bridge 请求入口 |
+| `__automa-ext__get-workflows` | 扩展到前端 | 返回本地 Automa 工作流列表 |
+| `__automa-ext__add-workflow` | 扩展到前端 | 返回工作流导入结果 |
+| `automa:execute-workflow` | 前端到扩展 | 触发 Automa 执行工作流 |
+
+如果页面已经打开后才安装 Automa 扩展，content script 通常不会自动注入到已打开页面。Agent 页面会通过刷新或重新检测处理这个场景。
+
+## 项目结构
 
 ```text
 browserflow/
@@ -222,12 +254,12 @@ browserflow/
 ├─ docs/images/              README 和文档图片资源
 ├─ automa/                   Automa 本地源码快照，默认不提交
 ├─ browserwing/              BrowserWing 本地源码快照，默认不提交
-├─ AUTOMA.md                 Automa 本地源码改动记录
 ├─ go.work                   Go workspace
-└─ README.md
+├─ README.md
+└─ README_EN.md
 ```
 
-## Development
+## 开发命令
 
 前端：
 
@@ -246,7 +278,11 @@ cd backend
 go run .
 ```
 
-## Git Notes
+## 安全说明
+
+如果把 Server 模式部署到局域网或互联网，请确认数据库、Redis、后端接口和前端访问入口都处在可信网络或反向代理保护下。Skill 调用会直接触发浏览器自动化任务，不建议在没有认证和访问控制的情况下暴露到公网。
+
+## Git 注意事项
 
 以下内容属于本地运行数据、外部源码快照或个人配置，不应提交：
 
@@ -261,7 +297,3 @@ go run .
 如果这些文件已经被 Git 跟踪，仅加入 `.gitignore` 不会自动取消跟踪，需要执行 `git rm --cached` 后再提交。
 
 `backend/manifest/config/config.yaml` 可能包含数据库、Redis 或本地服务地址。提交前请确认其中没有不应公开的敏感信息。
-
-## Automa Local Changes
-
-`automa/` 是外部源码快照，默认不提交。本项目对 Automa 的本地改动记录在 `AUTOMA.md` 中。更新或覆盖 `automa/` 后，需要对照该文件检查并重新应用必要改动。
