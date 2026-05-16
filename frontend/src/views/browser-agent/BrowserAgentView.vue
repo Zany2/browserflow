@@ -75,6 +75,7 @@ async function handleCommand(command, payload) {
       id: payload.id || payload.workflow_id || payload.workflowId,
       publicId: payload.publicId || payload.public_id,
       variables: payload.variables || payload.params || {},
+      checkParams: payload.check_params ?? payload.checkParams ?? false,
     })
     lastResult.value = '已发送执行命令'
     return { ok: true, status: 'queued' }

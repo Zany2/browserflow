@@ -225,6 +225,42 @@
         </el-button>
       </template>
     </AppDialog>
+
+    <AppDialog
+      v-model="executeParamDialogVisible"
+      title="执行参数"
+      width="640px"
+      :loading="executeParamSubmitting"
+      @confirm="confirmExecuteTaskWithParams"
+      @closed="resetExecuteParamDialog"
+    >
+      <el-form label-width="120px" class="execute-param-form">
+        <el-form-item
+          v-for="param in executeParamItems"
+          :key="param.key"
+          :label="param.name"
+          :required="param.required"
+        >
+          <div class="execute-param-control">
+            <el-switch
+              v-if="param.type === 'checkbox'"
+              v-model="param.value"
+              active-text="是"
+              inactive-text="否"
+            />
+            <el-input
+              v-else
+              v-model="param.value"
+              :type="param.type === 'json' ? 'textarea' : 'text'"
+              :rows="param.type === 'json' ? 4 : undefined"
+              :placeholder="param.placeholder"
+            />
+            <span v-if="param.description" class="form-help">{{ param.description }}</span>
+            <span v-if="param.defaultText" class="form-help">默认值：{{ param.defaultText }}</span>
+          </div>
+        </el-form-item>
+      </el-form>
+    </AppDialog>
   </section>
 </template>
 
@@ -236,7 +272,7 @@ import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
-import { listAutomaWorkflows } from '@/services/automa'
+import { getAutomaWorkflowDetail, listAutomaWorkflows } from '@/services/automa'
 import { listClients } from '@/services/client'
 import { createTask, deleteTask, executeTask, listTasks, updateTask } from '@/services/task'
 
@@ -248,6 +284,10 @@ const workflowLoading = ref(false)
 const clientLoading = ref(false)
 const saving = ref(false)
 const taskDialogVisible = ref(false)
+const executeParamDialogVisible = ref(false)
+const executeParamSubmitting = ref(false)
+const executeParamTask = ref(null)
+const executeParamItems = ref([])
 const taskPage = ref(1)
 const taskPageSize = ref(10)
 const pageSizes = [10, 30, 60]
@@ -449,12 +489,64 @@ async function handleDeleteTask(row) {
 }
 
 async function handleExecuteTask(row) {
+  const params = await loadExecuteTriggerParameters(row)
+  if (params.length > 0) {
+    openExecuteParamDialog(row, params)
+    return
+  }
+
   await executeTask(row.id, {
     client_id: row.client_id || '',
     client_ip: row.client_ip || '',
     params: row.params || {},
   })
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已下发' })
+}
+
+async function loadExecuteTriggerParameters(row) {
+  const workflowId = row.workflow_id || ''
+  if (!workflowId) return []
+
+  try {
+    const detail = await getAutomaWorkflowDetail(workflowId)
+    return getUniqueTriggerParameters(parseWorkflowDetailPayload(detail))
+  } catch {
+    return []
+  }
+}
+
+function openExecuteParamDialog(row, params) {
+  // Execute params 合并任务已保存参数与工作流默认值，执行前允许用户调整
+  executeParamTask.value = row
+  executeParamItems.value = params.map((param, index) => createExecuteParamItem(param, index, row.params || {}))
+  executeParamDialogVisible.value = true
+}
+
+async function confirmExecuteTaskWithParams() {
+  const row = executeParamTask.value
+  if (!row?.id) return
+
+  const params = buildExecuteParamObject()
+  if (!params) return
+
+  executeParamSubmitting.value = true
+  try {
+    await executeTask(row.id, {
+      client_id: row.client_id || '',
+      client_ip: row.client_ip || '',
+      params,
+    })
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已下发' })
+    executeParamDialogVisible.value = false
+  } finally {
+    executeParamSubmitting.value = false
+  }
+}
+
+function resetExecuteParamDialog() {
+  if (executeParamSubmitting.value) return
+  executeParamTask.value = null
+  executeParamItems.value = []
 }
 
 function handleWorkflowChange(workflowId) {
@@ -594,6 +686,125 @@ function normalizeParamEntries(params) {
     value: value == null ? '' : String(value),
   }))
   return entries.length > 0 ? entries : [createEmptyParamEntry()]
+}
+
+function parseWorkflowDetailPayload(detail) {
+  const raw = detail?.normalized_json || detail?.normalizedJson || detail?.raw_json || detail?.rawJson || ''
+  if (!raw) return detail || {}
+
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return detail || {}
+  }
+}
+
+function getUniqueTriggerParameters(workflow) {
+  const seen = new Set()
+  return getTriggerParameters(workflow).filter((param, index) => {
+    const name = param?.name || `param_${index + 1}`
+    if (seen.has(name)) return false
+    seen.add(name)
+    return true
+  })
+}
+
+function getTriggerParameters(workflow) {
+  const triggerData = workflow?.trigger || getTriggerNode(workflow)?.data || {}
+  return Array.isArray(triggerData.parameters) ? triggerData.parameters : []
+}
+
+function getTriggerNode(workflow) {
+  if (workflow?.drawflow?.nodes) {
+    return workflow.drawflow.nodes.find((node) => node?.label === 'trigger') || null
+  }
+
+  const legacyNodes = workflow?.drawflow?.drawflow?.Home?.data
+  if (legacyNodes) {
+    return Object.values(legacyNodes).find((node) => node?.name === 'trigger') || null
+  }
+
+  return null
+}
+
+function createExecuteParamItem(param, index, savedParams) {
+  const defaultValue = getTriggerParamDefaultRawValue(param)
+  const name = param?.name || `param_${index + 1}`
+  const value = Object.prototype.hasOwnProperty.call(savedParams, name) ? savedParams[name] : defaultValue
+  return {
+    key: `${name}_${param?.type || ''}_${index}`,
+    name,
+    type: param?.type || 'string',
+    description: param?.description || '',
+    placeholder: param?.placeholder || '',
+    required: Boolean(param?.required || param?.data?.required),
+    defaultText: formatParamDefaultValue(defaultValue),
+    value: normalizeExecuteParamValue(param, value),
+  }
+}
+
+function buildExecuteParamObject() {
+  const params = {}
+
+  for (const item of executeParamItems.value) {
+    if (isMissingRequiredParam(item)) {
+      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `请填写必填参数：${item.name}` })
+      return null
+    }
+
+    const value = parseExecuteParamValue(item)
+    if (value === undefined && item.type === 'json' && !isEmptyParamValue(item.value)) return null
+    params[item.name] = value
+  }
+
+  return params
+}
+
+function parseExecuteParamValue(item) {
+  if (item.type === 'number') {
+    const value = Number(item.value)
+    return Number.isNaN(value) ? 0 : value
+  }
+  if (item.type === 'json') {
+    if (isEmptyParamValue(item.value)) return null
+    try {
+      return JSON.parse(item.value)
+    } catch {
+      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 ${item.name} 不是有效 JSON` })
+      return undefined
+    }
+  }
+  if (item.type === 'checkbox') return Boolean(item.value)
+  return item.value
+}
+
+function getTriggerParamDefaultRawValue(param) {
+  if (param?.defaultValue !== undefined) return param.defaultValue
+  if (param?.default !== undefined) return param.default
+  if (param?.value !== undefined) return param.value
+  return ''
+}
+
+function normalizeExecuteParamValue(param, value) {
+  if (param?.type === 'checkbox') return Boolean(value)
+  if (param?.type === 'json' && value && typeof value === 'object') return JSON.stringify(value, null, 2)
+  return formatParamDefaultValue(value)
+}
+
+function formatParamDefaultValue(value) {
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function isEmptyParamValue(value) {
+  return value === undefined || value === null || value === ''
+}
+
+function isMissingRequiredParam(item) {
+  if (!item.required) return false
+  if (item.type === 'checkbox') return item.value !== true
+  return isEmptyParamValue(item.value)
 }
 
 function findClientById(clientId) {
@@ -839,6 +1050,20 @@ function createEmptyTaskForm() {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 12px;
+}
+
+.execute-param-form {
+  max-height: 58vh;
+  overflow: auto;
+  padding-right: 8px;
+}
+
+.execute-param-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 @media (max-width: 768px) {

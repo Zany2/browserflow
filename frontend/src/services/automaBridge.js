@@ -147,7 +147,7 @@ export function importAutomaWorkflow(workflow) {
   })
 }
 
-export function runAutomaWorkflow({ id, publicId, variables = {} }) {
+export function runAutomaWorkflow({ id, publicId, variables = {}, checkParams = false }) {
   if (!id && !publicId) {
     throw new Error('执行 Automa 工作流需要 id 或 publicId')
   }
@@ -157,6 +157,10 @@ export function runAutomaWorkflow({ id, publicId, variables = {} }) {
       detail: {
         id,
         publicId,
+        options: {
+          // Check params 参数由 BrowserFlow 侧处理，避免 Automa 再弹参数页
+          checkParams,
+        },
         data: {
           variables,
         },

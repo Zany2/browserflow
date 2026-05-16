@@ -38,7 +38,17 @@ func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) 
 	state.AgentMu.Unlock()
 
 	agent.Client.WriteMu.Lock()
-	err = agent.Client.Conn.WriteJSON(model.WSResponse{Type: "agent_command", BrowserID: agent.BrowserID, CommandID: commandID, Command: "automa.workflow.run", Payload: map[string]any{"id": req.ID, "variables": req.Variables}})
+	err = agent.Client.Conn.WriteJSON(model.WSResponse{
+		Type:      "agent_command",
+		BrowserID: agent.BrowserID,
+		CommandID: commandID,
+		Command:   "automa.workflow.run",
+		Payload: map[string]any{
+			"id":           req.ID,
+			"variables":    req.Variables,
+			"check_params": false,
+		},
+	})
 	agent.Client.WriteMu.Unlock()
 	if err != nil {
 		state.AgentMu.Lock()

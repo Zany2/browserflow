@@ -1,10 +1,27 @@
 # Automa 本地源码改动记录
 
-这些是对 `automa/` 上游源码的本地改动。更新、重新拉取或覆盖 Automa 源码后，需要检查并重新应用。
+这些是对 `third_party/automa/` 上游源码的本地改动。更新、重新拉取或覆盖 Automa 源码后，需要检查并重新应用。
+以后凡是修改 `third_party/automa/src`，都必须先用成对注释包起来，再把修改记录追加到本文件，方便后续和上游源码对照。
+
+## 源码改动标记规范
+
+所有对 `third_party/automa/src` 的本地源码改动，都需要用成对注释包起来，方便后续和上游源码合并、排查或重新应用：
+
+```js
+// BrowserFlow local change start: short English intent 简短中文意图
+// changed code
+// BrowserFlow local change end
+```
+
+要求：
+
+- 注释必须包住实际改动代码，不能只写在附近。
+- 注释使用 `// English 中文` 风格，保持和项目注释规范一致。
+- 每一类源码改动都需要同步记录到本文档，至少包含文件路径、目的、行为变化和关键代码位置。
 
 ## 导出工作流 JSON 时保留原始标识和时间戳
 
-- File: `automa/src/utils/workflowData.js`
+- File: `third_party/automa/src/utils/workflowData.js`
 - Purpose: 导出 `.automa.json` 时保留 Automa 本地工作流的 `id`、`createdAt`、`updatedAt`。
 - Backend fit: 本项目后端导入、文件导入和客户端同步时，将 JSON 顶层 `id` 保存为数据库 `automa_id`，并将 `createdAt`、`updatedAt` 分别保存为 `created_at_automa`、`updated_at_automa`。
 - Update rule: 后端更新已有工作流时会比较 JSON `updatedAt` 和数据库 `updated_at_automa`，避免旧导出文件覆盖数据库中更新的工作流。
@@ -307,7 +324,7 @@ workflows[workflowId] = convertWorkflow(workflow, [
 
 ## 页面桥接导入工作流时保留原始标识和时间戳
 
-- File: `automa/src/content/services/webService.js`
+- File: `third_party/automa/src/content/services/webService.js`
 - Purpose: 前端客户端执行页通过 `__automa-ext__` 发送 `add-workflow` 时，导入到本地 Automa 要保留服务端工作流 payload 中的 `id`、`createdAt`、`updatedAt`。
 - Problem: 上游默认逻辑会用 `nanoid()` 重新生成工作流 ID，并用 `Date.now()` 覆盖 `createdAt`，前端也拿不到导入是否成功的回执，所以“同步到本地”容易表现为没有反应。
 - Behavior: 如果 payload 带 `id`，直接作为本地工作流 ID；如果本地已有同 ID 工作流，则覆盖更新；如果没有 `id`，才回退到 `nanoid()`。
@@ -464,3 +481,47 @@ payload.updatedAt = workflow.updated_at_automa || workflow.updatedAtAutoma || pa
 ```
 
 这样服务端工作流同步到本地 Automa 后，本地 ID 和两个 Automa 原始时间戳不会被桥接层改写。
+
+## 外部执行工作流时跳过 Automa 参数页
+
+- File: `third_party/automa/src/content/services/shortcutListener.js`
+- File: `third_party/automa/src/workflowEngine/WorkflowEngine.js`
+- Purpose: BrowserFlow 工作流页面已经弹出自己的参数输入框，并把参数通过 `data.variables` 传给 Automa。Automa 源码需要保留外部传入的 `options.checkParams = false`，避免再次弹出 Automa 自带的参数输入页。
+- Problem: 上游 `automa:execute-workflow` 监听只会把 `detail.data` 写入 `workflow.options.data`。如果不透传 `detail.options`，`WorkflowEngine` 会使用默认 `checkParams = true`，有触发器参数时就会打开 Automa 参数页。
+- Behavior: `shortcutListener` 将外部事件中的 `detail.options` 和 `detail.data` 一起写入 `workflow.options`；`WorkflowEngine` 使用 `this.options?.checkParams ?? true` 判断是否需要弹 Automa 参数页。
+
+### 关键源码标记
+
+`third_party/automa/src/content/services/shortcutListener.js`：
+
+```js
+// BrowserFlow local change start: forward external run options 透传外部执行参数
+workflow.options = {
+  // BrowserFlow options allow external callers to finish param handling.
+  // BrowserFlow options 允许外部调用方完成参数处理后跳过 Automa 参数页。
+  ...(detail.options || {}),
+  data: detail.data || {},
+};
+// BrowserFlow local change end
+```
+
+`third_party/automa/src/workflowEngine/WorkflowEngine.js`：
+
+```js
+// BrowserFlow local change start: allow external callers to skip Automa params page 允许外部调用跳过 Automa 参数页
+const checkParams = this.options?.checkParams ?? true;
+const hasParams =
+  checkParams && triggerBlock.data?.parameters?.length > 0;
+// BrowserFlow local change end
+```
+
+### 关联 BrowserFlow 调用
+
+前端不是 Automa 源码，但和上面的源码改动配套：
+
+- File: `frontend/src/services/automaBridge.js`
+- Behavior: `runAutomaWorkflow({ id, variables, checkParams = false })` 发送 `automa:execute-workflow` 事件时，把 `checkParams` 放入 `detail.options`，把参数放入 `detail.data.variables`。
+- File: `frontend/src/views/browser-agent/BrowserAgentView.vue`
+- Behavior: Browser Agent 收到后端 `automa.workflow.run` 时，会把 `payload.check_params` 转为 `checkParams`，默认值是 `false`。
+- File: `backend/internal/controller/workflows/automa_v1_automa_workflow_run.go`
+- Behavior: 后端执行工作流命令下发 `check_params: false`，表示参数已经由 BrowserFlow 侧处理完成。

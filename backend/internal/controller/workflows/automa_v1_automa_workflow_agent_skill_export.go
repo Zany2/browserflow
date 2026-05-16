@@ -102,7 +102,7 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("Do not replace the exported `browser_id` with the current browser unless the user explicitly confirms that the workflow exists in the new browser instance.\n\n")
 
 	sb.WriteString("## Parameter Rules\n\n")
-	sb.WriteString("Before running a workflow, inspect its `Parameters` section. If a required parameter has no value, ask the user for it before calling the API. If an optional parameter has a default value, use the default unless the user provides another value. Pass parameters through the `variables` object, and keep parameter names exactly as listed in this skill.\n\n")
+	sb.WriteString("Before running a workflow, inspect its `Parameters` section. If a required parameter has no value, ask the user for it before calling the API. If an optional parameter has a default value, use the default unless the user provides another value. Pass parameters through the `variables` object, and keep parameter names exactly as listed in this skill. BrowserFlow treats this `variables` object as the completed parameter set and instructs Automa not to open its own parameter input page.\n\n")
 
 	sb.WriteString("## API Endpoints\n\n")
 	sb.WriteString("### Run Workflow\n\n")
@@ -133,6 +133,7 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("- Keep the target browser running and keep the browser-agent page connected before calling the API.\n")
 	sb.WriteString("- The target browser must report `automa_installed: true`; otherwise workflow list, open, and run commands may fail.\n")
 	sb.WriteString("- Pass trigger parameters through the `variables` object. Parameter names must match the Automa trigger configuration.\n")
+	sb.WriteString("- Do not rely on Automa's parameter tab for Skill calls; collect required values before sending the HTTP request.\n")
 	sb.WriteString("- If the exported browser instance is no longer available, choose another running browser and update `browser_id`.\n")
 	sb.WriteString("- The run API confirms that the command was sent to the browser-agent. It does not currently prove that the Automa workflow completed successfully.\n")
 

@@ -39,6 +39,8 @@ func formatAgentWorkflowListError(err error) string {
 		return "请先在浏览器页面启动一个浏览器实例"
 	case "browser agent is offline":
 		return "当前浏览器执行端未连接，请确认 browser-agent 页面已打开"
+	case "browser agent automa unavailable":
+		return "未检测到 Automa 响应，请确认扩展已安装并启用"
 	case "browser agent workflow list failed":
 		return "读取浏览器执行端工作流失败"
 	default:
@@ -54,6 +56,9 @@ func requestAgentWorkflowList(ctx context.Context, browserID string) (string, []
 	agent, resolvedBrowserID, err := resolveBrowserAgent(browserID)
 	if err != nil {
 		return "", nil, err
+	}
+	if !agent.AutomaInstalled {
+		return "", nil, errors.New("browser agent automa unavailable")
 	}
 
 	commandID := "cmd_" + guid.S()

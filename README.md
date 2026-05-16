@@ -252,8 +252,8 @@ browserflow/
 ├─ backend/                  GoFrame 后端服务
 ├─ frontend/                 Vue 3 前端应用
 ├─ docs/images/              README 和文档图片资源
-├─ automa/                   Automa 本地源码快照，默认不提交
-├─ browserwing/              BrowserWing 本地源码快照，默认不提交
+├─ third_party/automa/        Automa 本地源码快照，保留源码，不含依赖
+├─ third_party/browserwing/  BrowserWing 本地源码快照，不进仓库
 ├─ go.work                   Go workspace
 ├─ README.md
 └─ README_EN.md
@@ -291,8 +291,8 @@ go run .
 - `backend/logs/`
 - `AGENTS.md`
 - `CLAUDE.md`
-- `automa/`
-- `browserwing/`
+- `third_party/automa/`
+- `third_party/browserwing/`
 
 如果这些文件已经被 Git 跟踪，仅加入 `.gitignore` 不会自动取消跟踪，需要执行 `git rm --cached` 后再提交。
 

@@ -419,6 +419,7 @@ async function handleCommand(command, payload) {
       id: workflowId,
       publicId,
       variables,
+      checkParams: payload.check_params ?? payload.checkParams ?? false,
     })
 
     lastResult.value = taskId

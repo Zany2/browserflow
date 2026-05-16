@@ -252,8 +252,8 @@ browserflow/
 ├─ backend/                  GoFrame backend service
 ├─ frontend/                 Vue 3 frontend app
 ├─ docs/images/              README and documentation image assets
-├─ automa/                   Local Automa source snapshot, ignored by Git
-├─ browserwing/              Local BrowserWing source snapshot, ignored by Git
+├─ third_party/automa/        Local Automa source snapshot, source only
+├─ third_party/browserwing/  Local BrowserWing source snapshot, not committed
 ├─ go.work                   Go workspace
 ├─ README.md
 └─ README_EN.md
@@ -291,8 +291,8 @@ The following paths are local runtime data, external source snapshots, or person
 - `backend/logs/`
 - `AGENTS.md`
 - `CLAUDE.md`
-- `automa/`
-- `browserwing/`
+- `third_party/automa/`
+- `third_party/browserwing/`
 
 If these files are already tracked by Git, adding them to `.gitignore` will not untrack them automatically. Use `git rm --cached` before committing.
 
