@@ -13,6 +13,16 @@
           {{ currentAgentOnline ? 'Agent 在线' : 'Agent 离线' }}
         </el-tag>
         <span>{{ currentStatusText }}</span>
+        <el-button
+          class="executor-skill-button"
+          type="primary"
+          :icon="Download"
+          :loading="executorSkillExporting"
+          :disabled="!status.running"
+          @click="handleExportExecutorSkill"
+        >
+          导出控制 Skill
+        </el-button>
       </div>
     </header>
 
@@ -240,7 +250,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { Check, Plus, RefreshRight } from '@element-plus/icons-vue'
+import { Check, Download, Plus, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
@@ -257,6 +267,7 @@ import {
   switchBrowserInstance,
   updateBrowserInstance,
 } from '@/services/browser'
+import { exportBrowserExecutorSkill } from '@/services/browserExecutor'
 
 const instances = ref([])
 const selectedId = ref('')
@@ -272,6 +283,7 @@ const agents = ref([])
 const runtimeNow = ref(Date.now())
 const runtimeClockTimer = ref(null)
 const browserStatusRefreshing = ref(false)
+const executorSkillExporting = ref(false)
 const stopBrowserStatusSubscribe = ref(null)
 const stopAgentStatusSubscribe = ref(null)
 const status = ref({
@@ -472,6 +484,37 @@ async function handleStart(row, saveBeforeStart = false) {
   } finally {
     starting.value = false
   }
+}
+
+async function handleExportExecutorSkill() {
+  if (!status.value.running) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先启动浏览器' })
+    return
+  }
+
+  executorSkillExporting.value = true
+  try {
+    // Export Skill 下载当前浏览器控制 Skill，供大模型直接操作浏览器
+    const blob = await exportBrowserExecutorSkill()
+    downloadBlob(blob, 'SKILL_BROWSER_EXECUTOR.md')
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '浏览器控制 Skill 已导出' })
+  } catch (error) {
+    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message || '导出浏览器控制 Skill 失败' })
+  } finally {
+    executorSkillExporting.value = false
+  }
+}
+
+function downloadBlob(blob, filename) {
+  // Download file 创建临时链接触发浏览器下载
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 async function handleStop(row) {

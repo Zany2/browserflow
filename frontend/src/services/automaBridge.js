@@ -147,22 +147,91 @@ export function importAutomaWorkflow(workflow) {
   })
 }
 
-export function runAutomaWorkflow({ id, publicId, variables = {} }) {
+export function runAutomaWorkflow({
+  id,
+  publicId,
+  variables = {},
+  checkParams = false,
+  executionId = '',
+  waitResult = false,
+  timeout = 300,
+  returnData = null,
+} = {}) {
   if (!id && !publicId) {
-    throw new Error('执行 Automa 工作流需要 id 或 publicId')
+    throw new Error('Automa workflow execution requires id or publicId')
   }
 
+  const requestId = executionId || createBridgeRequestId()
+  const detail = {
+    id,
+    publicId,
+    options: {
+      // Check params is handled by BrowserFlow before calling Automa.
+      checkParams,
+      browserFlowRequestId: requestId,
+      browserFlowWaitResult: Boolean(waitResult),
+      browserFlowReturnData: returnData || null,
+    },
+    data: {
+      variables,
+    },
+  }
+
+  if (waitResult) {
+    return waitAutomaWorkflowResult({
+      requestId,
+      timeoutMs: Math.max(Number(timeout) || 300, 5) * 1000,
+      dispatch: () => dispatchAutomaWorkflow(detail),
+    })
+  }
+
+  dispatchAutomaWorkflow(detail)
+  return Promise.resolve({
+    ok: true,
+    status: 'queued',
+    request_id: requestId,
+    execution_id: requestId,
+  })
+}
+
+function dispatchAutomaWorkflow(detail) {
   window.dispatchEvent(
     new CustomEvent(AUTOMA_EVENTS.executeWorkflow, {
-      detail: {
-        id,
-        publicId,
-        data: {
-          variables,
-        },
-      },
+      detail,
     }),
   )
+}
+
+function waitAutomaWorkflowResult({ requestId, timeoutMs, dispatch }) {
+  return new Promise((resolve, reject) => {
+    let timeoutTimer = 0
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutTimer)
+      window.removeEventListener(AUTOMA_EVENTS.executeWorkflowResponse, onResponse)
+    }
+
+    function onResponse(event) {
+      const detail = event.detail || {}
+      if (detail.request_id !== requestId && detail.requestId !== requestId) return
+
+      cleanup()
+      resolve({
+        ok: detail.ok !== false && detail.status !== 'error',
+        ...detail,
+        request_id: requestId,
+        execution_id: detail.execution_id || requestId,
+      })
+    }
+
+    window.addEventListener(AUTOMA_EVENTS.executeWorkflowResponse, onResponse)
+    dispatch()
+
+    timeoutTimer = window.setTimeout(() => {
+      cleanup()
+      reject(new Error(`Timed out waiting for Automa workflow result after ${Math.round(timeoutMs / 1000)} seconds`))
+    }, timeoutMs)
+  })
 }
 
 function dispatchBridgeEvent(detail) {

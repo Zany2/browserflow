@@ -98,6 +98,26 @@ Thumbs.db
 AGENTS.md
 CLAUDE.md
 
+# Third-party source snapshots
+third_party/automa/node_modules/
+third_party/automa/build/
+third_party/automa/build-zip/
+third_party/automa/dist/
+third_party/automa/coverage/
+third_party/automa/.vite/
+third_party/automa/.eslintcache
+third_party/automa/.env.local
+third_party/automa/.env.development.local
+third_party/automa/.env.test.local
+third_party/automa/.env.production.local
+third_party/automa/.history/
+third_party/automa/*.log
+third_party/automa/secrets.production.js
+third_party/automa/secrets.development.js
+third_party/automa/get-pass-key.js
+third_party/automa/getPassKey.js
+third_party/automa/business/prod/
+third_party/automa/business/test/
+
 # External source snapshots
-automa/
-browserwing/
+third_party/browserwing/

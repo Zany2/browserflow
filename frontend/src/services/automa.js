@@ -169,13 +169,15 @@ export function openAgentAutomaWorkflow(id, browserId = '') {
   })
 }
 
-export function runAgentAutomaWorkflow(id, browserId = '', variables = {}) {
+export function runAgentAutomaWorkflow(id, browserId = '', variables = {}, options = {}) {
   return request({
     url: `/workflows/${id}/run`,
     method: 'POST',
+    timeout: options.wait_result ? Math.max(Number(options.timeout || 300) + 15, 30) * 1000 : undefined,
     data: {
       browser_id: browserId,
       variables,
+      ...options,
     },
     showErrorMessage: false,
     showSuccessMessage: false,

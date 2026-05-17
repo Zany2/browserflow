@@ -244,15 +244,30 @@ type WorkflowAgentExportSkillRes struct{}
 
 // WorkflowRunReq 运行工作流
 type WorkflowRunReq struct {
-	g.Meta    `path:"/{id}/run" method:"post" tags:"工作流" summary:"运行工作流"`
-	ID        string        `json:"id" in:"path" v:"required#工作流ID不能为空" dc:"工作流ID"`
-	BrowserID string        `json:"browser_id" dc:"浏览器实例ID"`
-	Variables model.JSONMap `json:"variables" dc:"运行变量"`
+	g.Meta     `path:"/{id}/run" method:"post" tags:"工作流" summary:"运行工作流"`
+	ID         string                             `json:"id" in:"path" v:"required#工作流ID不能为空" dc:"工作流ID"`
+	BrowserID  string                             `json:"browser_id" dc:"浏览器实例ID"`
+	Variables  model.JSONMap                      `json:"variables" dc:"运行变量"`
+	WaitResult bool                               `json:"wait_result" d:"false" dc:"是否等待工作流完成"`
+	Timeout    int                                `json:"timeout" d:"300" dc:"等待超时秒数"`
+	ReturnData *model.WorkflowExecutionReturnData `json:"return_data" dc:"回传数据配置"`
 }
 
 // WorkflowRunRes 工作流运行响应
 type WorkflowRunRes struct {
-	Result *model.AgentCommandResult `json:"result,omitempty" dc:"运行结果"`
+	Result    *model.AgentCommandResult `json:"result,omitempty" dc:"运行结果"`
+	Execution *model.WorkflowExecution  `json:"execution,omitempty" dc:"执行状态"`
+}
+
+// WorkflowExecutionDetailReq 获取工作流执行状态
+type WorkflowExecutionDetailReq struct {
+	g.Meta      `path:"/executions/{execution_id}" method:"get" tags:"工作流" summary:"获取工作流执行状态"`
+	ExecutionID string `json:"execution_id" in:"path" v:"required#执行ID不能为空" dc:"执行ID"`
+}
+
+// WorkflowExecutionDetailRes 工作流执行状态响应
+type WorkflowExecutionDetailRes struct {
+	Execution *model.WorkflowExecution `json:"execution,omitempty" dc:"执行状态"`
 }
 
 // WorkflowOpenReq 打开工作流

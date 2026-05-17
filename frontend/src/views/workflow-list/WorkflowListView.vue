@@ -60,6 +60,7 @@
       <el-button class="reset-button" @click="resetFilters">重置</el-button>
       <el-button
         class="export-skill-button"
+        type="primary"
         :icon="Download"
         :loading="skillExporting"
         :disabled="exportTargetWorkflows.length === 0"
@@ -117,16 +118,26 @@
 
       <el-table-column label="触发器参数" min-width="220">
         <template #default="{ row }">
-          <div v-if="getTriggerParameters(row).length > 0" class="trigger-params">
-            <el-tag
+          <div v-if="getTriggerParameters(row).length > 0" class="trigger-param-list">
+            <div
               v-for="(param, index) in getTriggerParameters(row)"
               :key="getTriggerParamKey(param, index)"
-              class="trigger-param-tag"
-              effect="plain"
+              class="trigger-param-item"
               :title="getTriggerParamTitle(param)"
             >
-              {{ formatTriggerParam(param) }}
-            </el-tag>
+              <span class="trigger-param-field trigger-param-field--name">
+                <small>参数名</small>
+                <strong>{{ formatTriggerParamName(param) }}</strong>
+              </span>
+              <span class="trigger-param-field trigger-param-field--meaning">
+                <small>意义</small>
+                <span>{{ formatTriggerParamMeaning(param) }}</span>
+              </span>
+              <span class="trigger-param-field trigger-param-field--default">
+                <small>默认值</small>
+                <span>{{ formatTriggerParamDefaultText(param?.defaultValue) }}</span>
+              </span>
+            </div>
           </div>
         </template>
       </el-table-column>
@@ -134,12 +145,6 @@
       <el-table-column label="节点数" width="70" align="center">
         <template #default="{ row }">
           {{ getNodeCount(row) }}
-        </template>
-      </el-table-column>
-
-      <el-table-column label="数据列" width="70" align="center">
-        <template #default="{ row }">
-          {{ getDataColumnCount(row) }}
         </template>
       </el-table-column>
 
@@ -157,7 +162,7 @@
 
       <el-table-column label="操作" width="90" align="center">
         <template #default="{ row }">
-          <el-button type="primary" link @click="executeWorkflow(getWorkflowId(row))">
+          <el-button type="primary" link @click="executeWorkflow(row)">
             执行
           </el-button>
         </template>
@@ -171,12 +176,53 @@
       :page-sizes="pageSizes"
       :total="sortedWorkflows.length"
     />
+
+    <AppDialog
+      v-model="paramDialogVisible"
+      title="执行参数"
+      width="640px"
+      :loading="paramSubmitting"
+      @confirm="confirmExecuteWithParams"
+      @closed="resetParamDialog"
+    >
+      <el-form label-width="120px" class="workflow-param-form">
+        <el-form-item
+          v-for="param in paramFormItems"
+          :key="param.key"
+          :label="param.name"
+          :required="param.required"
+        >
+          <div class="workflow-param-control">
+            <el-switch
+              v-if="param.type === 'checkbox'"
+              v-model="param.value"
+              active-text="是"
+              inactive-text="否"
+            />
+            <el-input
+              v-else
+              v-model="param.value"
+              :type="param.type === 'json' ? 'textarea' : 'text'"
+              :rows="param.type === 'json' ? 4 : undefined"
+              :placeholder="param.placeholder"
+            />
+            <span v-if="param.description" class="workflow-param-help">
+              {{ param.description }}
+            </span>
+            <span v-if="param.defaultText" class="workflow-param-help">
+              默认值：{{ param.defaultText }}
+            </span>
+          </div>
+        </el-form-item>
+      </el-form>
+    </AppDialog>
   </section>
 </template>
 
 <script setup>
 import { Download, SortDown, SortUp } from '@element-plus/icons-vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
@@ -225,6 +271,10 @@ const workflows = ref([])
 const exportScope = ref('filtered')
 const selectedWorkflows = ref([])
 const agentBrowserId = ref('')
+const paramDialogVisible = ref(false)
+const paramSubmitting = ref(false)
+const paramWorkflow = ref(null)
+const paramFormItems = ref([])
 
 const filteredWorkflows = computed(() => {
   const keyword = searchKeyword.value.trim().toLocaleLowerCase()
@@ -345,16 +395,106 @@ async function openWorkflow(workflowId) {
   }
 }
 
-async function executeWorkflow(workflowId) {
+async function executeWorkflow(workflow) {
+  const workflowId = getWorkflowId(workflow)
   if (!workflowId) return
   error.value = ''
 
+  const params = getUniqueTriggerParameters(workflow)
+  if (params.length > 0) {
+    openParamDialog(workflow, params)
+    return
+  }
+
   try {
     // Agent run 执行命令经后端转发到对应浏览器执行端
-    await runAgentAutomaWorkflow(workflowId, agentBrowserId.value)
+    await runAgentAutomaWorkflow(workflowId, agentBrowserId.value, {})
   } catch (err) {
     error.value = err.message
   }
+}
+
+function openParamDialog(workflow, params) {
+  // Param dialog 复用公共弹窗，在 BrowserFlow 侧完成参数填写与校验
+  paramWorkflow.value = workflow
+  paramFormItems.value = params.map((param, index) => createParamFormItem(param, index))
+  paramDialogVisible.value = true
+}
+
+async function confirmExecuteWithParams() {
+  const workflow = paramWorkflow.value
+  const workflowId = getWorkflowId(workflow)
+  if (!workflowId) return
+
+  const variables = buildRunVariablesFromParamForm()
+  if (!variables) return
+
+  paramSubmitting.value = true
+  error.value = ''
+  try {
+    // Agent run with variables 带参数执行，Automa 参数页由 BrowserFlow 跳过
+    await runAgentAutomaWorkflow(workflowId, agentBrowserId.value, variables)
+    paramDialogVisible.value = false
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    paramSubmitting.value = false
+  }
+}
+
+function resetParamDialog() {
+  if (paramSubmitting.value) return
+  paramWorkflow.value = null
+  paramFormItems.value = []
+}
+
+function createParamFormItem(param, index) {
+  const defaultValue = getTriggerParamDefaultRawValue(param)
+  return {
+    key: getTriggerParamKey(param, index),
+    name: param?.name || `param_${index + 1}`,
+    type: param?.type || 'string',
+    description: param?.description || '',
+    placeholder: param?.placeholder || '',
+    required: isTriggerParamRequired(param),
+    defaultText: formatTriggerParamDefaultValue(defaultValue),
+    value: normalizeParamInputValue(param, defaultValue),
+  }
+}
+
+function buildRunVariablesFromParamForm() {
+  const variables = {}
+
+  for (const item of paramFormItems.value) {
+    if (isMissingRequiredParam(item)) {
+      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `请填写必填参数：${item.name}` })
+      return null
+    }
+
+    const parsedValue = parseParamFormValue(item)
+    if (parsedValue === undefined && item.type === 'json' && !isEmptyParamValue(item.value)) return null
+    variables[item.name] = parsedValue
+  }
+
+  return variables
+}
+
+function parseParamFormValue(item) {
+  if (item.type === 'number') {
+    const value = Number(item.value)
+    return Number.isNaN(value) ? 0 : value
+  }
+  if (item.type === 'json') {
+    if (isEmptyParamValue(item.value)) return null
+    try {
+      return JSON.parse(item.value)
+    } catch {
+      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 ${item.name} 不是有效 JSON` })
+      return undefined
+    }
+  }
+  if (item.type === 'checkbox') return Boolean(item.value)
+  return item.value
 }
 
 async function handleExportSkill() {
@@ -374,7 +514,7 @@ async function handleExportSkill() {
       scope: exportScope.value,
       workflowIds,
     })
-    downloadBlob(blob, 'SKILL.md')
+    downloadBlob(blob, 'SKILL_AUTOMA.md')
     appMessage({ type: APP_MESSAGE_TYPE.success, message: 'Skill 已导出' })
   } catch (err) {
     error.value = err.message
@@ -463,6 +603,17 @@ function getTriggerParameters(workflow) {
   return Array.isArray(triggerData.parameters) ? triggerData.parameters : []
 }
 
+function getUniqueTriggerParameters(workflow) {
+  // Unique params 与 Automa 参数面板保持一致，同名参数只保留第一个
+  const seen = new Set()
+  return getTriggerParameters(workflow).filter((param, index) => {
+    const name = param?.name || `param_${index + 1}`
+    if (seen.has(name)) return false
+    seen.add(name)
+    return true
+  })
+}
+
 function getTriggerNode(workflow) {
   // Trigger node Automa 新版流程图中触发器通常是 label 为 trigger 的节点
   if (workflow?.drawflow?.nodes) {
@@ -495,11 +646,14 @@ function getTriggerParamTitle(param) {
   return parts.join('\n')
 }
 
-function formatTriggerParam(param) {
-  const name = param?.name || '未命名'
-  const type = formatTriggerParamType(param?.type)
-  const defaultValue = formatTriggerParamDefaultValue(param?.defaultValue)
-  return defaultValue ? `${name} / ${type} = ${defaultValue}` : `${name} / ${type}`
+function formatTriggerParamName(param) {
+  // Param name keeps Automa variable key visible 参数名直接展示 Automa 变量键
+  return param?.name || '未命名'
+}
+
+function formatTriggerParamMeaning(param) {
+  // Meaning prefers explicit description, then placeholder 参数意义优先使用说明，其次使用占位提示
+  return param?.description || param?.placeholder || '-'
 }
 
 function formatTriggerParamType(type) {
@@ -518,16 +672,44 @@ function formatTriggerParamDefaultValue(value) {
   return String(value)
 }
 
+function formatTriggerParamDefaultText(value) {
+  // Default text keeps empty value blank 默认值为空时保持空白
+  return formatTriggerParamDefaultValue(value)
+}
+
+function getTriggerParamDefaultRawValue(param) {
+  if (param?.defaultValue !== undefined) return param.defaultValue
+  if (param?.default !== undefined) return param.default
+  if (param?.value !== undefined) return param.value
+  return ''
+}
+
+function isTriggerParamRequired(param) {
+  return Boolean(param?.required || param?.data?.required)
+}
+
+function normalizeParamInputValue(param, value) {
+  if (param?.type === 'checkbox') return Boolean(value)
+  if (param?.type === 'json' && value && typeof value === 'object') return JSON.stringify(value, null, 2)
+  return formatTriggerParamDefaultValue(value)
+}
+
+function isEmptyParamValue(value) {
+  return value === undefined || value === null || value === ''
+}
+
+function isMissingRequiredParam(item) {
+  if (!item.required) return false
+  if (item.type === 'checkbox') return item.value !== true
+  return isEmptyParamValue(item.value)
+}
+
 function getNodeCount(workflow) {
   return workflow.drawflow?.nodes?.length || 0
 }
 
 function getWorkflowId(workflow) {
   return workflow?.id || workflow?.workflowId || workflow?.workflow_id || workflow?.automaId || workflow?.automa_id || ''
-}
-
-function getDataColumnCount(workflow) {
-  return workflow.dataColumns?.length || workflow.table?.length || 0
 }
 
 function getCreatedTimeRange() {
@@ -676,27 +858,74 @@ function padDatePart(value) {
   white-space: nowrap;
 }
 
-.trigger-params {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+.trigger-param-list {
+  display: grid;
+  gap: 8px;
   min-width: 0;
 }
 
-.trigger-param-tag {
-  max-width: 100%;
+.trigger-param-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  background: #f8fbff;
+  border: 1px solid #dce8f5;
+  border-radius: 6px;
 }
 
-.trigger-param-tag :deep(.el-tag__content) {
-  max-width: 180px;
+.trigger-param-field {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.trigger-param-field small {
+  color: #909399;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.trigger-param-field span,
+.trigger-param-field strong {
+  min-width: 0;
   overflow: hidden;
+  color: #303133;
+  font-size: 13px;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.trigger-param-field strong {
+  font-weight: 700;
+}
+
 .workflow-error {
   margin-bottom: 4px;
+}
+
+.workflow-param-form {
+  max-height: 58vh;
+  overflow: auto;
+  padding-right: 8px;
+}
+
+.workflow-param-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.workflow-param-help {
+  color: #909399;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 @media (max-width: 640px) {

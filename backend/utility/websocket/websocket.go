@@ -9,7 +9,9 @@ import (
 
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/workflowcache"
+	"github.com/Zany2/browserflow/backend/utility/workflowexecution"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -234,6 +236,11 @@ func (ws *WsHandlerFunc) handleAgentStatusUpdate(client *Client, in *model.WSReq
 func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) {
 	now := time.Now()
 	client.markHeartbeat(now.UnixMilli(), now)
+	browserID := in.BrowserID
+	if browserID == "" {
+		browserID = resolveClientID(client, in)
+	}
+	result := model.AgentCommandResult{BrowserID: browserID, CommandID: in.CommandID, Success: in.Success, Data: in.Data, Error: in.Error}
 
 	// Refresh last seen time after command result 命令结果上报后刷新最近活跃时间
 	if err := updateClientLastSeen(client, in); err != nil {
@@ -241,6 +248,19 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 	}
 
 	// Update task record when command id belongs to task execution 更新任务执行记录
+	// Notify command waiter and update execution state 通知命令等待方并更新执行状态
+	state.AgentMu.Lock()
+	resultCh := state.PendingCommands[in.CommandID]
+	delete(state.PendingCommands, in.CommandID)
+	if agent := state.AgentConnections[browserID]; agent != nil {
+		agent.LastSeenAt = now
+	}
+	state.AgentMu.Unlock()
+	workflowexecution.CompleteByCommand(in.CommandID, &result)
+	if resultCh != nil {
+		resultCh <- result
+	}
+
 	if strings.HasPrefix(in.CommandID, "task-record-") {
 		recordID := gconv.Int64(strings.TrimPrefix(in.CommandID, "task-record-"))
 		if recordID > 0 {

@@ -79,10 +79,11 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		CommandID: "task-record-" + gconv.String(recordID),
 		Command:   "task.execute",
 		Payload: g.Map{
-			"task_id":     taskID,
-			"task_name":   strings.TrimSpace(gconv.String(taskRecord[taskColumns.Name])),
-			"workflow_id": strings.TrimSpace(gconv.String(taskRecord[taskColumns.AutomaId])),
-			"params":      params,
+			"task_id":      taskID,
+			"task_name":    strings.TrimSpace(gconv.String(taskRecord[taskColumns.Name])),
+			"workflow_id":  strings.TrimSpace(gconv.String(taskRecord[taskColumns.AutomaId])),
+			"params":       params,
+			"check_params": false,
 		},
 	})
 	if sentCount <= 0 {
