@@ -414,28 +414,35 @@ async function handleCommand(command, payload) {
     const variables = payload.variables || payload.params || {}
     const taskId = payload.task_id || ''
     const taskName = payload.task_name || ''
+    const waitResult = Boolean(payload.wait_result ?? payload.waitResult ?? false)
 
-    runAutomaWorkflow({
+    const result = await runAutomaWorkflow({
       id: workflowId,
       publicId,
       variables,
       checkParams: payload.check_params ?? payload.checkParams ?? false,
+      executionId: payload.execution_id || payload.executionId || taskId || '',
+      waitResult,
+      timeout: payload.timeout || 300,
+      returnData: payload.return_data || payload.returnData || null,
     })
 
-    lastResult.value = taskId
-      ? `已接收任务执行：${taskName || taskId}`
-      : '已发送工作流执行命令'
+    lastResult.value = waitResult
+      ? `????????${result.status || '-'}`
+      : taskId
+        ? `????????${taskName || taskId}`
+        : '??????????'
 
     return {
-      ok: true,
+      ...result,
       task_id: taskId,
       task_name: taskName,
-      status: 'queued',
       workflow_id: workflowId,
       public_id: publicId,
       variables,
     }
   }
+
 
   throw new Error(`不支持的客户端命令: ${command}`)
 }

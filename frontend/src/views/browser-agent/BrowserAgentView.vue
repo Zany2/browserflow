@@ -71,15 +71,21 @@ async function handleCommand(command, payload) {
   }
 
   if (command === 'automa.workflow.run') {
-    runAutomaWorkflow({
+    const waitResult = Boolean(payload.wait_result ?? payload.waitResult ?? false)
+    const result = await runAutomaWorkflow({
       id: payload.id || payload.workflow_id || payload.workflowId,
       publicId: payload.publicId || payload.public_id,
       variables: payload.variables || payload.params || {},
       checkParams: payload.check_params ?? payload.checkParams ?? false,
+      executionId: payload.execution_id || payload.executionId || '',
+      waitResult,
+      timeout: payload.timeout || 300,
+      returnData: payload.return_data || payload.returnData || null,
     })
-    lastResult.value = '已发送执行命令'
-    return { ok: true, status: 'queued' }
+    lastResult.value = waitResult ? `????????${result.status || '-'}` : '???????'
+    return result
   }
+
 
   if (command === 'automa.workflow.open') {
     openAutomaWorkflow(payload.id || payload.workflow_id || payload.workflowId)

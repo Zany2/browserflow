@@ -154,6 +154,13 @@ message.on('workflow:execute', async (workflowData, sender) => {
     workflowData.options.tabId = sender.tab.id;
   }
 
+  // BrowserFlow local change start: remember source tab for external workflow result 记录外部执行结果回传页签
+  if (workflowData?.options?.browserFlowRequestId && sender?.tab?.id) {
+    if (!workflowData.options) workflowData.options = {};
+    workflowData.options.browserFlowSourceTabId = sender.tab.id;
+  }
+  // BrowserFlow local change end
+
   BackgroundWorkflowUtils.instance.executeWorkflow(
     workflowData,
     workflowData?.options || {}

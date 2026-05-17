@@ -117,6 +117,16 @@ class WorkflowManager {
           });
         });
       }
+
+      // BrowserFlow local change start: emit external workflow completion result 回传外部执行完成结果
+      this.#emitBrowserFlowWorkflowResult(engine, convertedWorkflow, {
+        id,
+        status,
+        history,
+        blockDetail,
+        ...rest,
+      });
+      // BrowserFlow local change end
     });
 
     BrowserAPIService.storage.local
@@ -145,6 +155,59 @@ class WorkflowManager {
 
     return engine;
   }
+
+  // BrowserFlow local change start: emit external workflow completion result 回传外部执行完成结果
+  #emitBrowserFlowWorkflowResult(engine, workflow, event) {
+    const options = engine?.options || {};
+    const requestId = options.browserFlowRequestId;
+    const sourceTabId = options.browserFlowSourceTabId;
+    if (!requestId || !sourceTabId) return;
+
+    const returnData = options.browserFlowReturnData || {};
+    const variables = {};
+    const variableNames = Array.isArray(returnData.variables)
+      ? returnData.variables
+      : [];
+    variableNames.forEach((name) => {
+      if (!name) return;
+      variables[name] = engine.referenceData?.variables?.[name];
+    });
+
+    const data = {
+      variables,
+    };
+    if (returnData.include_table) {
+      const limit = Number(returnData.table_limit || 20);
+      data.table = (engine.referenceData?.table || []).slice(
+        0,
+        Number.isFinite(limit) && limit > 0 ? limit : 20
+      );
+    }
+    if (returnData.include_history) {
+      data.history = event.history || [];
+    }
+
+    BrowserAPIService.tabs
+      .sendMessage(sourceTabId, {
+        type: 'browserflow:workflow-result',
+        data: {
+          ok: event.status === 'success',
+          status: event.status,
+          request_id: requestId,
+          execution_id: requestId,
+          workflow_id: workflow?.id,
+          message:
+            event.status === 'error' ? getBlockMessage(event.blockDetail) : '',
+          started_at: event.startedTimestamp,
+          ended_at: event.endedTimestamp,
+          data,
+        },
+      })
+      .catch((error) => {
+        console.error('Failed to send BrowserFlow workflow result:', error);
+      });
+  }
+  // BrowserFlow local change end
 
   /**
    * Stop workflow execution

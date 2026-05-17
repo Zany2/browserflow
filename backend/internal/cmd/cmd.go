@@ -11,6 +11,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/controller/app"
 	"github.com/Zany2/browserflow/backend/internal/controller/automa"
 	"github.com/Zany2/browserflow/backend/internal/controller/browser"
+	"github.com/Zany2/browserflow/backend/internal/controller/browserexecutor"
 	"github.com/Zany2/browserflow/backend/internal/controller/chat"
 	"github.com/Zany2/browserflow/backend/internal/controller/clients"
 	"github.com/Zany2/browserflow/backend/internal/controller/llm"
@@ -73,6 +74,9 @@ var (
 					// Desktop routes for local browser, model, and chat operation 本地浏览器、大模型和对话路由
 					group.Group("/browser", func(group *ghttp.RouterGroup) {
 						group.Bind(browser.NewV1())
+					})
+					group.Group("/browser-executor", func(group *ghttp.RouterGroup) {
+						group.Bind(browserexecutor.NewV1())
 					})
 					group.Group("/llm", func(group *ghttp.RouterGroup) {
 						group.Bind(llm.NewV1())

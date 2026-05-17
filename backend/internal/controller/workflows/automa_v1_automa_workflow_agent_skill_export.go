@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/gogf/gf/v2/frame/g"
 )
+
+const agentWorkflowSkillFileName = "SKILL_AUTOMA.md"
 
 // WorkflowAgentExportSkill exports agent workflows as SKILL.md 导出执行端工作流为 SKILL.md
 func (c *ControllerV1) WorkflowAgentExportSkill(ctx context.Context, req *v1.WorkflowAgentExportSkillReq) (res *v1.WorkflowAgentExportSkillRes, err error) {
@@ -29,11 +32,10 @@ func (c *ControllerV1) WorkflowAgentExportSkill(ctx context.Context, req *v1.Wor
 	}
 
 	request := g.RequestFromCtx(ctx)
-	fileName := fmt.Sprintf("BROWSERFLOW_AUTOMA_SKILL_%s.md", time.Now().Format("20060102150405"))
 
 	// Raw markdown response 原始 Markdown 响应，绕过统一 JSON 包装
 	request.Response.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	request.Response.Header().Set("Content-Disposition", "attachment; filename="+fileName)
+	request.Response.Header().Set("Content-Disposition", buildAgentSkillContentDisposition(agentWorkflowSkillFileName))
 	request.Response.Write(generateAgentWorkflowSkillMD(workflows, agentSkillBaseURL(request.Host, request.TLS != nil), browserID))
 
 	request.ExitAll()
@@ -82,6 +84,7 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("## Overview\n\n")
 	sb.WriteString("This skill describes Automa workflows that are currently available from a BrowserFlow browser-agent. Use the BrowserFlow HTTP API to open or run these workflows in the browser instance that exported them.\n\n")
 	sb.WriteString(fmt.Sprintf("**Total Workflows Available:** %d\n\n", len(workflows)))
+	sb.WriteString(fmt.Sprintf("**Recommended Filename:** `%s`\n\n", agentWorkflowSkillFileName))
 	sb.WriteString(fmt.Sprintf("**API Base URL:** `%s`\n\n", baseURL))
 	if strings.TrimSpace(browserID) != "" {
 		sb.WriteString(fmt.Sprintf("**Browser Instance ID:** `%s`\n\n", inlineCode(browserID)))
@@ -104,29 +107,61 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("## Parameter Rules\n\n")
 	sb.WriteString("Before running a workflow, inspect its `Parameters` section. If a required parameter has no value, ask the user for it before calling the API. If an optional parameter has a default value, use the default unless the user provides another value. Pass parameters through the `variables` object, and keep parameter names exactly as listed in this skill. BrowserFlow treats this `variables` object as the completed parameter set and instructs Automa not to open its own parameter input page.\n\n")
 
+	sb.WriteString("## Execution Mode Rules\n\n")
+	sb.WriteString("Before running a workflow, decide whether the user needs the final workflow result.\n\n")
+	sb.WriteString("- Use asynchronous execution when the user only asks to start, trigger, submit, open, launch, run, or execute a task and does not ask for returned data or final completion. Set `wait_result` to `false`. Return the `execution.execution_id` to the user so they can query status or results later.\n")
+	sb.WriteString("- Use synchronous waiting when the user asks to get, query, search, extract, collect, return, fetch, read, wait for completion, or confirm final success/failure. Set `wait_result` to `true`, set a reasonable `timeout`, and request returned data if needed.\n")
+	sb.WriteString("- For data-returning requests, request `return_data.variables: [\"browserflow_output\"]` and read `execution.result.data.variables.browserflow_output` first. If it is missing, report that the workflow completed but did not provide a BrowserFlow output variable.\n")
+	sb.WriteString("- If the user asks to check a previous task, use the execution status endpoint with the saved `execution_id` instead of running the workflow again.\n")
+	sb.WriteString("- If the intent is ambiguous, prefer async mode for action-only tasks and sync mode for data-returning tasks.\n\n")
+
 	sb.WriteString("## API Endpoints\n\n")
-	sb.WriteString("### Run Workflow\n\n")
+	sb.WriteString("### Run Workflow Async\n\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("curl -X POST '%s/workflows/%s/run' \\\n", baseURL, firstWorkflowID))
 	sb.WriteString("  -H 'Content-Type: application/json' \\\n")
-	sb.WriteString(fmt.Sprintf("  -d '%s'\n", compactJSON(map[string]any{
-		"browser_id": browserID,
-		"variables":  firstVariables,
-	})))
+	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
+		"browser_id":  browserID,
+		"variables":   firstVariables,
+		"wait_result": false,
+	}))))
+	sb.WriteString("```\n\n")
+
+	sb.WriteString("### Run Workflow And Wait For Result\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl -X POST '%s/workflows/%s/run' \\\n", baseURL, firstWorkflowID))
+	sb.WriteString("  -H 'Content-Type: application/json' \\\n")
+	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
+		"browser_id":  browserID,
+		"variables":   firstVariables,
+		"wait_result": true,
+		"timeout":     300,
+		"return_data": map[string]any{
+			"variables":       []string{"browserflow_output"},
+			"include_table":   false,
+			"table_limit":     20,
+			"include_history": false,
+		},
+	}))))
+	sb.WriteString("```\n\n")
+
+	sb.WriteString("### Query Execution Status\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl '%s/workflows/executions/{execution_id}'\n", baseURL))
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("### Open Workflow Editor\n\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("curl -X POST '%s/workflows/%s/open' \\\n", baseURL, firstWorkflowID))
 	sb.WriteString("  -H 'Content-Type: application/json' \\\n")
-	sb.WriteString(fmt.Sprintf("  -d '%s'\n", compactJSON(map[string]any{
+	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
 		"browser_id": browserID,
-	})))
+	}))))
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("## Available Workflows\n\n")
 	for index, workflow := range workflows {
-		appendAgentWorkflowSkillSection(&sb, index+1, workflow)
+		appendAgentWorkflowSkillSection(&sb, index+1, workflow, baseURL, browserID)
 	}
 
 	sb.WriteString("## Usage Notes\n\n")
@@ -135,13 +170,13 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("- Pass trigger parameters through the `variables` object. Parameter names must match the Automa trigger configuration.\n")
 	sb.WriteString("- Do not rely on Automa's parameter tab for Skill calls; collect required values before sending the HTTP request.\n")
 	sb.WriteString("- If the exported browser instance is no longer available, choose another running browser and update `browser_id`.\n")
-	sb.WriteString("- The run API confirms that the command was sent to the browser-agent. It does not currently prove that the Automa workflow completed successfully.\n")
+	sb.WriteString("- Async run returns after the command is accepted. Sync run waits until Automa reports `success`, `error`, `stopped`, or BrowserFlow reports `timeout`.\n")
 
 	return sb.String()
 }
 
 // appendAgentWorkflowSkillSection writes one workflow section 写入单个工作流说明
-func appendAgentWorkflowSkillSection(sb *strings.Builder, index int, workflow map[string]any) {
+func appendAgentWorkflowSkillSection(sb *strings.Builder, index int, workflow map[string]any, baseURL string, browserID string) {
 	workflowID := getAgentWorkflowID(workflow)
 	name := firstAgentSkillString(workflow, "name", "title")
 	if name == "" {
@@ -162,6 +197,7 @@ func appendAgentWorkflowSkillSection(sb *strings.Builder, index int, workflow ma
 	params := extractAgentWorkflowParameters(workflow)
 	if len(params) == 0 {
 		sb.WriteString("Parameters: none detected.\n\n")
+		appendAgentWorkflowRunExample(sb, baseURL, workflowID, browserID, nil)
 		return
 	}
 
@@ -185,6 +221,28 @@ func appendAgentWorkflowSkillSection(sb *strings.Builder, index int, workflow ma
 		}
 	}
 	sb.WriteString("\n")
+	appendAgentWorkflowRunExample(sb, baseURL, workflowID, browserID, buildAgentSkillVariableExample(params))
+}
+
+// appendAgentWorkflowRunExample writes a workflow-specific run example 写入工作流运行示例
+func appendAgentWorkflowRunExample(sb *strings.Builder, baseURL string, workflowID string, browserID string, variables map[string]any) {
+	if strings.TrimSpace(workflowID) == "" {
+		return
+	}
+	if variables == nil {
+		variables = map[string]any{}
+	}
+	sb.WriteString("Run example:\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl -X POST '%s/workflows/%s/run' \\\n", baseURL, workflowID))
+	sb.WriteString("  -H 'Content-Type: application/json' \\\n")
+	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
+		"browser_id":  browserID,
+		"variables":   variables,
+		"wait_result": false,
+	}))))
+	sb.WriteString("```\n\n")
+	sb.WriteString("For data-returning requests, use the sync example in the API Endpoints section and keep the same workflow ID and variables.\n\n")
 }
 
 // buildAgentSkillDescription builds frontmatter description 构建 frontmatter 描述
@@ -473,6 +531,17 @@ func compactJSON(value any) string {
 		return "{}"
 	}
 	return string(data)
+}
+
+// shellSingleQuote wraps a shell argument with safe single quotes 包装安全单引号参数
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+// buildAgentSkillContentDisposition builds download header 构建下载响应头
+func buildAgentSkillContentDisposition(fileName string) string {
+	encoded := url.PathEscape(fileName)
+	return fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", fileName, encoded)
 }
 
 // agentSkillBaseURL builds api base url 构建 API 基础地址

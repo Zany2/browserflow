@@ -22,6 +22,9 @@ function automaCustomEventListener(findWorkflow) {
       ...(detail.options || {}),
       data: detail.data || {},
     };
+    if (detail.options?.browserFlowRequestId) {
+      workflow.options.browserFlowSourceTabId = null;
+    }
     // BrowserFlow local change end
     sendMessage('workflow:execute', workflow, 'background');
   }

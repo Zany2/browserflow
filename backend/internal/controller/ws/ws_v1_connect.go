@@ -14,6 +14,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
+	"github.com/Zany2/browserflow/backend/utility/workflowexecution"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/guid"
 	"github.com/gorilla/websocket"
@@ -276,6 +277,7 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 				agent.LastSeenAt = time.Now()
 			}
 			state.AgentMu.Unlock()
+			workflowexecution.CompleteByCommand(in.CommandID, &result)
 			if resultCh != nil {
 				resultCh <- result
 			}

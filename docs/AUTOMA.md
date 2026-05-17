@@ -525,3 +525,11 @@ const hasParams =
 - Behavior: Browser Agent 收到后端 `automa.workflow.run` 时，会把 `payload.check_params` 转为 `checkParams`，默认值是 `false`。
 - File: `backend/internal/controller/workflows/automa_v1_automa_workflow_run.go`
 - Behavior: 后端执行工作流命令下发 `check_params: false`，表示参数已经由 BrowserFlow 侧处理完成。
+
+## BrowserFlow execution completion and returned data
+- File: `third_party/automa/src/background/index.js`
+- File: `third_party/automa/src/workflowEngine/WorkflowManager.js`
+- File: `third_party/automa/src/content/services/webService.js`
+- Purpose: BrowserFlow exported Automa Skills support both async dispatch and sync wait. When sync wait is requested, Automa sends the terminal status and selected output data back to the browser-agent page, and browser-agent returns it to the backend through the existing WebSocket command result.
+- Behavior: BrowserFlow sends `browserFlowRequestId`, `browserFlowWaitResult`, and `browserFlowReturnData` through workflow options. Automa records the source tab id as `browserFlowSourceTabId`, emits a result from `engine.on('destroyed')`, and forwards `browserflow:workflow-result` to the page event `__browserflow_automa_workflow_result__`.
+- Data rule: Workflows should write business output to the `browserflow_output` variable. Sync Skill calls should request and read that variable first instead of returning all variables, table rows, or logs.

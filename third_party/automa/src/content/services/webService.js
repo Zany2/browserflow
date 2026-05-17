@@ -30,6 +30,20 @@ function sendMessageBack(type, payload = {}) {
   window.dispatchEvent(event);
 }
 
+// BrowserFlow local change start: forward workflow execution result to page 转发工作流执行结果到页面
+browser.runtime.onMessage.addListener((message) => {
+  if (message?.type !== 'browserflow:workflow-result') return undefined;
+
+  window.dispatchEvent(
+    new CustomEvent('__browserflow_automa_workflow_result__', {
+      detail: message.data || {},
+    })
+  );
+  return undefined;
+});
+// BrowserFlow local change end
+
+
 // BrowserFlow local change start: preserve imported workflow timestamps 保留导入工作流的原始时间戳
 // normalizeWorkflowTimestamp keeps imported Automa timestamps 保留导入工作流的原始时间
 function normalizeWorkflowTimestamp(value, fallbackValue = Date.now()) {

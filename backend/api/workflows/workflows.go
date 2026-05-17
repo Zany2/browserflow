@@ -24,5 +24,6 @@ type IWorkflowsV1 interface {
 	WorkflowAgentList(ctx context.Context, req *v1.WorkflowAgentListReq) (res *v1.WorkflowAgentListRes, err error)
 	WorkflowAgentExportSkill(ctx context.Context, req *v1.WorkflowAgentExportSkillReq) (res *v1.WorkflowAgentExportSkillRes, err error)
 	WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) (res *v1.WorkflowRunRes, err error)
+	WorkflowExecutionDetail(ctx context.Context, req *v1.WorkflowExecutionDetailReq) (res *v1.WorkflowExecutionDetailRes, err error)
 	WorkflowOpen(ctx context.Context, req *v1.WorkflowOpenReq) (res *v1.WorkflowOpenRes, err error)
 }
