@@ -282,18 +282,7 @@ go run .
 
 When deploying server mode on a LAN or the internet, make sure the database, Redis, backend APIs, and frontend entry are protected by a trusted network or reverse proxy. Skill calls can trigger browser automation directly, so exposing them publicly without authentication or access control is not recommended.
 
-## Git Notes
+## License
 
-The following paths are local runtime data, external source snapshots, or personal configuration and should not be committed:
+Apache-2.0
 
-- `backend/data/`
-- `backend/user_data/`
-- `backend/logs/`
-- `AGENTS.md`
-- `CLAUDE.md`
-- `third_party/automa/`
-- `third_party/browserwing/`
-
-If these files are already tracked by Git, adding them to `.gitignore` will not untrack them automatically. Use `git rm --cached` before committing.
-
-`backend/manifest/config/config.yaml` may contain database, Redis, or local service addresses. Check it before committing to avoid exposing sensitive information.
