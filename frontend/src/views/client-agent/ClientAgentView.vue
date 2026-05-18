@@ -428,10 +428,10 @@ async function handleCommand(command, payload) {
     })
 
     lastResult.value = waitResult
-      ? `????????${result.status || '-'}`
+      ? `执行结果：${result.status || '-'}`
       : taskId
-        ? `????????${taskName || taskId}`
-        : '??????????'
+        ? `任务已下发：${taskName || taskId}`
+        : '工作流已下发'
 
     return {
       ...result,

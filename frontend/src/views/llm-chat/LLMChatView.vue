@@ -319,14 +319,17 @@ async function handleSendMessage() {
   }
 
   currentSession.value.messages.push(userMessage, assistantMessage)
+  // Reactive message 使用数组中的响应式对象承接流式内容，确保每个分片都能立即渲染
+  const streamingAssistantMessage = currentSession.value.messages.at(-1)
   scrollToBottom()
 
   const sessionId = currentSession.value.id
   try {
     await streamChatMessage(sessionId, messageText, (chunk) => {
       if (chunk.type === 'message') {
-        assistantMessage.id = chunk.message_id || assistantMessage.id
-        assistantMessage.content += chunk.content || ''
+        streamingAssistantMessage.id = chunk.message_id || streamingAssistantMessage.id
+        streamingAssistantMessage.content += chunk.content || ''
+        scrollToBottom()
       }
       if (chunk.type === 'error') {
         throw new Error(chunk.error || '生成失败')
@@ -354,7 +357,8 @@ function getSessionTitle(session) {
 }
 
 function getConfigLabel(config) {
-  return `${getProviderName(config.provider)} / ${config.model}`
+  // Config label 下拉项展示提供商、配置名和模型名，便于区分同模型的不同配置
+  return `${getProviderName(config.provider)} / ${config.name || '-'} / ${config.model}`
 }
 
 function getProviderName(providerId) {

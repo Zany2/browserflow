@@ -153,10 +153,19 @@
             class-name="ellipsis-column"
             show-overflow-tooltip
           />
-          <el-table-column label="默认" width="70" align="center" class-name="action-column">
+          <el-table-column label="默认" width="96" align="center" class-name="action-column">
             <template #default="{ row }">
               <el-tag v-if="row.is_default" type="success" effect="plain">默认</el-tag>
-              <span v-else>-</span>
+              <el-button
+                v-else
+                link
+                type="primary"
+                :loading="isDefaultUpdating(row.id)"
+                :disabled="!row.is_active"
+                @click="handleSetDefaultConfig(row)"
+              >
+                设为默认
+              </el-button>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="80" align="center" class-name="action-column">
@@ -219,6 +228,7 @@ const defaultFilter = ref('')
 const statusFilter = ref('')
 const selectedConfigIds = ref([])
 const statusUpdatingIds = ref([])
+const defaultUpdatingIds = ref([])
 
 const configForm = reactive(createEmptyForm())
 
@@ -354,6 +364,23 @@ async function handleToggleConfigStatus(config, checked) {
   }
 }
 
+async function handleSetDefaultConfig(config) {
+  if (!config.is_active) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先启用该模型配置' })
+    return
+  }
+
+  defaultUpdatingIds.value = Array.from(new Set([...defaultUpdatingIds.value, config.id]))
+  try {
+    // Default update 设为默认后由后端清空旧默认项，再刷新列表同步最新状态
+    await updateLLMConfig(config.id, { ...config, is_default: true })
+    await loadConfigs()
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '已设为默认模型' })
+  } finally {
+    defaultUpdatingIds.value = defaultUpdatingIds.value.filter((id) => id !== config.id)
+  }
+}
+
 function handleToggleConfig(configId, checked) {
   if (checked) {
     selectedConfigIds.value = Array.from(new Set([...selectedConfigIds.value, configId]))
@@ -420,6 +447,10 @@ function getProviderName(providerId) {
 
 function isStatusUpdating(configId) {
   return statusUpdatingIds.value.includes(configId)
+}
+
+function isDefaultUpdating(configId) {
+  return defaultUpdatingIds.value.includes(configId)
 }
 
 function createEmptyForm() {

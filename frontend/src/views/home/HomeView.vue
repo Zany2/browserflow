@@ -1,27 +1,59 @@
 <template>
-  <!-- Hero panel 首页主视觉，说明项目定位和核心能力 -->
+  <!-- Hero panel 首页主视觉，先说明价值，再给出当前模式 -->
   <section class="home-page">
     <section class="hero-panel">
       <div class="hero-copy">
-        <h1>BrowserFlow 控制台</h1>
+        <span class="eyebrow">双模式浏览器自动化平台</span>
+        <h1>把 Automa 工作流，接成可调度的自动化能力</h1>
         <p class="summary">
-          BrowserFlow 是一套面向浏览器自动化的双形态项目：在 Windows 上，它可以作为本地工具直接运行，
-          管理浏览器实例、大模型配置、对话调试和 Automa 工作流；部署到服务器后，它可以作为任务调度中心，
-          统一维护客户端、服务端工作流、定时任务和执行记录。
+          BrowserFlow 把浏览器执行端、工作流同步、任务下发和结果追踪放进同一条链路里：
+          在 Windows 上专注本机调试与执行，部署到服务器后则承担多客户端调度和集中管理。
         </p>
       </div>
       <div class="mode-strip" aria-label="运行模式">
-        <span class="mode-pill mode-pill--desktop">Windows 本地版</span>
-        <span class="mode-pill mode-pill--server">服务器调度版</span>
+        <span class="mode-pill mode-pill--current">{{ currentModeLabel }}</span>
+        <span class="mode-pill mode-pill--desktop">Windows 本地</span>
+        <span class="mode-pill mode-pill--server">Server 调度</span>
       </div>
     </section>
 
+    <!-- Quick start 当前模式下的高频入口，减少用户判断成本 -->
+    <section class="quick-start-panel">
+      <div class="section-heading">
+        <div class="section-heading__copy">
+          <span>从这里开始</span>
+          <p>{{ currentModeDescription }}</p>
+        </div>
+        <a
+          v-if="showAgentEntryLink"
+          class="client-agent-link"
+          :href="agentEntryUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ agentEntryText }}
+        </a>
+      </div>
+      <div class="quick-start-grid">
+        <RouterLink
+          v-for="item in currentModeActions"
+          :key="item.to"
+          class="quick-start-card"
+          :to="item.to"
+        >
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.description }}</span>
+        </RouterLink>
+      </div>
+    </section>
+
+    <!-- Runtime modes 双模式说明，压缩成面向决策的描述 -->
     <section class="mode-grid">
       <article class="mode-card mode-card--desktop">
         <h2>Windows 本地使用</h2>
         <p>
-          适合放在个人电脑或自动化工作站上运行。后端可以内嵌前端 dist，打开可执行文件后直接进入控制台，
-          用于启动浏览器、连接本机执行端、配置模型、测试对话，并从浏览器扩展侧读取或执行工作流。
+          适合单机调试和本地自动化。启动受控浏览器后，可以直接管理工作流、验证模型、测试对话，
+          并从当前浏览器里的 Automa 读取或执行流程。
         </p>
         <div class="route-list">
           <span>浏览器</span>
@@ -34,8 +66,8 @@
       <article class="mode-card mode-card--server">
         <h2>服务器任务调度</h2>
         <p>
-          适合部署在长期在线的服务器上。服务器负责保存调度数据、接收客户端连接、同步可执行工作流、
-          创建任务计划，并记录每一次任务下发、执行状态、错误信息和结果内容。
+          适合长期在线和多客户端协作。服务端负责同步工作流、绑定客户端、创建任务计划，
+          并持续记录每次下发、执行状态和结果。
         </p>
         <div class="route-list">
           <span>工作流管理</span>
@@ -46,40 +78,39 @@
       </article>
     </section>
 
+    <!-- Feature cards 核心能力，围绕一条自动化闭环展开 -->
     <section class="feature-grid">
       <article class="feature-item feature-item--blue">
-        <h2>浏览器执行环境</h2>
-        <p>维护本地或远程浏览器配置，启动后与执行端保持状态同步，方便工作流调试和自动化运行。</p>
+        <h2>连接执行端</h2>
+        <p>让本地浏览器或远程客户端稳定接入，先把“能执行”这件事接牢。</p>
       </article>
       <article class="feature-item feature-item--green">
-        <h2>大模型与对话</h2>
-        <p>集中管理模型供应商、模型名称、API Key 和默认配置，用对话页快速验证模型是否可用。</p>
+        <h2>管理工作流</h2>
+        <p>读取、同步、导入和保护 Automa 工作流，让流程从浏览器里真正走进系统。</p>
       </article>
       <article class="feature-item feature-item--orange">
-        <h2>工作流同步</h2>
-        <p>本地读取 Automa 工作流，服务器侧可导入、同步、保护和版本化，用于后续任务调度。</p>
+        <h2>编排任务</h2>
+        <p>把工作流、参数、客户端和 Cron 组合成任务，而不是每次都靠人工点一下。</p>
       </article>
       <article class="feature-item feature-item--purple">
-        <h2>任务编排闭环</h2>
-        <p>任务配置、客户端选择、参数下发、执行记录和结果追踪串起来，形成可持续运行的自动化链路。</p>
+        <h2>追踪结果</h2>
+        <p>保留下发、回执、错误和结果，让自动化从“跑过”变成“可追溯”。</p>
       </article>
     </section>
 
+    <!-- Workflow chain 主流程，用最短路径说明产品心智 -->
     <section class="flow-panel">
-      <span>编辑与调试</span>
+      <span>连接执行端</span>
       <strong>→</strong>
       <span>同步工作流</span>
       <strong>→</strong>
-      <span>创建任务</span>
+      <span>编排任务</span>
       <strong>→</strong>
-      <span>客户端执行</span>
+      <span>自动执行</span>
       <strong>→</strong>
-      <span>记录结果</span>
+      <span>追踪结果</span>
     </section>
 
-    <a class="client-agent-link" :href="agentEntryUrl" target="_blank" rel="noopener noreferrer">
-      {{ agentEntryText }}
-    </a>
   </section>
 </template>
 
@@ -91,6 +122,30 @@ import { getRuntimeConfig } from '@/services/app'
 const router = useRouter()
 const runtimeMode = ref('')
 
+// Mode copy 当前运行模式对应的首页说明文案
+const modeCopy = {
+  windows: {
+    label: '当前：Windows 本地模式',
+    description: '先启动浏览器，再读取工作流、验证模型，适合本机调试和单机执行。',
+    actions: [
+      { to: '/browser', title: '浏览器', description: '启动并查看受控浏览器状态' },
+      { to: '/workflows', title: '工作流', description: '读取、打开或执行 Automa 流程' },
+      { to: '/llm', title: '大模型', description: '配置供应商、模型与默认参数' },
+      { to: '/chat', title: '对话', description: '快速验证模型是否可用' },
+    ],
+  },
+  server: {
+    label: '当前：Server 调度模式',
+    description: '先接入客户端，再同步工作流和创建任务，适合远程调度与集中管理。',
+    actions: [
+      { to: '/clients', title: '客户端', description: '查看在线执行端与连接状态' },
+      { to: '/automa', title: '工作流管理', description: '同步、导入并维护服务端流程' },
+      { to: '/tasks', title: '任务配置', description: '绑定流程、客户端与调度规则' },
+      { to: '/task-records', title: '执行记录', description: '追踪下发、回执与执行结果' },
+    ],
+  },
+}
+
 onMounted(async () => {
   try {
     const config = await getRuntimeConfig()
@@ -100,22 +155,47 @@ onMounted(async () => {
   }
 })
 
+// currentModeMeta 当前模式元信息，失败时回退到通用说明
+const currentModeMeta = computed(() => {
+  return (
+    modeCopy[runtimeMode.value] || {
+      label: '当前：运行模式读取中',
+      description: '先确认后端运行模式，再进入对应的浏览器控制或任务调度页面。',
+      actions: [
+        { to: '/browser', title: '浏览器', description: '进入本地执行环境' },
+        { to: '/automa', title: '工作流管理', description: '进入服务端流程管理' },
+      ],
+    }
+  )
+})
+
+// currentModeLabel 当前运行模式标题
+const currentModeLabel = computed(() => currentModeMeta.value.label)
+
+// currentModeDescription 当前运行模式说明
+const currentModeDescription = computed(() => currentModeMeta.value.description)
+
+// currentModeActions 当前运行模式推荐入口
+const currentModeActions = computed(() => currentModeMeta.value.actions)
+
+// showAgentEntryLink 服务端模式才显示客户端执行页入口
+const showAgentEntryLink = computed(() => runtimeMode.value === 'server')
+
 // agentEntryUrl current agent page url 当前模式对应的入口地址
 const agentEntryUrl = computed(() => {
-  const routeName = runtimeMode.value === 'windows' ? 'browser-agent' : 'client-agent'
-  return new URL(router.resolve({ name: routeName }).href, window.location.href).href
+  return new URL(router.resolve({ name: 'client-agent' }).href, window.location.href).href
 })
 
 // agentEntryText current agent page label 当前模式对应的入口文案
 const agentEntryText = computed(() => {
-  return runtimeMode.value === 'windows' ? '浏览器执行页测试入口' : '客户端执行页测试入口'
+  return '客户端执行页测试入口'
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .home-page {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .hero-panel {
@@ -123,24 +203,33 @@ const agentEntryText = computed(() => {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 24px;
-  padding: 36px 0 18px;
+  padding: 22px 0 8px;
 }
 
 .hero-copy {
   min-width: 0;
 }
 
+.eyebrow {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 h1 {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   color: #303133;
   font-size: 34px;
+  line-height: 1.25;
 }
 
 .summary {
   max-width: 900px;
   margin: 0;
   color: #606266;
-  line-height: 1.8;
+  line-height: 1.7;
 }
 
 .mode-strip {
@@ -168,10 +257,86 @@ h1 {
   border-color: #bfdbfe;
 }
 
+.mode-pill--current {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
 .mode-pill--server {
   color: #b45309;
   background: #fffbeb;
   border-color: #fde68a;
+}
+
+.quick-start-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.section-heading__copy {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.section-heading__copy span {
+  color: #303133;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.section-heading__copy p {
+  margin: 0;
+  color: #909399;
+}
+
+.quick-start-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quick-start-card {
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  padding: 12px 14px;
+  background: #f8fbff;
+  border: 1px solid #dce8f5;
+  border-radius: 8px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.quick-start-card strong {
+  color: #303133;
+  font-size: 16px;
+}
+
+.quick-start-card span {
+  color: #606266;
+  line-height: 1.5;
+}
+
+.quick-start-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 10px 24px rgb(37 99 235 / 10%);
+  transform: translateY(-1px);
 }
 
 .mode-grid {
@@ -181,7 +346,7 @@ h1 {
 }
 
 .mode-card {
-  padding: 22px;
+  padding: 18px;
   background: #ffffff;
   border: 1px solid #e4e7ed;
   border-top: 5px solid transparent;
@@ -198,7 +363,7 @@ h1 {
 
 .mode-card h2,
 .feature-item h2 {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   color: #303133;
   font-size: 18px;
 }
@@ -207,14 +372,14 @@ h1 {
 .feature-item p {
   margin: 0;
   color: #606266;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .route-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .route-list span {
@@ -233,7 +398,7 @@ h1 {
 }
 
 .feature-item {
-  padding: 18px;
+  padding: 14px 16px;
   background: #ffffff;
   border: 1px solid #e4e7ed;
   border-left: 5px solid transparent;
@@ -265,7 +430,7 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 16px 18px;
+  padding: 12px 16px;
   color: #606266;
   background: #ffffff;
   border: 1px solid #e4e7ed;
@@ -282,7 +447,7 @@ h1 {
 }
 
 .client-agent-link {
-  justify-self: end;
+  flex-shrink: 0;
   color: #909399;
   font-size: 13px;
 }
@@ -294,7 +459,8 @@ h1 {
 @media (max-width: 768px) {
   .hero-panel,
   .mode-grid,
-  .feature-grid {
+  .feature-grid,
+  .quick-start-grid {
     grid-template-columns: 1fr;
   }
 
@@ -302,8 +468,13 @@ h1 {
     justify-content: flex-start;
   }
 
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .client-agent-link {
-    justify-self: start;
+    align-self: flex-start;
   }
 }
 </style>

@@ -82,7 +82,7 @@ async function handleCommand(command, payload) {
       timeout: payload.timeout || 300,
       returnData: payload.return_data || payload.returnData || null,
     })
-    lastResult.value = waitResult ? `????????${result.status || '-'}` : '???????'
+    lastResult.value = waitResult ? `执行结果：${result.status || '-'}` : '工作流已下发'
     return result
   }
 
