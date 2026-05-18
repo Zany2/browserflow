@@ -282,18 +282,6 @@ go run .
 
 如果把 Server 模式部署到局域网或互联网，请确认数据库、Redis、后端接口和前端访问入口都处在可信网络或反向代理保护下。Skill 调用会直接触发浏览器自动化任务，不建议在没有认证和访问控制的情况下暴露到公网。
 
-## Git 注意事项
+## 开源协议
 
-以下内容属于本地运行数据、外部源码快照或个人配置，不应提交：
-
-- `backend/data/`
-- `backend/user_data/`
-- `backend/logs/`
-- `AGENTS.md`
-- `CLAUDE.md`
-- `third_party/automa/`
-- `third_party/browserwing/`
-
-如果这些文件已经被 Git 跟踪，仅加入 `.gitignore` 不会自动取消跟踪，需要执行 `git rm --cached` 后再提交。
-
-`backend/manifest/config/config.yaml` 可能包含数据库、Redis 或本地服务地址。提交前请确认其中没有不应公开的敏感信息。
+Apache-2.0
