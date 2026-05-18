@@ -6,11 +6,12 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/chat/v1"
+	"github.com/Zany2/browserflow/backend/utility/chatruntime"
 )
 
 // ChatSessionDelete deletes chat session 删除对话会话
 func (c *ControllerV1) ChatSessionDelete(ctx context.Context, req *v1.ChatSessionDeleteReq) (res *v1.ChatSessionDeleteRes, err error) {
-	db, _, err := ensureRuntime(ctx)
+	db, _, err := chatruntime.Ensure(ctx)
 	if err != nil {
 		return nil, err
 	}

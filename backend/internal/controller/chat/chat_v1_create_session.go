@@ -7,12 +7,13 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/chat/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/utility/chatruntime"
 	"github.com/gogf/gf/v2/util/guid"
 )
 
 // ChatSessionCreate creates chat session 创建对话会话
 func (c *ControllerV1) ChatSessionCreate(ctx context.Context, req *v1.ChatSessionCreateReq) (res *v1.ChatSessionCreateRes, err error) {
-	db, _, err := ensureRuntime(ctx)
+	db, _, err := chatruntime.Ensure(ctx)
 	if err != nil {
 		return nil, err
 	}

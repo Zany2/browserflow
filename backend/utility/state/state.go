@@ -9,7 +9,6 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
-	"github.com/gorilla/websocket"
 )
 
 // BrowserRuntime running browser holder 浏览器运行态对象
@@ -23,18 +22,12 @@ type BrowserRuntime struct {
 	AgentToken string                 // AgentToken browser agent token 浏览器执行端令牌
 }
 
-// WSClient websocket client wrapper WebSocket 客户端包装
-type WSClient struct {
-	Conn    *websocket.Conn // Conn websocket connection WebSocket 连接
-	WriteMu sync.Mutex      // WriteMu protects writes 保护写入操作
-}
-
 // AgentConnection online browser agent connection 在线浏览器执行端连接
 type AgentConnection struct {
 	BrowserID       string    // BrowserID browser instance id 浏览器实例ID
 	Role            string    // Role agent role 执行端角色
 	Token           string    // Token agent auth token 执行端认证令牌
-	Client          *WSClient // Client websocket client WebSocket 客户端
+	ConnectionID    string    // ConnectionID websocket connection id WebSocket 连接标识
 	AutomaInstalled bool      // AutomaInstalled plugin installed status 插件安装状态
 	AutomaVersion   string    // AutomaVersion plugin version 插件版本
 	ConnectedAt     time.Time // ConnectedAt connection time 连接建立时间

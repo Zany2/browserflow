@@ -6,15 +6,15 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
-	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/os/gtime"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/clientops"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // ClientUpdate updates editable client fields 更新客户端可编辑字段
 func (c *ControllerV1) ClientUpdate(ctx context.Context, req *v1.ClientUpdateReq) (res *v1.ClientUpdateRes, err error) {
 	// Query target client 查询目标客户端
-	record, err := queryClientRecord(ctx, req.ID)
+	record, err := clientops.QueryRecord(ctx, req.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -26,9 +26,8 @@ func (c *ControllerV1) ClientUpdate(ctx context.Context, req *v1.ClientUpdateReq
 	columns := dao.Clients.Columns()
 	_, err = dao.Clients.Ctx(ctx).
 		WherePri(gconv.Int64(record[columns.Id])).
-		Data(g.Map{
-			columns.ClientName: strings.TrimSpace(req.ClientName),
-			columns.UpdatedAt:  gtime.Now(),
+		Data(do.Clients{
+			ClientName: strings.TrimSpace(req.ClientName),
 		}).
 		Update()
 	if err != nil {
@@ -39,7 +38,7 @@ func (c *ControllerV1) ClientUpdate(ctx context.Context, req *v1.ClientUpdateReq
 	if err != nil {
 		return nil, err
 	}
-	client, err := clientRecordToEntity(updated)
+	client, err := clientops.RecordToEntity(updated)
 	if err != nil {
 		return nil, err
 	}

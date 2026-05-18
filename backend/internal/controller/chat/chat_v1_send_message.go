@@ -9,6 +9,7 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/chat/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/utility/chatruntime"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/guid"
 )
@@ -25,7 +26,7 @@ func (c *ControllerV1) ChatMessageSend(ctx context.Context, req *v1.ChatMessageS
 		return nil, fmt.Errorf("消息不能为空")
 	}
 
-	db, llmClient, err := ensureRuntime(ctx)
+	db, llmClient, err := chatruntime.Ensure(ctx)
 	if err != nil {
 		return nil, err
 	}

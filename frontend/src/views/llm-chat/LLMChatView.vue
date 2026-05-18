@@ -149,6 +149,8 @@ const selectedSessionIds = ref([])
 const sessionCurrentPage = ref(1)
 const sessionPageSize = ref(10)
 const sessionPageSizes = [10, 30, 60]
+// STREAM_CHAR_DELAY controls typewriter speed 流式逐字显示间隔
+const STREAM_CHAR_DELAY = 18
 const inputMessage = ref('')
 const streaming = ref(false)
 const messageListRef = ref(null)
@@ -323,10 +325,10 @@ async function handleSendMessage() {
 
   const sessionId = currentSession.value.id
   try {
-    await streamChatMessage(sessionId, messageText, (chunk) => {
+    await streamChatMessage(sessionId, messageText, async (chunk) => {
       if (chunk.type === 'message') {
         assistantMessage.id = chunk.message_id || assistantMessage.id
-        assistantMessage.content += chunk.content || ''
+        await appendAssistantContent(assistantMessage, chunk.content)
       }
       if (chunk.type === 'error') {
         throw new Error(chunk.error || '生成失败')
@@ -354,7 +356,7 @@ function getSessionTitle(session) {
 }
 
 function getConfigLabel(config) {
-  return `${getProviderName(config.provider)} / ${config.model}`
+  return `${getProviderName(config.provider)} / ${config.name || '-'} / ${config.model || '-'}`
 }
 
 function getProviderName(providerId) {
@@ -373,6 +375,21 @@ async function scrollToBottom() {
   if (messageListRef.value) {
     messageListRef.value.scrollTop = messageListRef.value.scrollHeight
   }
+}
+
+async function appendAssistantContent(assistantMessage, content) {
+  // Typewriter output renders each SSE chunk one character at a time 逐字追加 SSE 内容
+  for (const char of Array.from(String(content || ''))) {
+    assistantMessage.content += char
+    await scrollToBottom()
+    await sleep(STREAM_CHAR_DELAY)
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
 }
 </script>
 

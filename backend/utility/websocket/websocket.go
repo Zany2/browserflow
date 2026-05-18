@@ -7,8 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zany2/browserflow/backend/internal/consts"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/workflowcache"
 	"github.com/Zany2/browserflow/backend/utility/workflowexecution"
@@ -34,6 +36,8 @@ var (
 
 // WsHandlerFunc default websocket handler 默认 WebSocket 处理器
 type WsHandlerFunc struct {
+	// mode runtime mode 当前运行模式
+	mode string
 	// mu protect context maps 保护上下文索引
 	mu sync.RWMutex
 	// ClientCtxMap client contexts 客户端上下文
@@ -46,6 +50,7 @@ type WsHandlerFunc struct {
 func Init(ctx context.Context) {
 	once.Do(func() {
 		WsHandler = &WsHandlerFunc{
+			mode:            consts.ResolveRuntimeMode(ctx),
 			ClientCtxMap:    make(map[string]context.Context),
 			ClientCtxCancel: make(map[string]context.CancelFunc),
 		}
@@ -72,12 +77,33 @@ func MaxConn(ctx context.Context) int64 {
 // BuildClientIdentity build client identity 构建客户端标识
 func BuildClientIdentity(clientIP string) ClientIdentity {
 	return ClientIdentity{
-		ClientIP: clientIP,
+		ConnectionID:     clientIP,
+		ClientIP:         clientIP,
+		RequireHeartbeat: true,
+	}
+}
+
+// BuildConnectionIdentity build arbitrary connection identity 构建通用连接标识
+func BuildConnectionIdentity(connectionID, clientIP string, requireHeartbeat bool) ClientIdentity {
+	return ClientIdentity{
+		ConnectionID:     connectionID,
+		ClientIP:         clientIP,
+		RequireHeartbeat: requireHeartbeat,
 	}
 }
 
 // SendClientMessage send structured websocket message 发送结构化消息
 func SendClientMessage(clientIP string, in *model.WSResponse) int {
+	return sendStructuredMessage(clientIP, in)
+}
+
+// SendConnectionMessage send structured message by connection id 按连接标识发送结构化消息
+func SendConnectionMessage(connectionID string, in *model.WSResponse) int {
+	return sendStructuredMessage(connectionID, in)
+}
+
+// sendStructuredMessage sends one JSON websocket message 发送单条 JSON WebSocket 消息
+func sendStructuredMessage(connectionID string, in *model.WSResponse) int {
 	if in == nil {
 		return 0
 	}
@@ -92,7 +118,7 @@ func SendClientMessage(clientIP string, in *model.WSResponse) int {
 	if WsManage == nil {
 		Init(context.Background())
 	}
-	return WsManage.SendMessageToClient(clientIP, body)
+	return WsManage.SendMessageToClient(connectionID, body)
 }
 
 // SendRawClientMessage send raw websocket message 发送原始消息
@@ -139,6 +165,11 @@ func (ws *WsHandlerFunc) OnMessage(client *Client, messageType int, message []by
 		return
 	}
 
+	if ws.mode != consts.RuntimeModeServer {
+		ws.handleDesktopMessage(client, &in)
+		return
+	}
+
 	switch strings.ToLower(in.Type) {
 	case model.WSMessageTypeHeartbeat:
 		ws.handleHeartbeat(client, &in)
@@ -151,7 +182,7 @@ func (ws *WsHandlerFunc) OnMessage(client *Client, messageType int, message []by
 	case model.WSMessageTypeWorkflowInventory:
 		ws.handleWorkflowInventory(client, &in)
 	case model.WSMessageTypePing:
-		_ = SendClientMessage(client.ClientIP(), &model.WSResponse{Type: model.WSMessageTypePong})
+		_ = SendConnectionMessage(client.ConnectionID(), &model.WSResponse{Type: model.WSMessageTypePong})
 	default:
 		g.Log().Line().Infof(client.Ctx, "收到未处理的 WebSocket 消息：client_ip=%s type=%s", client.ClientIP(), in.Type)
 	}
@@ -274,12 +305,11 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 			}
 			_, err := dao.TaskRecords.Ctx(client.Ctx).
 				WherePri(recordID).
-				Data(g.Map{
-					dao.TaskRecords.Columns().Status:       status,
-					dao.TaskRecords.Columns().ResultJson:   resultJSON,
-					dao.TaskRecords.Columns().ErrorMessage: strings.TrimSpace(in.Error),
-					dao.TaskRecords.Columns().FinishedAt:   gtime.Now(),
-					dao.TaskRecords.Columns().UpdatedAt:    gtime.Now(),
+				Data(do.TaskRecords{
+					Status:       status,
+					ResultJson:   resultJSON,
+					ErrorMessage: strings.TrimSpace(in.Error),
+					FinishedAt:   gtime.Now(),
 				}).
 				Update()
 			if err != nil {
@@ -370,22 +400,21 @@ func saveClientRegister(client *Client, in *model.WSRequest, clientID string) er
 	}
 
 	// Build shared save data 构建新增和更新共用数据
-	saveData := g.Map{
-		columns.ClientId:       clientID,
-		columns.ClientName:     clientName,
-		columns.ClientIp:       client.ClientIP(),
-		columns.UserAgent:      strings.TrimSpace(in.UserAgent),
-		columns.Status:         "online",
-		columns.PluginStatus:   resolvePluginStatus(in.AutomaInstalled),
-		columns.AutomaVersion:  strings.TrimSpace(in.AutomaVersion),
-		columns.BrowserName:    strings.TrimSpace(in.BrowserName),
-		columns.BrowserVersion: strings.TrimSpace(in.BrowserVersion),
-		columns.OsName:         strings.TrimSpace(in.OsName),
-		columns.OsVersion:      strings.TrimSpace(in.OsVersion),
-		columns.Hostname:       strings.TrimSpace(in.Hostname),
-		columns.LastSeenAt:     now,
-		columns.ConnectedAt:    now,
-		columns.UpdatedAt:      now,
+	saveData := do.Clients{
+		ClientId:       clientID,
+		ClientName:     clientName,
+		ClientIp:       client.ClientIP(),
+		UserAgent:      strings.TrimSpace(in.UserAgent),
+		Status:         "online",
+		PluginStatus:   resolvePluginStatus(in.AutomaInstalled),
+		AutomaVersion:  strings.TrimSpace(in.AutomaVersion),
+		BrowserName:    strings.TrimSpace(in.BrowserName),
+		BrowserVersion: strings.TrimSpace(in.BrowserVersion),
+		OsName:         strings.TrimSpace(in.OsName),
+		OsVersion:      strings.TrimSpace(in.OsVersion),
+		Hostname:       strings.TrimSpace(in.Hostname),
+		LastSeenAt:     now,
+		ConnectedAt:    now,
 	}
 
 	// Query existing client by ip 按客户端 IP 查询已有记录
@@ -398,15 +427,14 @@ func saveClientRegister(client *Client, in *model.WSRequest, clientID string) er
 
 	// Insert new client when missing 不存在时新增客户端
 	if record.IsEmpty() {
-		saveData[columns.FirstSeenAt] = now
-		saveData[columns.CreatedAt] = now
+		saveData.FirstSeenAt = now
 		_, err = dao.Clients.Ctx(client.Ctx).Data(saveData).Insert()
 		return err
 	}
 
 	// Keep custom name unless empty 保留自定义名称，仅空名称时由同步补全
 	if strings.TrimSpace(gconv.String(record[columns.ClientName])) != "" {
-		delete(saveData, columns.ClientName)
+		saveData.ClientName = nil
 	}
 	_, err = dao.Clients.Ctx(client.Ctx).
 		Where(columns.ClientIp, client.ClientIP()).
@@ -432,16 +460,15 @@ func updateClientLastSeen(client *Client, in *model.WSRequest) error {
 	// Build update data 构建更新数据
 	columns := dao.Clients.Columns()
 	now := gtime.Now()
-	updateData := g.Map{
-		columns.ClientIp:   client.ClientIP(),
-		columns.Status:     "online",
-		columns.LastSeenAt: now,
-		columns.UpdatedAt:  now,
+	updateData := do.Clients{
+		ClientIp:   client.ClientIP(),
+		Status:     "online",
+		LastSeenAt: now,
 	}
 	if in != nil && (in.Type == model.WSMessageTypeAgentRegister || in.Type == model.WSMessageTypeAgentStatusUpdate) {
-		updateData[columns.PluginStatus] = resolvePluginStatus(in.AutomaInstalled)
+		updateData.PluginStatus = resolvePluginStatus(in.AutomaInstalled)
 		if automaVersion := strings.TrimSpace(in.AutomaVersion); automaVersion != "" || in.Type == model.WSMessageTypeAgentRegister {
-			updateData[columns.AutomaVersion] = automaVersion
+			updateData.AutomaVersion = automaVersion
 		}
 	}
 
@@ -467,13 +494,11 @@ func markClientOffline(client *Client) error {
 
 	// Update offline status 更新离线状态
 	columns := dao.Clients.Columns()
-	now := gtime.Now()
 	_, err := dao.Clients.Ctx(client.Ctx).
 		Where(columns.ClientIp, clientIP).
-		Data(g.Map{
-			columns.Status:         "offline",
-			columns.DisconnectedAt: now,
-			columns.UpdatedAt:      now,
+		Data(do.Clients{
+			Status:         "offline",
+			DisconnectedAt: gtime.Now(),
 		}).
 		Update()
 	return err
@@ -496,11 +521,11 @@ func (ws *WsHandlerFunc) OnOpen(client *Client) {
 	ctx, cancel := context.WithCancel(client.Ctx)
 
 	ws.mu.Lock()
-	ws.ClientCtxMap[client.ClientIP()] = ctx
-	ws.ClientCtxCancel[client.ClientIP()] = cancel
+	ws.ClientCtxMap[client.ConnectionID()] = ctx
+	ws.ClientCtxCancel[client.ConnectionID()] = cancel
 	ws.mu.Unlock()
 
-	g.Log().Line().Infof(client.Ctx, "WebSocket 连接已建立：client_ip=%s", client.ClientIP())
+	g.Log().Line().Infof(client.Ctx, "WebSocket 连接已建立：connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
 }
 
 // OnClose handle websocket close 处理连接关闭
@@ -509,20 +534,24 @@ func (ws *WsHandlerFunc) OnClose(client *Client) {
 		return
 	}
 
-	// Mark database client offline 标记数据库客户端离线
-	if err := markClientOffline(client); err != nil {
-		g.Log().Line().Errorf(client.Ctx, "WebSocket 断开时标记客户端离线失败：client_ip=%s err=%+v", client.ClientIP(), err)
+	if ws.mode == consts.RuntimeModeServer {
+		// Mark database client offline 标记数据库客户端离线
+		if err := markClientOffline(client); err != nil {
+			g.Log().Line().Errorf(client.Ctx, "WebSocket 断开时标记客户端离线失败：client_ip=%s err=%+v", client.ClientIP(), err)
+		}
+	} else {
+		ws.handleDesktopClose(client)
 	}
 
 	ws.mu.Lock()
-	cancel, ok := ws.ClientCtxCancel[client.ClientIP()]
-	delete(ws.ClientCtxMap, client.ClientIP())
-	delete(ws.ClientCtxCancel, client.ClientIP())
+	cancel, ok := ws.ClientCtxCancel[client.ConnectionID()]
+	delete(ws.ClientCtxMap, client.ConnectionID())
+	delete(ws.ClientCtxCancel, client.ConnectionID())
 	ws.mu.Unlock()
 
 	if ok {
 		cancel()
 	}
 
-	g.Log().Line().Infof(client.Ctx, "WebSocket 连接已断开：client_ip=%s", client.ClientIP())
+	g.Log().Line().Infof(client.Ctx, "WebSocket 连接已断开：connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
 }

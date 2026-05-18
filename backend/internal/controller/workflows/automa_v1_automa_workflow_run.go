@@ -9,13 +9,15 @@ import (
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/utility/state"
+	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
+	"github.com/Zany2/browserflow/backend/utility/workflowagent"
 	"github.com/Zany2/browserflow/backend/utility/workflowexecution"
 	"github.com/gogf/gf/v2/util/guid"
 )
 
 // WorkflowRun runs workflow through browser agent 运行工作流
 func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) (res *v1.WorkflowRunRes, err error) {
-	agent, browserID, err := resolveWorkflowRunAgent(req.BrowserID)
+	agent, browserID, err := workflowagent.ResolveRunAgent(req.BrowserID)
 	if err != nil {
 		return nil, err
 	}
@@ -38,12 +40,11 @@ func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) 
 	agent.LastSeenAt = time.Now()
 	state.AgentMu.Unlock()
 
-	timeout := normalizeWorkflowRunTimeout(req.Timeout)
+	timeout := workflowagent.NormalizeRunTimeout(req.Timeout)
 	returnData := workflowexecution.NormalizeReturnData(req.ReturnData)
 	workflowexecution.MarkRunning(executionID)
 
-	agent.Client.WriteMu.Lock()
-	err = agent.Client.Conn.WriteJSON(model.WSResponse{
+	if sent := websockets.SendConnectionMessage(agent.ConnectionID, &model.WSResponse{
 		Type:      "agent_command",
 		BrowserID: agent.BrowserID,
 		CommandID: commandID,
@@ -57,14 +58,12 @@ func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) 
 			"timeout":      timeout,
 			"return_data":  returnData,
 		},
-	})
-	agent.Client.WriteMu.Unlock()
-	if err != nil {
+	}); sent <= 0 {
 		state.AgentMu.Lock()
 		delete(state.PendingCommands, commandID)
 		state.AgentMu.Unlock()
-		workflowexecution.MarkTimeout(executionID, err.Error())
-		return nil, err
+		workflowexecution.MarkTimeout(executionID, "browser agent is offline")
+		return nil, errors.New("browser agent is offline")
 	}
 
 	if !req.WaitResult {
@@ -94,41 +93,4 @@ func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) 
 		workflowexecution.MarkTimeout(executionID, ctx.Err().Error())
 		return nil, ctx.Err()
 	}
-}
-
-// resolveWorkflowRunAgent resolves target browser agent 解析目标浏览器执行端
-func resolveWorkflowRunAgent(browserID string) (*state.AgentConnection, string, error) {
-	state.AgentMu.Lock()
-	defer state.AgentMu.Unlock()
-
-	resolvedBrowserID := browserID
-	var agent *state.AgentConnection
-	if resolvedBrowserID != "" {
-		agent = state.AgentConnections[resolvedBrowserID]
-		if agent == nil {
-			return nil, "", errors.New("browser agent is offline")
-		}
-		return agent, resolvedBrowserID, nil
-	}
-
-	for id, item := range state.AgentConnections {
-		agent = item
-		resolvedBrowserID = id
-		break
-	}
-	if agent == nil {
-		return nil, "", errors.New("no browser agent online")
-	}
-	return agent, resolvedBrowserID, nil
-}
-
-// normalizeWorkflowRunTimeout normalizes wait timeout 规范化等待超时
-func normalizeWorkflowRunTimeout(timeout int) int {
-	if timeout <= 0 {
-		return 300
-	}
-	if timeout < 5 {
-		return 5
-	}
-	return timeout
 }

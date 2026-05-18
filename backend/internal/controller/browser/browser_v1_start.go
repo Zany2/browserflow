@@ -13,6 +13,7 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/browser/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/utility/browserruntime"
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
@@ -338,6 +339,6 @@ func (c *ControllerV1) BrowserStart(ctx context.Context, req *v1.BrowserStartReq
 		}
 	}
 	state.BrowserMu.Unlock()
-	watchBrowserRuntime(instance.ID, runtime)
+	browserruntime.Watch(instance.ID, runtime)
 	return &v1.BrowserStartRes{Status: &status}, nil
 }

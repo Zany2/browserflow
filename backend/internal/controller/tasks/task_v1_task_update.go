@@ -6,9 +6,9 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	"github.com/gogf/gf/v2/errors/gerror"
-	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
@@ -23,11 +23,9 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		return nil, gerror.New("工作流不能为空")
 	}
 
-	columns := dao.Tasks.Columns()
 	taskID := gconv.Int64(req.ID)
 	record, err := dao.Tasks.Ctx(ctx).
 		WherePri(taskID).
-		Where(columns.DeletedAt + " IS NULL").
 		One()
 	if err != nil {
 		return nil, err
@@ -36,7 +34,7 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		return nil, gerror.New("任务不存在")
 	}
 
-	clientIP, err := resolveClientIP(ctx, req.ClientID, req.ClientIP)
+	clientIP, err := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +42,7 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		return nil, gerror.New("执行客户端不能为空")
 	}
 
-	paramsJSON, err := encodeJSONMap(req.Params)
+	paramsJSON, err := taskdata.EncodeJSONMap(req.Params)
 	if err != nil {
 		return nil, err
 	}
@@ -56,15 +54,14 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 
 	_, err = dao.Tasks.Ctx(ctx).
 		WherePri(taskID).
-		Data(g.Map{
-			columns.Name:           name,
-			columns.Description:    strings.TrimSpace(req.Description),
-			columns.AutomaId:       workflowID,
-			columns.ClientIp:       clientIP,
-			columns.CronExpression: strings.TrimSpace(req.CronExpression),
-			columns.ParamsJson:     paramsJSON,
-			columns.Enabled:        enabled,
-			columns.UpdatedAt:      gtime.Now(),
+		Data(do.Tasks{
+			Name:           name,
+			Description:    strings.TrimSpace(req.Description),
+			AutomaId:       workflowID,
+			ClientIp:       clientIP,
+			CronExpression: strings.TrimSpace(req.CronExpression),
+			ParamsJson:     paramsJSON,
+			Enabled:        enabled,
 		}).
 		Update()
 	if err != nil {
@@ -75,7 +72,7 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 	if err != nil {
 		return nil, err
 	}
-	task, err := buildTaskMap(ctx, updated)
+	task, err := taskdata.BuildTaskMap(ctx, updated)
 	if err != nil {
 		return nil, err
 	}

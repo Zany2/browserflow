@@ -58,7 +58,6 @@ func StopCronScheduler() {
 func syncCronTasks(ctx context.Context) {
 	columns := dao.Tasks.Columns()
 	records, err := dao.Tasks.Ctx(ctx).
-		Where(columns.DeletedAt+" IS NULL").
 		Where(columns.Enabled, true).
 		Where(columns.CronExpression+" IS NOT NULL").
 		Where(columns.CronExpression+" <> ?", "").

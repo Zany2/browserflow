@@ -38,12 +38,18 @@ type Config struct {
 
 // ClientIdentity websocket client identity WebSocket 客户端身份
 type ClientIdentity struct {
+	// ConnectionID internal connection identity 内部连接标识
+	ConnectionID string
 	// ClientIP unique client identity 客户端唯一标识
 	ClientIP string
+	// RequireHeartbeat read timeout guard 是否要求心跳保活
+	RequireHeartbeat bool
 }
 
 // ClientSnapshot websocket client snapshot WebSocket 客户端快照
 type ClientSnapshot struct {
+	// ConnectionID internal connection identity 内部连接标识
+	ConnectionID string `json:"connection_id"`
 	// ClientIP unique client identity 客户端唯一标识
 	ClientIP string `json:"client_ip"`
 	// ConnectedAt connected time 建连时间
@@ -139,7 +145,7 @@ func newClientBuckets(bucketCount int) []*clientBucket {
 	return buckets
 }
 
-// bucketIndex hash client ip to bucket 按 clientIp 分桶
+// bucketIndex hash connection id to bucket 按连接标识分桶
 func (m *WebSocketManager) bucketIndex(key string) uint32 {
 	if m.bucketCount == 0 {
 		return 0
@@ -154,47 +160,47 @@ func (m *WebSocketManager) bucketIndex(key string) uint32 {
 	return hash % m.bucketCount
 }
 
-// clientBucket get bucket by client ip 获取客户端分桶
-func (m *WebSocketManager) clientBucket(clientIP string) *clientBucket {
-	return m.clientBuckets[m.bucketIndex(clientIP)]
+// clientBucket get bucket by connection id 获取连接分桶
+func (m *WebSocketManager) clientBucket(connectionID string) *clientBucket {
+	return m.clientBuckets[m.bucketIndex(connectionID)]
 }
 
-// loadClient load client by client ip 按 clientIp 加载连接
-func (m *WebSocketManager) loadClient(clientIP string) (*Client, bool) {
-	if clientIP == "" {
+// loadClient load client by connection id 按连接标识加载连接
+func (m *WebSocketManager) loadClient(connectionID string) (*Client, bool) {
+	if connectionID == "" {
 		return nil, false
 	}
 
-	bucket := m.clientBucket(clientIP)
+	bucket := m.clientBucket(connectionID)
 	bucket.mu.RLock()
-	client, ok := bucket.clients[clientIP]
+	client, ok := bucket.clients[connectionID]
 	bucket.mu.RUnlock()
 	return client, ok
 }
 
 // rangeClients iterate all clients 遍历全部连接
-func (m *WebSocketManager) rangeClients(handler func(clientIP string, client *Client) bool) {
+func (m *WebSocketManager) rangeClients(handler func(connectionID string, client *Client) bool) {
 	for i := range m.clientBuckets {
 		bucket := m.clientBuckets[i]
 
 		bucket.mu.RLock()
 		pairs := make([]struct {
-			clientIP string
-			client   *Client
+			connectionID string
+			client       *Client
 		}, 0, len(bucket.clients))
-		for clientIP, client := range bucket.clients {
+		for connectionID, client := range bucket.clients {
 			pairs = append(pairs, struct {
-				clientIP string
-				client   *Client
+				connectionID string
+				client       *Client
 			}{
-				clientIP: clientIP,
-				client:   client,
+				connectionID: connectionID,
+				client:       client,
 			})
 		}
 		bucket.mu.RUnlock()
 
 		for _, pair := range pairs {
-			if !handler(pair.clientIP, pair.client) {
+			if !handler(pair.connectionID, pair.client) {
 				return
 			}
 		}
@@ -203,14 +209,14 @@ func (m *WebSocketManager) rangeClients(handler func(clientIP string, client *Cl
 
 // onConnect handle new connection 处理新连接
 func (m *WebSocketManager) onConnect(client *Client) bool {
-	if client == nil || client.clientIP == "" {
+	if client == nil || client.connectionID == "" {
 		if client != nil && client.conn != nil {
 			_ = client.conn.Close()
 		}
 		return false
 	}
 
-	// onConnect replace same clientIp 同一 clientIp 新连接顶掉旧连接
+	// onConnect replace same connection id 同一连接标识的新连接顶掉旧连接
 	if previous, replaced := m.addClient(client); replaced {
 		m.disConnect(previous)
 	}
@@ -234,47 +240,47 @@ func (m *WebSocketManager) disConnect(client *Client) {
 	}
 
 	client.disconnectOnce.Do(func() {
-		if m.deleteClientIfMatch(client.clientIP, client) {
+		if m.deleteClientIfMatch(client.connectionID, client) {
 			atomic.AddInt64(&m.count, -1)
 		}
 		client.closeMessageChannel()
 		_ = client.conn.Close()
-		if m.Handler != nil && client.clientIP != "" {
+		if m.Handler != nil && client.connectionID != "" {
 			m.Handler.OnClose(client)
 		}
 	})
 }
 
 // deleteClientIfMatch delete exact client instance 仅删除当前连接实例
-func (m *WebSocketManager) deleteClientIfMatch(clientIP string, client *Client) bool {
-	if clientIP == "" {
+func (m *WebSocketManager) deleteClientIfMatch(connectionID string, client *Client) bool {
+	if connectionID == "" {
 		return false
 	}
 
-	bucket := m.clientBucket(clientIP)
+	bucket := m.clientBucket(connectionID)
 	bucket.mu.Lock()
 	defer bucket.mu.Unlock()
 
-	existing, ok := bucket.clients[clientIP]
+	existing, ok := bucket.clients[connectionID]
 	if !ok || existing != client {
 		return false
 	}
-	delete(bucket.clients, clientIP)
+	delete(bucket.clients, connectionID)
 	return true
 }
 
 // addClient store client and return previous one 写入连接并返回旧连接
 func (m *WebSocketManager) addClient(client *Client) (*Client, bool) {
-	bucket := m.clientBucket(client.clientIP)
+	bucket := m.clientBucket(client.connectionID)
 	bucket.mu.Lock()
 	defer bucket.mu.Unlock()
 
-	if previous, ok := bucket.clients[client.clientIP]; ok {
-		bucket.clients[client.clientIP] = client
+	if previous, ok := bucket.clients[client.connectionID]; ok {
+		bucket.clients[client.connectionID] = client
 		return previous, true
 	}
 
-	bucket.clients[client.clientIP] = client
+	bucket.clients[client.connectionID] = client
 	atomic.AddInt64(&m.count, 1)
 	return nil, false
 }
@@ -291,19 +297,27 @@ func (m *WebSocketManager) enqueue(client *Client, msg *messageData) {
 // RegisterClient register websocket client 注册 WebSocket 客户端
 func (m *WebSocketManager) RegisterClient(ctx context.Context, clientIP string, conn *websocket.Conn) {
 	m.RegisterClientWithIdentity(ctx, ClientIdentity{
-		ClientIP: clientIP,
+		ConnectionID:     clientIP,
+		ClientIP:         clientIP,
+		RequireHeartbeat: true,
 	}, conn)
 }
 
 // RegisterClientWithIdentity register client with identity 按身份注册客户端
 func (m *WebSocketManager) RegisterClientWithIdentity(ctx context.Context, identity ClientIdentity, conn *websocket.Conn) {
+	connectionID := identity.ConnectionID
+	if connectionID == "" {
+		connectionID = identity.ClientIP
+	}
 	client := &Client{
-		Ctx:         ctx,
-		clientIP:    identity.ClientIP,
-		connectedAt: time.Now(),
-		conn:        conn,
-		manager:     m,
-		message:     make(chan *messageData, m.messageBuffer),
+		Ctx:              ctx,
+		connectionID:     connectionID,
+		clientIP:         identity.ClientIP,
+		connectedAt:      time.Now(),
+		conn:             conn,
+		manager:          m,
+		requireHeartbeat: identity.RequireHeartbeat,
+		message:          make(chan *messageData, m.messageBuffer),
 	}
 	client.markActive(client.connectedAt)
 
@@ -316,8 +330,8 @@ func (m *WebSocketManager) RegisterClientWithIdentity(ctx context.Context, ident
 }
 
 // TouchClient refresh client active time 刷新客户端活跃时间
-func (m *WebSocketManager) TouchClient(clientIP string) bool {
-	client, ok := m.loadClient(clientIP)
+func (m *WebSocketManager) TouchClient(connectionID string) bool {
+	client, ok := m.loadClient(connectionID)
 	if !ok {
 		return false
 	}
@@ -326,32 +340,32 @@ func (m *WebSocketManager) TouchClient(clientIP string) bool {
 }
 
 // GetClientCtx get client context 获取连接上下文
-func (m *WebSocketManager) GetClientCtx(clientIP string) context.Context {
-	if client, ok := m.loadClient(clientIP); ok {
+func (m *WebSocketManager) GetClientCtx(connectionID string) context.Context {
+	if client, ok := m.loadClient(connectionID); ok {
 		return client.Ctx
 	}
 	return nil
 }
 
 // GetClientSnapshot get client snapshot 获取连接快照
-func (m *WebSocketManager) GetClientSnapshot(clientIP string) (*ClientSnapshot, bool) {
-	if client, ok := m.loadClient(clientIP); ok {
+func (m *WebSocketManager) GetClientSnapshot(connectionID string) (*ClientSnapshot, bool) {
+	if client, ok := m.loadClient(connectionID); ok {
 		return buildSnapshot(client), true
 	}
 	return nil, false
 }
 
-// ListClientConnections list one client connection 列出指定 clientIp 的连接
-func (m *WebSocketManager) ListClientConnections(clientIP string) []ClientSnapshot {
-	if client, ok := m.loadClient(clientIP); ok {
+// ListClientConnections list one client connection 列出指定连接
+func (m *WebSocketManager) ListClientConnections(connectionID string) []ClientSnapshot {
+	if client, ok := m.loadClient(connectionID); ok {
 		return []ClientSnapshot{*buildSnapshot(client)}
 	}
 	return nil
 }
 
 // HasClient check client exists 检查连接是否存在
-func (m *WebSocketManager) HasClient(clientIP string) bool {
-	_, ok := m.loadClient(clientIP)
+func (m *WebSocketManager) HasClient(connectionID string) bool {
+	_, ok := m.loadClient(connectionID)
 	return ok
 }
 
@@ -360,17 +374,17 @@ func (m *WebSocketManager) GetWSCount() int64 {
 	return atomic.LoadInt64(&m.count)
 }
 
-// GetClientConnectionCount get client connection count 获取指定 clientIp 的连接数
-func (m *WebSocketManager) GetClientConnectionCount(clientIP string) int {
-	if m.HasClient(clientIP) {
+// GetClientConnectionCount get client connection count 获取指定连接数
+func (m *WebSocketManager) GetClientConnectionCount(connectionID string) int {
+	if m.HasClient(connectionID) {
 		return 1
 	}
 	return 0
 }
 
 // SendMessageToClient send text message 发送文本消息
-func (m *WebSocketManager) SendMessageToClient(clientIP string, message []byte) int {
-	return m.sendMessageToClient(clientIP, websocket.TextMessage, message)
+func (m *WebSocketManager) SendMessageToClient(connectionID string, message []byte) int {
+	return m.sendMessageToClient(connectionID, websocket.TextMessage, message)
 }
 
 // SendMessageToClients send text message to clients 批量发送文本消息
@@ -385,8 +399,8 @@ func (m *WebSocketManager) BroadcastMessage(message []byte, excluded ...string) 
 		excludedMap[excluded[i]] = struct{}{}
 	}
 
-	m.rangeClients(func(clientIP string, client *Client) bool {
-		if _, ok := excludedMap[clientIP]; ok {
+	m.rangeClients(func(connectionID string, client *Client) bool {
+		if _, ok := excludedMap[connectionID]; ok {
 			return true
 		}
 		m.enqueue(client, &messageData{data: message, dataType: websocket.TextMessage})
@@ -395,15 +409,15 @@ func (m *WebSocketManager) BroadcastMessage(message []byte, excluded ...string) 
 }
 
 // CloseClientConnection close one client connection 关闭指定连接
-func (m *WebSocketManager) CloseClientConnection(clientIP string) {
-	if client, ok := m.loadClient(clientIP); ok {
+func (m *WebSocketManager) CloseClientConnection(connectionID string) {
+	if client, ok := m.loadClient(connectionID); ok {
 		m.disConnect(client)
 	}
 }
 
-// CloseClientConnections close client connections 关闭指定 clientIp 的连接
-func (m *WebSocketManager) CloseClientConnections(clientIP string) int {
-	if client, ok := m.loadClient(clientIP); ok {
+// CloseClientConnections close client connections 关闭指定连接
+func (m *WebSocketManager) CloseClientConnections(connectionID string) int {
+	if client, ok := m.loadClient(connectionID); ok {
 		m.disConnect(client)
 		return 1
 	}
@@ -438,8 +452,8 @@ func (m *WebSocketManager) BroadcastBinary(binary []byte, excluded ...string) {
 		excludedMap[excluded[i]] = struct{}{}
 	}
 
-	m.rangeClients(func(clientIP string, client *Client) bool {
-		if _, ok := excludedMap[clientIP]; ok {
+	m.rangeClients(func(connectionID string, client *Client) bool {
+		if _, ok := excludedMap[connectionID]; ok {
 			return true
 		}
 		m.enqueue(client, &messageData{data: binary, dataType: websocket.BinaryMessage})
@@ -469,11 +483,11 @@ func (m *WebSocketManager) sendMessageToClients(clientIPs []string, messageType 
 }
 
 // sendMessageToClient send message to one local client 向单个本地连接发送消息
-func (m *WebSocketManager) sendMessageToClient(clientIP string, messageType int, payload []byte) int {
-	if clientIP == "" {
+func (m *WebSocketManager) sendMessageToClient(connectionID string, messageType int, payload []byte) int {
+	if connectionID == "" {
 		return 0
 	}
-	if client, ok := m.loadClient(clientIP); ok {
+	if client, ok := m.loadClient(connectionID); ok {
 		m.enqueue(client, &messageData{data: payload, dataType: messageType})
 		return 1
 	}
@@ -483,6 +497,7 @@ func (m *WebSocketManager) sendMessageToClient(clientIP string, messageType int,
 // buildSnapshot build snapshot data 构建连接快照
 func buildSnapshot(client *Client) *ClientSnapshot {
 	return &ClientSnapshot{
+		ConnectionID:        client.connectionID,
 		ClientIP:            client.clientIP,
 		ConnectedAt:         client.connectedAt,
 		LastActiveTime:      client.LastActiveTime(),

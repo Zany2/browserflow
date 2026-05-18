@@ -6,13 +6,14 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/taskrecords/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
+	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // TaskRecordList returns task records 获取任务记录列表
 func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordListReq) (res *v1.TaskRecordListRes, err error) {
 	columns := dao.TaskRecords.Columns()
-	gModel := dao.TaskRecords.Ctx(ctx).Where(columns.DeletedAt + " IS NULL")
+	gModel := dao.TaskRecords.Ctx(ctx)
 
 	if taskID := strings.TrimSpace(req.TaskID); taskID != "" {
 		gModel = gModel.Where(columns.TaskId, gconv.Int64(taskID))
@@ -22,7 +23,7 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 	}
 	// Workflow name filter 工作流名称模糊检索，转换为执行记录可匹配的工作流 ID
 	if workflowName := strings.TrimSpace(req.WorkflowName); workflowName != "" {
-		workflowIDs, workflowErr := findWorkflowIDsByName(ctx, workflowName)
+		workflowIDs, workflowErr := taskdata.FindWorkflowIDsByName(ctx, workflowName)
 		if workflowErr != nil {
 			return nil, workflowErr
 		}
@@ -31,7 +32,7 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 		}
 		gModel = gModel.WhereIn(columns.WorkflowId, workflowIDs)
 	}
-	if clientIP, resolveErr := resolveClientIP(ctx, req.ClientID, req.ClientIP); resolveErr != nil {
+	if clientIP, resolveErr := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP); resolveErr != nil {
 		return nil, resolveErr
 	} else if clientIP != "" {
 		gModel = gModel.Where(columns.ClientIp, clientIP)
@@ -60,7 +61,7 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 
 	list := make([]*v1.TaskRecordListResModel, 0, len(records))
 	for _, record := range records {
-		item, mapErr := buildTaskRecordMap(ctx, record)
+		item, mapErr := taskdata.BuildTaskRecordMap(ctx, record)
 		if mapErr != nil {
 			return nil, mapErr
 		}
