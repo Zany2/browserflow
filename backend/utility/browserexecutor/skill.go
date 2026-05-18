@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/Zany2/browserflow/backend/internal/model"
 )
 
 // GenerateSkill builds SKILL.md content for direct browser control. GenerateSkill builds SKILL.md content.
-func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
+func GenerateSkill(baseURL string) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
 	sb.WriteString("name: browserflow-browser-executor\n")
@@ -21,12 +19,6 @@ func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
 	sb.WriteString("Use this skill when the user wants to operate the browser directly with an LLM instead of running a prebuilt Automa workflow.\n\n")
 	sb.WriteString("Keep the BrowserFlow `browser-agent` client tab alive. Do not close the whole browser after a task; when cleanup is needed, close only task-related business tabs that were opened or used for that task.\n\n")
 	sb.WriteString(fmt.Sprintf("**API Base URL:** `%s/browser-executor`\n\n", baseURL))
-	if status.BrowserID != "" {
-		sb.WriteString(fmt.Sprintf("**Current Browser Instance ID:** `%s`\n\n", inline(status.BrowserID)))
-	}
-	if status.URL != "" {
-		sb.WriteString(fmt.Sprintf("**Current Page:** `%s`\n\n", inline(status.URL)))
-	}
 
 	sb.WriteString("## Mandatory Workflow\n\n")
 	sb.WriteString("1. Check `status` before controlling the browser.\n")

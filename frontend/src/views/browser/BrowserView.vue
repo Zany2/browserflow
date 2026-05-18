@@ -18,7 +18,6 @@
           type="primary"
           :icon="Download"
           :loading="executorSkillExporting"
-          :disabled="!status.running"
           @click="handleExportExecutorSkill"
         >
           导出控制 Skill
@@ -487,14 +486,9 @@ async function handleStart(row, saveBeforeStart = false) {
 }
 
 async function handleExportExecutorSkill() {
-  if (!status.value.running) {
-    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先启动浏览器' })
-    return
-  }
-
   executorSkillExporting.value = true
   try {
-    // Export Skill 下载当前浏览器控制 Skill，供大模型直接操作浏览器
+    // Export Skill downloads static browser-control instructions 导出静态浏览器控制 Skill
     const blob = await exportBrowserExecutorSkill()
     downloadBlob(blob, 'SKILL_BROWSER_EXECUTOR.md')
     appMessage({ type: APP_MESSAGE_TYPE.success, message: '浏览器控制 Skill 已导出' })

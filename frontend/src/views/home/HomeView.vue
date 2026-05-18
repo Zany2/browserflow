@@ -3,10 +3,9 @@
     <section class="hero-panel">
       <div class="hero-copy">
         <p class="eyebrow">Browser automation command center</p>
-        <h1>把浏览器、模型、工作流和任务调度放在一个控制台里。</h1>
+        <h1>{{ heroTitle }}</h1>
         <p class="summary">
-          BrowserFlow 既可以作为 Windows 本地自动化工具，也可以部署为服务器调度中心。
-          你可以管理浏览器配置、验证大模型、读取 Automa 工作流，并把可复用流程沉淀为任务。
+          {{ heroSummary }}
         </p>
       </div>
 
@@ -31,16 +30,10 @@
     </section>
 
     <section class="mode-grid">
-      <article class="mode-card">
-        <span class="mode-tag mode-tag--desktop">Windows 本地</span>
-        <h2>适合个人电脑或自动化工作站</h2>
-        <p>浏览器执行端由目标浏览器承载；控制台负责管理配置、读取工作流和下发执行请求。</p>
-      </article>
-
-      <article class="mode-card">
-        <span class="mode-tag mode-tag--server">服务器调度</span>
-        <h2>适合长期在线的任务中心</h2>
-        <p>统一管理客户端、工作流、定时任务和执行记录，让自动化流程可追踪、可复用。</p>
+      <article v-for="card in modeCards" :key="card.title" class="mode-card">
+        <span class="mode-tag" :class="card.tagClass">{{ card.tag }}</span>
+        <h2>{{ card.title }}</h2>
+        <p>{{ card.desc }}</p>
       </article>
     </section>
 
@@ -59,8 +52,8 @@ import { getRuntimeConfig } from '@/services/app'
 
 const runtimeMode = ref('')
 
-// quickActions shows primary navigation entries 首页核心入口
-const quickActions = [
+// windowsQuickActions shows local-mode entries Windows 本地模式入口
+const windowsQuickActions = [
   {
     icon: '01',
     title: '浏览器',
@@ -69,26 +62,112 @@ const quickActions = [
   },
   {
     icon: '02',
+    title: '工作流',
+    desc: '读取和执行浏览器里的 Automa 工作流',
+    to: '/workflows',
+  },
+  {
+    icon: '03',
     title: '大模型',
     desc: '维护厂商、配置名称和模型',
     to: '/llm',
   },
   {
-    icon: '03',
+    icon: '04',
     title: '对话',
     desc: '用 SSE 流式验证模型效果',
     to: '/chat',
   },
+]
+
+// serverQuickActions shows server-mode entries 服务器模式入口
+const serverQuickActions = [
   {
-    icon: '04',
+    icon: '01',
+    title: '工作流管理',
+    desc: '导入、同步和维护服务端工作流',
+    to: '/automa',
+  },
+  {
+    icon: '02',
     title: '任务',
     desc: '编排工作流并追踪执行结果',
     to: '/tasks',
   },
+  {
+    icon: '03',
+    title: '执行记录',
+    desc: '查看任务下发、状态和结果',
+    to: '/task-records',
+  },
+  {
+    icon: '04',
+    title: '客户端',
+    desc: '维护在线客户端和执行环境',
+    to: '/clients',
+  },
 ]
 
+// quickActions switches homepage entries by runtime mode 首页入口按运行模式切换
+const quickActions = computed(() => {
+  if (runtimeMode.value === 'server') return serverQuickActions
+  return windowsQuickActions
+})
+
+// heroTitle switches headline by runtime mode 首页标题按运行模式切换
+const heroTitle = computed(() => {
+  if (runtimeMode.value === 'server') return '把客户端、工作流、任务调度和执行记录放在一个控制台里。'
+  return '把浏览器、模型、对话和 Automa 工作流放在一个本地控制台里。'
+})
+
+// heroSummary switches intro by runtime mode 首页说明按运行模式切换
+const heroSummary = computed(() => {
+  if (runtimeMode.value === 'server') {
+    return '服务器模式面向长期在线的调度中心：统一维护客户端、服务端工作流、任务配置和执行记录。'
+  }
+  return 'Windows 模式面向本地自动化工作站：管理浏览器配置、验证大模型、读取 Automa 工作流，并在目标浏览器中承载执行端。'
+})
+
+// modeCards explains the active runtime mode 当前模式说明卡片
+const modeCards = computed(() => {
+  if (runtimeMode.value === 'server') {
+    return [
+      {
+        tag: '服务器调度',
+        tagClass: 'mode-tag--server',
+        title: '适合长期在线的任务中心',
+        desc: '统一管理客户端、工作流、定时任务和执行记录，让自动化流程可追踪、可复用。',
+      },
+      {
+        tag: '客户端执行',
+        tagClass: 'mode-tag--desktop',
+        title: '执行由客户端承载',
+        desc: '客户端保持在线并接收服务器下发的工作流执行请求，结果回传到执行记录。',
+      },
+    ]
+  }
+
+  return [
+    {
+      tag: 'Windows 本地',
+      tagClass: 'mode-tag--desktop',
+      title: '适合个人电脑或自动化工作站',
+      desc: '浏览器执行端由目标浏览器承载；控制台负责管理配置、读取工作流和下发执行请求。',
+    },
+    {
+      tag: '本地验证',
+      tagClass: 'mode-tag--server',
+      title: '专注工作流现场调试',
+      desc: '本地模式聚焦浏览器、模型和工作流验证；服务器调度能力会在服务端模式展示。',
+    },
+  ]
+})
+
 // flowSteps describes the automation lifecycle 首页流程步骤
-const flowSteps = ['配置环境', '验证模型', '同步工作流', '创建任务', '查看结果']
+const flowSteps = computed(() => {
+  if (runtimeMode.value === 'server') return ['同步工作流', '创建任务', '选择客户端', '下发执行', '查看结果']
+  return ['配置浏览器', '验证模型', '读取工作流', '填写参数', '执行验证']
+})
 
 onMounted(async () => {
   try {
