@@ -2,7 +2,7 @@
   <section class="home-page">
     <section class="hero-panel">
       <div class="hero-copy">
-        <p class="eyebrow">Browser automation command center</p>
+        <p class="eyebrow">Browser automation workspace</p>
         <h1>{{ heroTitle }}</h1>
         <p class="summary">
           {{ heroSummary }}
@@ -12,7 +12,16 @@
       <div class="hero-status">
         <span class="status-label">当前模式</span>
         <strong>{{ runtimeModeText }}</strong>
-        <span class="status-note">执行端请在目标浏览器中启动</span>
+        <template v-if="isServerMode">
+          <span class="status-note">将客户端地址发给执行电脑打开</span>
+          <div class="client-link-row">
+            <a class="client-link" :href="clientAgentUrl" target="_blank" rel="noreferrer">
+              {{ clientAgentUrl }}
+            </a>
+            <el-button link type="primary" @click="copyClientAgentUrl">复制</el-button>
+          </div>
+        </template>
+        <span v-else class="status-note">公共能力与 Windows 本地能力优先可用</span>
       </div>
     </section>
 
@@ -29,9 +38,9 @@
       </RouterLink>
     </section>
 
-    <section class="mode-grid">
-      <article v-for="card in modeCards" :key="card.title" class="mode-card">
-        <span class="mode-tag" :class="card.tagClass">{{ card.tag }}</span>
+    <section class="intro-grid">
+      <article v-for="card in introCards" :key="card.title" class="intro-card">
+        <span class="intro-tag" :class="card.tagClass">{{ card.tag }}</span>
         <h2>{{ card.title }}</h2>
         <p>{{ card.desc }}</p>
       </article>
@@ -48,125 +57,157 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import { getRuntimeConfig } from '@/services/app'
 
 const runtimeMode = ref('')
 
-// windowsQuickActions shows local-mode entries Windows 本地模式入口
+// windowsQuickActions lists local workspace entries Windows 本地模式入口
 const windowsQuickActions = [
   {
     icon: '01',
     title: '浏览器',
-    desc: '维护本地浏览器实例配置',
+    desc: '维护浏览器实例和运行状态，作为自动化执行现场',
     to: '/browser',
   },
   {
     icon: '02',
     title: '工作流',
-    desc: '读取和执行浏览器里的 Automa 工作流',
+    desc: '读取、筛选、执行和导出浏览器里的 Automa 工作流',
     to: '/workflows',
   },
   {
     icon: '03',
     title: '大模型',
-    desc: '维护厂商、配置名称和模型',
+    desc: '集中维护模型厂商、模型名称和 API Key',
     to: '/llm',
   },
   {
     icon: '04',
     title: '对话',
-    desc: '用 SSE 流式验证模型效果',
+    desc: '用流式对话快速验证模型配置和回答效果',
     to: '/chat',
   },
 ]
 
-// serverQuickActions shows server-mode entries 服务器模式入口
+// serverQuickActions lists scheduler workspace entries Server 调度模式入口
 const serverQuickActions = [
   {
     icon: '01',
     title: '工作流管理',
-    desc: '导入、同步和维护服务端工作流',
+    desc: '导入、同步和维护服务端可调度的工作流',
     to: '/automa',
   },
   {
     icon: '02',
-    title: '任务',
-    desc: '编排工作流并追踪执行结果',
+    title: '任务配置',
+    desc: '把工作流编排成可手动或定时下发的任务',
     to: '/tasks',
   },
   {
     icon: '03',
     title: '执行记录',
-    desc: '查看任务下发、状态和结果',
+    desc: '查看任务下发、运行状态和客户端回传结果',
     to: '/task-records',
   },
   {
     icon: '04',
     title: '客户端',
-    desc: '维护在线客户端和执行环境',
+    desc: '管理在线执行电脑、插件状态和连接状态',
     to: '/clients',
   },
 ]
 
-// quickActions switches homepage entries by runtime mode 首页入口按运行模式切换
-const quickActions = computed(() => {
-  if (runtimeMode.value === 'server') return serverQuickActions
-  return windowsQuickActions
-})
+// windowsIntroCards describes local scenarios and strengths Windows 模式使用场景与优点
+const windowsIntroCards = [
+  {
+    tag: '使用场景',
+    tagClass: 'intro-tag--scene',
+    title: '网页重复操作自动化',
+    desc: '适合登录后页面操作、表单填写、数据读取、流程验证等需要稳定复用的浏览器任务。',
+  },
+  {
+    tag: '使用场景',
+    tagClass: 'intro-tag--scene',
+    title: 'Automa 工作流调试',
+    desc: '从当前浏览器读取工作流，查看参数、打开流程、带参数执行，让调试留在同一个控制台里。',
+  },
+  {
+    tag: '项目优点',
+    tagClass: 'intro-tag--advantage',
+    title: '执行链路更清晰',
+    desc: '浏览器、执行端、工作流和模型配置集中管理，减少在多个页面和工具之间来回切换。',
+  },
+  {
+    tag: '项目优点',
+    tagClass: 'intro-tag--advantage',
+    title: '本地优先，轻量可控',
+    desc: '优先服务本机 Windows 自动化场景，配置简单、反馈直接，也便于把稳定流程继续沉淀成 Skill。',
+  },
+]
+
+// serverIntroCards describes scheduler scenarios and strengths Server 模式使用场景与优点
+const serverIntroCards = [
+  {
+    tag: '使用场景',
+    tagClass: 'intro-tag--scene',
+    title: '集中调度多台客户端',
+    desc: '适合把多台执行电脑接入同一个控制台，由服务端统一维护客户端、任务和执行状态。',
+  },
+  {
+    tag: '使用场景',
+    tagClass: 'intro-tag--scene',
+    title: '工作流下发与同步',
+    desc: '服务端保存可同步工作流，客户端打开执行页后接收任务并在本地 Automa 中执行。',
+  },
+  {
+    tag: '项目优点',
+    tagClass: 'intro-tag--advantage',
+    title: '调度和执行解耦',
+    desc: '服务端负责配置、派发和记录，客户端负责实际浏览器执行，更适合长期运行的自动化任务。',
+  },
+  {
+    tag: '项目优点',
+    tagClass: 'intro-tag--advantage',
+    title: '执行过程可追踪',
+    desc: '客户端在线状态、任务记录和结果回传集中展示，方便排查任务失败和确认执行进度。',
+  },
+]
+
+const isServerMode = computed(() => runtimeMode.value === 'server')
+
+// quickActions switches entries by runtime mode 首页入口按运行模式切换
+const quickActions = computed(() => (isServerMode.value ? serverQuickActions : windowsQuickActions))
+
+// introCards switches scenario cards by runtime mode 首页说明卡片按运行模式切换
+const introCards = computed(() => (isServerMode.value ? serverIntroCards : windowsIntroCards))
+
+// flowSteps switches automation lifecycle by runtime mode 首页流程步骤按运行模式切换
+const flowSteps = computed(() =>
+  isServerMode.value
+    ? ['同步工作流', '生成客户端地址', '客户端连接', '下发任务', '查看记录']
+    : ['配置浏览器', '连接执行端', '读取工作流', '填写参数', '执行验证'],
+)
 
 // heroTitle switches headline by runtime mode 首页标题按运行模式切换
 const heroTitle = computed(() => {
-  if (runtimeMode.value === 'server') return '把客户端、工作流、任务调度和执行记录放在一个控制台里。'
-  return '把浏览器、模型、对话和 Automa 工作流放在一个本地控制台里。'
+  if (isServerMode.value) return 'BrowserFlow 是一个面向多客户端自动化调度的服务端控制台。'
+  return 'BrowserFlow 是一个面向浏览器自动化的本地控制台。'
 })
 
-// heroSummary switches intro by runtime mode 首页说明按运行模式切换
+// heroSummary switches project intro by runtime mode 首页简介按运行模式切换
 const heroSummary = computed(() => {
-  if (runtimeMode.value === 'server') {
-    return '服务器模式面向长期在线的调度中心：统一维护客户端、服务端工作流、任务配置和执行记录。'
+  if (isServerMode.value) {
+    return '服务器模式用于集中管理工作流、任务、客户端和执行记录，适合把多台执行电脑接入同一个调度中心。'
   }
-  return 'Windows 模式面向本地自动化工作站：管理浏览器配置、验证大模型、读取 Automa 工作流，并在目标浏览器中承载执行端。'
+  return 'Windows 模式把浏览器实例、Automa 工作流、执行端连接、大模型配置和对话验证放在一起，适合把重复网页操作沉淀为可调试、可复用的本地流程。'
 })
 
-// modeCards explains the active runtime mode 当前模式说明卡片
-const modeCards = computed(() => {
-  if (runtimeMode.value === 'server') {
-    return [
-      {
-        tag: '服务器调度',
-        tagClass: 'mode-tag--server',
-        title: '适合长期在线的任务中心',
-        desc: '统一管理客户端、工作流、定时任务和执行记录，让自动化流程可追踪、可复用。',
-      },
-      {
-        tag: '客户端执行',
-        tagClass: 'mode-tag--desktop',
-        title: '执行由客户端承载',
-        desc: '客户端保持在线并接收服务器下发的工作流执行请求，结果回传到执行记录。',
-      },
-    ]
-  }
+// clientAgentUrl builds a shareable client page address 生成可分享的客户端执行页地址
+const clientAgentUrl = computed(() => {
+  if (typeof window === 'undefined') return '#/client-agent'
 
-  return [
-    {
-      tag: 'Windows 本地',
-      tagClass: 'mode-tag--desktop',
-      title: '适合个人电脑或自动化工作站',
-      desc: '浏览器执行端由目标浏览器承载；控制台负责管理配置、读取工作流和下发执行请求。',
-    },
-    {
-      tag: '本地验证',
-      tagClass: 'mode-tag--server',
-      title: '专注工作流现场调试',
-      desc: '本地模式聚焦浏览器、模型和工作流验证；服务器调度能力会在服务端模式展示。',
-    },
-  ]
-})
-
-// flowSteps describes the automation lifecycle 首页流程步骤
-const flowSteps = computed(() => {
-  if (runtimeMode.value === 'server') return ['同步工作流', '创建任务', '选择客户端', '下发执行', '查看结果']
-  return ['配置浏览器', '验证模型', '读取工作流', '填写参数', '执行验证']
+  return `${window.location.origin}${window.location.pathname}#/client-agent`
 })
 
 onMounted(async () => {
@@ -184,19 +225,47 @@ const runtimeModeText = computed(() => {
   if (runtimeMode.value === 'server') return '服务器调度版'
   return '自动识别中'
 })
+
+async function copyClientAgentUrl() {
+  // Copy URL 优先使用 Clipboard API，兜底兼容普通 HTTP 访问
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
+    await navigator.clipboard.writeText(clientAgentUrl.value)
+  } catch {
+    copyTextFallback(clientAgentUrl.value)
+  }
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端地址已复制' })
+}
+
+function copyTextFallback(text) {
+  // Fallback copy 使用临时输入框完成复制
+  const input = document.createElement('textarea')
+  input.value = text
+  input.setAttribute('readonly', 'readonly')
+  input.style.position = 'fixed'
+  input.style.opacity = '0'
+  document.body.appendChild(input)
+  input.select()
+  document.execCommand('copy')
+  document.body.removeChild(input)
+}
 </script>
 
 <style scoped>
 .home-page {
   display: grid;
-  gap: 18px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .hero-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 20px;
-  padding: 28px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  padding: 24px;
   background:
     radial-gradient(circle at 92% 12%, rgba(64, 158, 255, 0.18), transparent 34%),
     linear-gradient(135deg, #f8fbff 0%, #ffffff 62%);
@@ -221,16 +290,16 @@ h1 {
   max-width: 760px;
   margin: 0;
   color: #111827;
-  font-size: 36px;
+  font-size: 32px;
   line-height: 1.22;
 }
 
 .summary {
   max-width: 820px;
-  margin: 16px 0 0;
+  margin: 12px 0 0;
   color: #606266;
   font-size: 16px;
-  line-height: 1.8;
+  line-height: 1.7;
 }
 
 .hero-status {
@@ -260,6 +329,24 @@ h1 {
   line-height: 1.6;
 }
 
+.client-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.client-link {
+  min-width: 0;
+  overflow: hidden;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .quick-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -267,7 +354,7 @@ h1 {
 }
 
 .quick-card,
-.mode-card,
+.intro-card,
 .flow-panel {
   background: #ffffff;
   border: 1px solid #e4e7ed;
@@ -277,8 +364,8 @@ h1 {
 .quick-card {
   display: grid;
   gap: 8px;
-  min-height: 138px;
-  padding: 18px;
+  min-height: 118px;
+  padding: 16px;
   color: #303133;
   transition:
     transform 0.18s ease,
@@ -308,17 +395,20 @@ h1 {
   line-height: 1.55;
 }
 
-.mode-grid {
+.intro-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+  min-height: 0;
 }
 
-.mode-card {
-  padding: 20px;
+.intro-card {
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px;
 }
 
-.mode-tag {
+.intro-tag {
   display: inline-flex;
   margin-bottom: 12px;
   padding: 5px 10px;
@@ -327,26 +417,30 @@ h1 {
   border-radius: 999px;
 }
 
-.mode-tag--desktop {
+.intro-tag--scene {
   color: #1d4ed8;
   background: #eff6ff;
 }
 
-.mode-tag--server {
+.intro-tag--advantage {
   color: #b45309;
   background: #fffbeb;
 }
 
-.mode-card h2 {
+.intro-card h2 {
   margin: 0 0 8px;
   color: #111827;
   font-size: 18px;
 }
 
-.mode-card p {
+.intro-card p {
+  display: -webkit-box;
   margin: 0;
+  overflow: hidden;
   color: #606266;
   line-height: 1.7;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .flow-panel {
@@ -368,9 +462,12 @@ h1 {
 }
 
 @media (max-width: 900px) {
-  .hero-panel,
-  .mode-grid {
+  .hero-panel {
     grid-template-columns: 1fr;
+  }
+
+  .intro-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .quick-grid {
@@ -379,6 +476,11 @@ h1 {
 }
 
 @media (max-width: 560px) {
+  .home-page {
+    height: auto;
+    overflow: visible;
+  }
+
   .hero-panel {
     padding: 22px;
   }
@@ -388,6 +490,10 @@ h1 {
   }
 
   .quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intro-grid {
     grid-template-columns: 1fr;
   }
 }

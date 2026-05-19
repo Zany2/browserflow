@@ -14,7 +14,7 @@ func (c *ControllerV1) Runtime(ctx context.Context, req *v1.RuntimeReq) (res *v1
 	// Choose disabled routes by runtime mode 按运行模式选择禁用路由
 	disabledRoutes := []string{"/automa", "/tasks", "/task-records", "/clients"}
 	if mode == consts.RuntimeModeServer {
-		disabledRoutes = []string{"/browser", "/llm", "/chat", "/browser-agent"}
+		disabledRoutes = []string{"/browser", "/workflows", "/llm", "/chat", "/browser-agent"}
 	} else {
 		disabledRoutes = append(disabledRoutes, "/client-agent")
 	}

@@ -13,10 +13,6 @@ Keep the BrowserFlow `browser-agent` client tab alive. Do not close the whole br
 
 **API Base URL:** `http://127.0.0.1:8001/api/v1/browser-executor`
 
-**Current Browser Instance ID:** `browser_q84m3z011jcdidyac75yof0100ezgm2l`
-
-**Current Page:** `http://localhost:5173/#/browser-agent?browser_id=browser_q84m3z011jcdidyac75yof0100ezgm2l`
-
 ## Mandatory Workflow
 
 1. Check `status` before controlling the browser.
@@ -84,7 +80,7 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/input-elements' \
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/page-structure' \
   -H 'Content-Type: application/json' \
-  -d '{"include_images":false,"include_buttons":true,"limit":30,"include_links":true,"include_forms":true,"include_tables":true}'
+  -d '{"include_links":true,"include_forms":true,"include_tables":true,"include_images":false,"include_buttons":true,"limit":30}'
 ```
 
 ### Element Info
@@ -100,7 +96,7 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/element-info' \
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/act' \
   -H 'Content-Type: application/json' \
-  -d '{"return_observe":true,"intent":"click","identifier":"@e1"}'
+  -d '{"intent":"click","identifier":"@e1","return_observe":true}'
 ```
 
 ### Click Element
@@ -132,7 +128,7 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/select' \
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/fill-form' \
   -H 'Content-Type: application/json' \
-  -d '{"fields":[{"name":"email","value":"user@example.com"},{"name":"password","value":"secret"}],"submit":false,"timeout":10}'
+  -d '{"timeout":10,"fields":[{"name":"email","value":"user@example.com"},{"name":"password","value":"secret"}],"submit":false}'
 ```
 
 ### Press Key
@@ -148,7 +144,7 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/press-key' \
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/wait' \
   -H 'Content-Type: application/json' \
-  -d '{"identifier":"@e1","state":"interactable","timeout":10}'
+  -d '{"state":"interactable","timeout":10,"identifier":"@e1"}'
 ```
 
 ### Wait For DOM Stable
@@ -252,7 +248,7 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/window' \
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/mouse' \
   -H 'Content-Type: application/json' \
-  -d '{"x":300,"y":200,"button":"left","action":"click"}'
+  -d '{"action":"click","x":300,"y":200,"button":"left"}'
 ```
 
 ### Extract Text
@@ -276,7 +272,7 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/screenshot' \
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/element-screenshot' \
   -H 'Content-Type: application/json' \
-  -d '{"identifier":"@e1","format":"png"}'
+  -d '{"format":"png","identifier":"@e1"}'
 ```
 
 ### Batch Operations

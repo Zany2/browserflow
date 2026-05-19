@@ -91,10 +91,20 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="默认" width="60" align="center" class-name="action-column">
+          <el-table-column label="默认" width="96" align="center" class-name="action-column default-column">
             <template #default="{ row }">
-              <el-tag v-if="row.is_default" type="success" effect="plain">默认</el-tag>
-              <span v-else></span>
+              <div :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`" class="default-cell">
+                <span v-if="row.is_default" class="default-action default-badge">默认</span>
+                <button
+                  v-else
+                  class="default-action default-button"
+                  type="button"
+                  :disabled="isDefaultUpdating(row.id)"
+                  @click.stop="handleSetDefaultInstance(row)"
+                >
+                  {{ isDefaultUpdating(row.id) ? '设置中' : '设为默认' }}
+                </button>
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="类型" width="66">
@@ -277,6 +287,7 @@ const instancePageSizes = [10, 30, 60]
 const saving = ref(false)
 const starting = ref(false)
 const defaultSaving = ref(false)
+const defaultUpdatingIds = ref([])
 const launchArgsText = ref('')
 const agents = ref([])
 const runtimeNow = ref(Date.now())
@@ -461,6 +472,21 @@ async function handleDefaultChange(checked) {
   }
 }
 
+async function handleSetDefaultInstance(instance) {
+  if (instance.is_default) return
+
+  defaultUpdatingIds.value = Array.from(new Set([...defaultUpdatingIds.value, instance.id]))
+  try {
+    // Default shortcut 列表快捷设置默认配置，后端保存时会清理其他默认项
+    await updateBrowserInstance(instance.id, buildInstancePayload(instance, { is_default: true }))
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '已设为默认配置' })
+    await loadAll()
+    syncSelectedDefaultFlag()
+  } finally {
+    defaultUpdatingIds.value = defaultUpdatingIds.value.filter((id) => id !== instance.id)
+  }
+}
+
 async function handleStart(row, saveBeforeStart = false) {
   if (!row.id) {
     appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先保存浏览器配置' })
@@ -640,12 +666,43 @@ function getAutomaTagType(instance) {
 }
 
 function buildPayload() {
-  return {
-    ...form,
+  // Payload whitelist 表单入参白名单，避免运行态字段回传
+  return buildInstancePayload(form, {
     launch_args: launchArgsText.value
       .split('\n')
       .map((item) => item.trim())
       .filter(Boolean),
+  })
+}
+
+function buildInstancePayload(instance, overrides = {}) {
+  const nextInstance = { ...instance, ...overrides }
+  return {
+    name: nextInstance.name,
+    description: nextInstance.description,
+    is_default: Boolean(nextInstance.is_default),
+    type: nextInstance.type,
+    bin_path: nextInstance.bin_path,
+    user_data_dir: nextInstance.user_data_dir,
+    control_url: nextInstance.control_url,
+    user_agent: nextInstance.user_agent,
+    headless: nextInstance.headless,
+    no_sandbox: nextInstance.no_sandbox,
+    launch_args: Array.isArray(nextInstance.launch_args) ? nextInstance.launch_args : [],
+    proxy: nextInstance.proxy,
+  }
+}
+
+function isDefaultUpdating(instanceId) {
+  return defaultUpdatingIds.value.includes(instanceId)
+}
+
+function syncSelectedDefaultFlag() {
+  if (!form.id) return
+
+  const current = instances.value.find((instance) => instance.id === form.id)
+  if (current) {
+    form.is_default = Boolean(current.is_default)
   }
 }
 
@@ -821,6 +878,55 @@ function createEmptyForm() {
 
 .instance-panel :deep(.operation-column .el-button) {
   flex-shrink: 0;
+}
+
+.instance-panel :deep(.default-column .cell) {
+  display: flex;
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.default-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  min-height: 24px;
+}
+
+.default-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 24px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.default-badge {
+  color: #67c23a;
+  font-size: 12px;
+  line-height: 22px;
+  background: #f0f9eb;
+  border: 1px solid #b3e19d;
+  border-radius: 4px;
+}
+
+.default-button {
+  padding: 0;
+  color: #409eff;
+  font: inherit;
+  line-height: 24px;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.default-button:disabled {
+  color: #a8abb2;
+  cursor: default;
 }
 
 .table-toolbar {

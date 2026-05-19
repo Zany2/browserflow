@@ -143,7 +143,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { CopyDocument, RefreshRight } from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
+import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
@@ -382,7 +382,14 @@ async function handleSaveDetail() {
 }
 
 async function handleDeleteWorkflow(row) {
-  await ElMessageBox.confirm('确认删除这个工作流吗？', '删除工作流', { type: 'warning' })
+  const confirmed = await appConfirm({
+    title: '删除工作流',
+    message: '确认删除这个工作流吗？',
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
   await deleteAutomaWorkflow(getWorkflowId(row))
   showSuccessMessage('工作流已删除')
   await loadWorkflows()
@@ -392,9 +399,14 @@ async function handleBatchDelete() {
   const ids = selectedWorkflowIds.value.slice()
   if (ids.length === 0) return
 
-  await ElMessageBox.confirm(`确认删除选中的 ${ids.length} 个工作流吗？`, '批量删除工作流', {
-    type: 'warning',
+  const confirmed = await appConfirm({
+    title: '批量删除工作流',
+    message: `确认删除选中的 ${ids.length} 个工作流吗？`,
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
   })
+  if (!confirmed) return
+
   await batchDeleteAutomaWorkflows(ids)
   showSuccessMessage('已删除选中工作流')
   await loadWorkflows()

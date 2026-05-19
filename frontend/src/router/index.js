@@ -32,6 +32,7 @@ export const routes = [
   {
     path: '/client-agent',
     name: 'client-agent',
+    meta: { title: 'BrowserFlow-客户端' },
     component: ClientAgentView,
   },
   {
@@ -128,12 +129,18 @@ router.beforeEach(async (to) => {
   return true
 })
 
-router.afterEach(() => {
+router.afterEach((to) => {
+  setDocumentTitle(to)
   NProgress.done()
 })
 
 router.onError(() => {
   NProgress.done()
 })
+
+function setDocumentTitle(route) {
+  // Page title 路由标题，未配置时恢复默认标题
+  document.title = route.meta?.title || 'BrowserFlow'
+}
 
 export default router

@@ -43,14 +43,38 @@ Do not replace the exported `browser_id` with the current browser unless the use
 
 Before running a workflow, inspect its `Parameters` section. If a required parameter has no value, ask the user for it before calling the API. If an optional parameter has a default value, use the default unless the user provides another value. Pass parameters through the `variables` object, and keep parameter names exactly as listed in this skill. BrowserFlow treats this `variables` object as the completed parameter set and instructs Automa not to open its own parameter input page.
 
+## Execution Mode Rules
+
+Before running a workflow, decide whether the user needs the final workflow result.
+
+- Use asynchronous execution when the user only asks to start, trigger, submit, open, launch, run, or execute a task and does not ask for returned data or final completion. Set `wait_result` to `false`. Return the `execution.execution_id` to the user so they can query status or results later.
+- Use synchronous waiting when the user asks to get, query, search, extract, collect, return, fetch, read, wait for completion, or confirm final success/failure. Set `wait_result` to `true`, set a reasonable `timeout`, and request returned data if needed.
+- For data-returning requests, request `return_data.variables: ["browserflow_output"]` and read `execution.result.data.variables.browserflow_output` first. If it is missing, report that the workflow completed but did not provide a BrowserFlow output variable.
+- If the user asks to check a previous task, use the execution status endpoint with the saved `execution_id` instead of running the workflow again.
+- If the intent is ambiguous, prefer async mode for action-only tasks and sync mode for data-returning tasks.
+
 ## API Endpoints
 
-### Run Workflow
+### Run Workflow Async
 
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/workflows/Wpo4FUxYuiTzOdX5F1blF/run' \
   -H 'Content-Type: application/json' \
-  -d '{"browser_id":"browser_q84m3z011jcdidyac75yof0100ezgm2l","variables":{"id_card":"111","name":""}}'
+  -d '{"browser_id":"browser_q84m3z011jcdidyac75yof0100ezgm2l","variables":{"id_card":"111","name":""},"wait_result":false}'
+```
+
+### Run Workflow And Wait For Result
+
+```bash
+curl -X POST 'http://127.0.0.1:8001/api/v1/workflows/Wpo4FUxYuiTzOdX5F1blF/run' \
+  -H 'Content-Type: application/json' \
+  -d '{"browser_id":"browser_q84m3z011jcdidyac75yof0100ezgm2l","return_data":{"include_history":false,"include_table":false,"table_limit":20,"variables":["browserflow_output"]},"timeout":300,"variables":{"id_card":"111","name":""},"wait_result":true}'
+```
+
+### Query Execution Status
+
+```bash
+curl 'http://127.0.0.1:8001/api/v1/workflows/executions/{execution_id}'
 ```
 
 ### Open Workflow Editor
@@ -70,7 +94,7 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/workflows/Wpo4FUxYuiTzOdX5F1blF/open'
 - Status: enabled
 - Nodes: 6
 - Created: 2026-05-17 00:47:21
-- Updated: 2026-05-17 00:52:49
+- Updated: 2026-05-18 16:20:14
 
 Parameters:
 - `id_card` (string): 身份证号 Default: `111`
@@ -80,8 +104,10 @@ Run example:
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/workflows/Wpo4FUxYuiTzOdX5F1blF/run' \
   -H 'Content-Type: application/json' \
-  -d '{"browser_id":"browser_q84m3z011jcdidyac75yof0100ezgm2l","variables":{"id_card":"111","name":""}}'
+  -d '{"browser_id":"browser_q84m3z011jcdidyac75yof0100ezgm2l","variables":{"id_card":"111","name":""},"wait_result":false}'
 ```
+
+For data-returning requests, use the sync example in the API Endpoints section and keep the same workflow ID and variables.
 
 ### 2. baidu测试
 
@@ -90,7 +116,7 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/workflows/Wpo4FUxYuiTzOdX5F1blF/run' 
 - Status: enabled
 - Nodes: 4
 - Created: 2026-05-17 00:47:21
-- Updated: 2026-05-17 00:50:36
+- Updated: 2026-05-18 16:20:18
 
 Parameters: none detected.
 
@@ -98,8 +124,10 @@ Run example:
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/workflows/yA6L9FqA7zAOzRp-YaFUp/run' \
   -H 'Content-Type: application/json' \
-  -d '{"browser_id":"browser_q84m3z011jcdidyac75yof0100ezgm2l","variables":{}}'
+  -d '{"browser_id":"browser_q84m3z011jcdidyac75yof0100ezgm2l","variables":{},"wait_result":false}'
 ```
+
+For data-returning requests, use the sync example in the API Endpoints section and keep the same workflow ID and variables.
 
 ## Usage Notes
 
@@ -108,4 +136,4 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/workflows/yA6L9FqA7zAOzRp-YaFUp/run' 
 - Pass trigger parameters through the `variables` object. Parameter names must match the Automa trigger configuration.
 - Do not rely on Automa's parameter tab for Skill calls; collect required values before sending the HTTP request.
 - If the exported browser instance is no longer available, choose another running browser and update `browser_id`.
-- The run API confirms that the command was sent to the browser-agent. It does not currently prove that the Automa workflow completed successfully.
+- Async run returns after the command is accepted. Sync run waits until Automa reports `success`, `error`, `stopped`, or BrowserFlow reports `timeout`.
