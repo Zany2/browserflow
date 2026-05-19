@@ -1,12 +1,14 @@
 package workflowexecution
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/gogf/gf/v2/os/gcache"
 	"github.com/gogf/gf/v2/util/guid"
 )
 
@@ -15,15 +17,19 @@ const (
 	defaultTableLimit = 20
 	// maxExecutionCount max retained execution count 最大保留执行数
 	maxExecutionCount = 500
+	// executionTTL max retained execution lifetime 执行状态最长保存时间
+	executionTTL = 6 * time.Hour
 )
 
 var (
 	// mu protects execution store 保护执行状态存储
 	mu sync.RWMutex
-	// executions stores execution states 执行状态存储
-	executions = map[string]*model.WorkflowExecution{}
-	// commandIndex maps command id to execution id 命令到执行标识索引
-	commandIndex = map[string]string{}
+	// cacheCtx shared cache context 共享缓存上下文
+	cacheCtx = context.Background()
+	// executions stores execution states with ttl 带过期时间的执行状态缓存
+	executions = gcache.New(maxExecutionCount)
+	// commandIndex maps command id to execution id with ttl 带过期时间的命令索引缓存
+	commandIndex = gcache.New(maxExecutionCount)
 )
 
 // NewID creates execution id 创建执行标识
@@ -79,11 +85,10 @@ func Create(in model.WorkflowExecutionCreateInput) *model.WorkflowExecution {
 	}
 
 	mu.Lock()
-	executions[execution.ExecutionID] = execution
+	_ = executions.Set(cacheCtx, execution.ExecutionID, execution, executionTTL)
 	if execution.CommandID != "" {
-		commandIndex[execution.CommandID] = execution.ExecutionID
+		_ = commandIndex.Set(cacheCtx, execution.CommandID, execution.ExecutionID, executionTTL)
 	}
-	pruneLocked()
 	mu.Unlock()
 
 	return cloneExecution(execution)
@@ -106,7 +111,7 @@ func CompleteByCommand(commandID string, result *model.AgentCommandResult) {
 	}
 
 	mu.RLock()
-	executionID := commandIndex[commandID]
+	executionID := getCommandExecutionIDLocked(commandID)
 	mu.RUnlock()
 	if executionID == "" {
 		return
@@ -153,9 +158,9 @@ func MarkTimeout(executionID string, message string) {
 // Get returns execution state 获取执行状态
 func Get(executionID string) (*model.WorkflowExecution, bool) {
 	mu.RLock()
-	execution, ok := executions[strings.TrimSpace(executionID)]
+	execution := getExecutionLocked(executionID)
 	mu.RUnlock()
-	if !ok {
+	if execution == nil {
 		return nil, false
 	}
 	return cloneExecution(execution), true
@@ -169,12 +174,32 @@ func update(executionID string, fn func(execution *model.WorkflowExecution)) {
 	}
 
 	mu.Lock()
-	execution := executions[executionID]
+	execution := getExecutionLocked(executionID)
 	if execution != nil {
 		fn(execution)
 		execution.UpdatedAt = time.Now()
 	}
 	mu.Unlock()
+}
+
+// getExecutionLocked gets execution from cache 调用方需持有执行状态锁
+func getExecutionLocked(executionID string) *model.WorkflowExecution {
+	value, err := executions.Get(cacheCtx, strings.TrimSpace(executionID))
+	if err != nil || value == nil {
+		return nil
+	}
+	execution, _ := value.Val().(*model.WorkflowExecution)
+	return execution
+}
+
+// getCommandExecutionIDLocked gets execution id by command id 调用方需持有执行状态锁
+func getCommandExecutionIDLocked(commandID string) string {
+	value, err := commandIndex.Get(cacheCtx, strings.TrimSpace(commandID))
+	if err != nil || value == nil {
+		return ""
+	}
+	executionID, _ := value.Val().(string)
+	return executionID
 }
 
 // resolveResultStatus resolves terminal status 解析终态状态
@@ -315,26 +340,4 @@ func cloneExecution(execution *model.WorkflowExecution) *model.WorkflowExecution
 		next.EndedAt = &endedAt
 	}
 	return &next
-}
-
-// pruneLocked keeps recent executions only 保留最近执行状态
-func pruneLocked() {
-	if len(executions) <= maxExecutionCount {
-		return
-	}
-
-	var oldestID string
-	var oldestTime time.Time
-	for id, execution := range executions {
-		if oldestID == "" || execution.UpdatedAt.Before(oldestTime) {
-			oldestID = id
-			oldestTime = execution.UpdatedAt
-		}
-	}
-	if oldestID != "" {
-		if commandID := executions[oldestID].CommandID; commandID != "" {
-			delete(commandIndex, commandID)
-		}
-		delete(executions, oldestID)
-	}
 }

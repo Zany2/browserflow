@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
@@ -257,8 +258,7 @@ func (ws *WsHandlerFunc) handleDesktopAgentResult(client *Client, in *model.WSRe
 		Data:      in.Data,
 		Error:     in.Error,
 	}
-	resultCh := state.PendingCommands[in.CommandID]
-	delete(state.PendingCommands, in.CommandID)
+	resultCh := state.PopPendingCommand(in.CommandID)
 	if agent := state.AgentConnections[browserID]; agent != nil {
 		agent.LastSeenAt = time.Now()
 	}
@@ -388,6 +388,7 @@ func scheduleBrowserRuntimeProbe(browserID string) {
 
 		removedRuntime, _, removed := state.RemoveBrowserRuntime(browserID, runtime)
 		if removed {
+			browserexecutor.Cleanup(browserID)
 			state.CleanupBrowserRuntime(removedRuntime)
 		}
 	}()

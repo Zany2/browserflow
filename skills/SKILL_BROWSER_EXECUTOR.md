@@ -1,6 +1,6 @@
 ---
 name: browserflow-browser-executor
-description: Control the current BrowserFlow Windows browser directly through HTTP APIs. Use observe, act, accessibility snapshots, RefIDs, page structure, element diagnostics, page text, page HTML, and compact actions to navigate, click, type, fill forms, upload files, drag, handle dialogs, scroll, reload, extract data, screenshot, operate mouse/window, run JavaScript, and manage tabs without Automa workflows.
+description: Control the current BrowserFlow Windows browser directly through HTTP APIs. Use observe, act, accessibility snapshots, RefIDs, page structure, element diagnostics, page text, page HTML, cookies, storage, and compact actions to navigate, click, type, fill forms, upload files, drag, handle dialogs, scroll, reload, extract data, screenshot, operate mouse/window, run JavaScript, and manage tabs without Automa workflows.
 ---
 
 # BrowserFlow Browser Executor
@@ -25,8 +25,9 @@ Keep the BrowserFlow `browser-agent` client tab alive. Do not close the whole br
 8. Prefer `fill-form` for multiple fields and `batch` for deterministic sequential actions; do not batch steps that need observation between them.
 9. If a RefID fails, call `observe` or `snapshot` again because the page may have changed.
 10. Prefer `page-structure` for structured extraction before requesting full `page-content`, and use `element-info` to diagnose one uncertain element.
-11. Use `wait` states precisely: `load`, `visible`, `hidden`, `enabled`, `interactable`, `writable`, `stable`, `dom-stable`, `request-idle`, `elements-more-than`, or `time`.
-12. Never close the BrowserFlow browser or any `#/browser-agent` client tab. Before using `close-page` or `tabs` with `action:"close"`, call `tabs` with `action:"list"` and close only task-related business tabs.
+11. Use `wait` states precisely: `load`, `visible`, `hidden`, `enabled`, `interactable`, `writable`, `stable`, `dom-stable`, `request-idle`, `elements-more-than`, or `time`. For navigation, set `wait_until` to `load`, `dom-stable`, `request-idle`, `page-stable`, or `none`.
+12. Use `cookies` and `storage` when the task needs to inspect login/session state or clean up page state. Prefer these semantic APIs over ad hoc JavaScript.
+13. Never close the BrowserFlow browser or any `#/browser-agent` client tab. Before using `close-page` or `tabs` with `action:"close"`, call `tabs` with `action:"list"` and close only task-related business tabs.
 
 ## Preflight
 
@@ -42,7 +43,7 @@ curl 'http://127.0.0.1:8001/api/v1/browser-executor/status'
 ```bash
 curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/navigate' \
   -H 'Content-Type: application/json' \
-  -d '{"url":"https://example.com"}'
+  -d '{"url":"https://example.com","wait_until":"load"}'
 ```
 
 ### Observe Page
@@ -211,6 +212,38 @@ curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/page-content' \
   -d '{"limit":12000}'
 ```
 
+### List Cookies
+
+```bash
+curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/cookies' \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"list"}'
+```
+
+### Set Cookie
+
+```bash
+curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/cookies' \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"set","name":"token","value":"abc","url":"https://example.com","same_site":"Lax"}'
+```
+
+### List Local Storage
+
+```bash
+curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/storage' \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"list","type":"local"}'
+```
+
+### Set Local Storage
+
+```bash
+curl -X POST 'http://127.0.0.1:8001/api/v1/browser-executor/storage' \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"set","type":"local","key":"token","value":"abc"}'
+```
+
 ### Scroll Page
 
 ```bash
@@ -310,6 +343,7 @@ GoFrame wraps responses as `{code,message,data}`. Browser operation data is usua
 - If a page did not update, call `wait` with `dom-stable`, `request-idle`, or a specific element state, then `observe`.
 - If a click fails, use `element-info` to check visibility, disabled state, box coordinates, and XPath; then retry with a better identifier or coordinate `mouse` fallback.
 - If extraction is empty, try `page-structure`, `page-text`, `page-content`, or a broader selector with a smaller limit.
+- If login state or a persisted setting looks wrong, inspect `cookies` and `storage` before retrying page actions.
 - If `status.running` is false, ask the user to reopen the BrowserFlow browser-agent page.
 
 ## Other Endpoints
@@ -317,7 +351,7 @@ GoFrame wraps responses as `{code,message,data}`. Browser operation data is usua
 - `GET http://127.0.0.1:8001/api/v1/browser-executor/status` - Check whether the current browser is controllable
 - `GET/POST http://127.0.0.1:8001/api/v1/browser-executor/help` - Show command help
 - `GET http://127.0.0.1:8001/api/v1/browser-executor/export/skill` - Export Browser Executor Skill
-- `POST http://127.0.0.1:8001/api/v1/browser-executor/navigate` - Open URL
+- `POST http://127.0.0.1:8001/api/v1/browser-executor/navigate` - Open URL and wait for load/dom-stable/request-idle/page-stable/none
 - `GET/POST http://127.0.0.1:8001/api/v1/browser-executor/snapshot` - Get page snapshot and RefIDs
 - `GET/POST http://127.0.0.1:8001/api/v1/browser-executor/clickable-elements` - Get compact clickable element RefIDs
 - `GET/POST http://127.0.0.1:8001/api/v1/browser-executor/input-elements` - Get compact input element RefIDs
@@ -344,6 +378,8 @@ GoFrame wraps responses as `{code,message,data}`. Browser operation data is usua
 - `POST http://127.0.0.1:8001/api/v1/browser-executor/screenshot` - Capture screenshot as base64
 - `POST http://127.0.0.1:8001/api/v1/browser-executor/element-screenshot` - Capture a single element screenshot as base64
 - `POST http://127.0.0.1:8001/api/v1/browser-executor/evaluate` - Execute JavaScript with automatic function wrapping
+- `POST http://127.0.0.1:8001/api/v1/browser-executor/cookies` - List, set, delete, or clear browser cookies
+- `POST http://127.0.0.1:8001/api/v1/browser-executor/storage` - List, get, set, delete, or clear localStorage/sessionStorage on the current page
 - `POST http://127.0.0.1:8001/api/v1/browser-executor/tabs` - Manage tabs list/new/switch/close
 - `POST http://127.0.0.1:8001/api/v1/browser-executor/scroll` - Scroll page or element
 - `POST http://127.0.0.1:8001/api/v1/browser-executor/mouse` - Run coordinate mouse operations move/click/double-click/right-click/down/up/scroll
@@ -365,7 +401,9 @@ GoFrame wraps responses as `{code,message,data}`. Browser operation data is usua
 - Set `return_observe:true` on `act`, `navigate`, `click`, `type`, `select`, `fill-form`, or `scroll` when you need the updated page state.
 - Prefer `fill-form` over repeated `type` calls when a page has several fields.
 - Prefer `wait` with specific states (`interactable`, `enabled`, `writable`, `dom-stable`, `request-idle`) instead of blind time sleeps.
+- For `navigate`, choose `wait_until` deliberately. Use `request-idle` for network-heavy SPAs, `dom-stable` for DOM-rendered pages, and `none` only when the next step explicitly waits for something else.
 - Call `handle-dialog` before the action that triggers an alert, confirm, prompt, or beforeunload dialog.
+- Use `cookies` for authentication/session inspection and `storage` for localStorage/sessionStorage reads or cleanup. Avoid raw `evaluate` for these common state tasks.
 - Prefer `page-text` or `page-content` only when the model needs broad context, and keep limits small.
 - Browser control APIs are powerful. Use them only against the local BrowserFlow backend.
 - Do not close the browser as a task cleanup step. Keep the BrowserFlow `browser-agent` client tab open so the local executor remains connected.

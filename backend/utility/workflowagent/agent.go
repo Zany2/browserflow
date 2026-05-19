@@ -46,7 +46,7 @@ func RequestWorkflowList(ctx context.Context, browserID string) (string, []map[s
 	commandID := "cmd_" + guid.S()
 	resultCh := make(chan model.AgentCommandResult, 1)
 	state.AgentMu.Lock()
-	state.PendingCommands[commandID] = resultCh
+	state.SetPendingCommand(commandID, resultCh)
 	agent.LastSeenAt = time.Now()
 	state.AgentMu.Unlock()
 
@@ -58,7 +58,7 @@ func RequestWorkflowList(ctx context.Context, browserID string) (string, []map[s
 		Payload:   map[string]any{},
 	}); sent <= 0 {
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		return "", nil, errors.New("browser agent is offline")
 	}
@@ -78,7 +78,7 @@ func RequestWorkflowList(ctx context.Context, browserID string) (string, []map[s
 		return resolvedBrowserID, workflows, nil
 	case <-ctx.Done():
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		return "", nil, ctx.Err()
 	}

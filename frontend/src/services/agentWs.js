@@ -10,6 +10,7 @@ const WORKFLOW_INVENTORY_INTERVAL_MS = 60000
 // AUTOMA_VERSION_PROBE_INTERVAL_MS version fallback probe interval 版本兜底探测间隔
 const AUTOMA_VERSION_PROBE_INTERVAL_MS = 30000
 const WORKFLOW_INVENTORY_REFRESH_COMMAND = 'automa.workflow.inventory.refresh'
+const AUTOMA_WORKFLOW_RESULT_EVENT = '__browserflow_automa_workflow_result__'
 
 // createAgentSocket creates websocket channel 创建客户端 websocket 通道
 export function createAgentSocket({
@@ -51,6 +52,8 @@ export function createAgentSocket({
   // automaRefreshTimer pending page refresh timer 待执行页面刷新定时器
   let automaRefreshTimer = null
   let currentClientIp = ''
+  // workflowResultCommandIds keeps async workflow command mapping 保存异步工作流命令映射
+  let workflowResultCommandIds = new Map()
 
   const getCurrentAutomaInstalled = () => Boolean(getAutomaInstalled?.() || lastKnownAutomaInstalled)
 
@@ -169,6 +172,46 @@ export function createAgentSocket({
     })
   }
 
+  // trackWorkflowCommand remembers async workflow command id 记录异步工作流命令标识
+  const trackWorkflowCommand = (payload) => {
+    if (payload?.command !== 'automa.workflow.run') return
+
+    const commandId = String(payload.command_id || '').trim()
+    const data = payload.payload || {}
+    const waitResult = Boolean(data.wait_result ?? data.waitResult ?? false)
+    const executionId = String(data.execution_id || data.executionId || '').trim()
+
+    if (!commandId || !executionId || waitResult) return
+    workflowResultCommandIds.set(executionId, commandId)
+  }
+
+  // untrackWorkflowCommand removes failed async workflow mapping 清理失败的异步工作流映射
+  const untrackWorkflowCommand = (payload) => {
+    const data = payload?.payload || {}
+    const executionId = String(data.execution_id || data.executionId || '').trim()
+    if (executionId) workflowResultCommandIds.delete(executionId)
+  }
+
+  // handleWorkflowResultEvent forwards async final result 回传异步工作流最终结果
+  const handleWorkflowResultEvent = (event) => {
+    const detail = event.detail || {}
+    const executionId = String(
+      detail.execution_id || detail.executionId || detail.request_id || detail.requestId || '',
+    ).trim()
+    const commandId = workflowResultCommandIds.get(executionId)
+    if (!commandId) return
+
+    workflowResultCommandIds.delete(executionId)
+    const success = detail.ok !== false && detail.status !== 'error'
+    sendResult({
+      type: 'agent_result',
+      command_id: commandId,
+      success,
+      data: detail,
+      error: success ? undefined : String(detail.message || detail.error || '').trim(),
+    })
+  }
+
   // sendWorkflowInventory reports client workflow cache 上报客户端工作流清单缓存
   const sendWorkflowInventory = async ({ force = false, automaInstalled = null } = {}) => {
     if (!enableWorkflowInventory) {
@@ -269,6 +312,8 @@ export function createAgentSocket({
 
     if (payload.type !== 'agent_command') return
 
+    trackWorkflowCommand(payload)
+
     try {
       const data =
         payload.command === WORKFLOW_INVENTORY_REFRESH_COMMAND
@@ -281,6 +326,7 @@ export function createAgentSocket({
         data,
       })
     } catch (error) {
+      untrackWorkflowCommand(payload)
       sendResult({
         type: 'agent_result',
         command_id: payload.command_id,
@@ -392,10 +438,14 @@ export function createAgentSocket({
     })
   }
 
+  window.addEventListener(AUTOMA_WORKFLOW_RESULT_EVENT, handleWorkflowResultEvent)
+
   connect()
 
   return () => {
     stopped = true
+    window.removeEventListener(AUTOMA_WORKFLOW_RESULT_EVENT, handleWorkflowResultEvent)
+    workflowResultCommandIds.clear()
     if (reconnectTimer) window.clearTimeout(reconnectTimer)
     if (automaRefreshTimer) window.clearTimeout(automaRefreshTimer)
     clearSocketTimers()

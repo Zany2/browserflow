@@ -34,13 +34,13 @@ func (c *ControllerV1) AutomaWorkflowRun(ctx context.Context, req *v1.AutomaWork
 	}
 	commandID := "cmd_" + guid.S()
 	resultCh := make(chan model.AgentCommandResult, 1)
-	state.PendingCommands[commandID] = resultCh
+	state.SetPendingCommand(commandID, resultCh)
 	agent.LastSeenAt = time.Now()
 	state.AgentMu.Unlock()
 
 	if sent := websockets.SendConnectionMessage(agent.ConnectionID, &model.WSResponse{Type: "agent_command", BrowserID: agent.BrowserID, CommandID: commandID, Command: "automa.workflow.run", Payload: map[string]any{"id": req.ID, "variables": req.Variables}}); sent <= 0 {
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		return nil, errors.New("browser agent is offline")
 	}
@@ -49,7 +49,7 @@ func (c *ControllerV1) AutomaWorkflowRun(ctx context.Context, req *v1.AutomaWork
 		return &v1.AutomaWorkflowRunRes{Result: &result}, nil
 	case <-ctx.Done():
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		return nil, ctx.Err()
 	}

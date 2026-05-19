@@ -281,8 +281,7 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 	// Update task record when command id belongs to task execution 更新任务执行记录
 	// Notify command waiter and update execution state 通知命令等待方并更新执行状态
 	state.AgentMu.Lock()
-	resultCh := state.PendingCommands[in.CommandID]
-	delete(state.PendingCommands, in.CommandID)
+	resultCh := state.PopPendingCommand(in.CommandID)
 	if agent := state.AgentConnections[browserID]; agent != nil {
 		agent.LastSeenAt = now
 	}

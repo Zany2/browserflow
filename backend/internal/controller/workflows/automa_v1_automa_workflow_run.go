@@ -36,7 +36,7 @@ func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) 
 	})
 
 	state.AgentMu.Lock()
-	state.PendingCommands[commandID] = resultCh
+	state.SetPendingCommand(commandID, resultCh)
 	agent.LastSeenAt = time.Now()
 	state.AgentMu.Unlock()
 
@@ -60,7 +60,7 @@ func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) 
 		},
 	}); sent <= 0 {
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		workflowexecution.MarkTimeout(executionID, "browser agent is offline")
 		return nil, errors.New("browser agent is offline")
@@ -81,14 +81,14 @@ func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) 
 		return &v1.WorkflowRunRes{Result: &result, Execution: execution}, nil
 	case <-timer.C:
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		workflowexecution.MarkTimeout(executionID, fmt.Sprintf("workflow execution timeout after %d seconds", timeout))
 		execution, _ = workflowexecution.Get(executionID)
 		return &v1.WorkflowRunRes{Execution: execution}, nil
 	case <-ctx.Done():
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		workflowexecution.MarkTimeout(executionID, ctx.Err().Error())
 		return nil, ctx.Err()

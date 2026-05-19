@@ -32,6 +32,7 @@ func (c *ControllerV1) BrowserExecutorAct(ctx context.Context, req *v1.BrowserEx
 		Identifier: req.Identifier,
 		Value:      req.Value,
 		Text:       req.Text,
+		WaitUntil:  req.WaitUntil,
 		Fields:     fields,
 		Submit:     req.Submit,
 		Clear:      clear,

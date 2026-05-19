@@ -3,6 +3,7 @@ package browserruntime
 import (
 	"time"
 
+	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 	"github.com/Zany2/browserflow/backend/utility/state"
 )
 
@@ -37,6 +38,7 @@ func Watch(instanceID string, runtime *state.BrowserRuntime) {
 			failureCount += 1
 			if failureCount >= browserRuntimeProbeFailureLimit {
 				state.RemoveBrowserRuntime(instanceID, runtime)
+				browserexecutor.Cleanup(instanceID)
 				state.CleanupBrowserRuntime(runtime)
 				return
 			}

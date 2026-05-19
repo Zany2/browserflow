@@ -73,9 +73,6 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 
 	var runtime *state.BrowserRuntime
 	agentURL := fmt.Sprintf("%s/#/browser-agent?browser_id=%s", strings.TrimRight(frontendURL, "/"), url.QueryEscape(instance.ID))
-	state.BrowserMu.Lock()
-	state.BrowserCurrentInstanceID = instance.ID
-	state.BrowserMu.Unlock()
 	if instance.Type == "remote" {
 		controlURL := strings.TrimSpace(instance.ControlURL)
 		if controlURL == "" {
