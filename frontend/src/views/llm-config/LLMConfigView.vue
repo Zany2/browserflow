@@ -170,11 +170,11 @@
           />
           <el-table-column label="默认" width="96" align="center" class-name="action-column default-column">
             <template #default="{ row }">
-              <div :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`" class="default-cell">
-                <span v-if="row.is_default" class="default-action default-badge">默认</span>
+              <div :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`" class="quick-edit-cell">
+                <span v-if="row.is_default" class="quick-edit-action quick-edit-badge">默认</span>
                 <button
                   v-else
-                  class="default-action default-button"
+                  class="quick-edit-action quick-edit-button"
                   type="button"
                   :disabled="isDefaultUpdating(row.id)"
                   @click.stop="handleSetDefaultConfig(row)"
@@ -184,13 +184,14 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="80" align="center" class-name="action-column">
+          <el-table-column label="状态" width="86" align="center" class-name="action-column quick-edit-column">
             <template #default="{ row }">
               <el-switch
+                class="quick-edit-switch"
                 :model-value="row.is_active"
                 :loading="isStatusUpdating(row.id)"
-                active-text="启用"
-                inactive-text="停用"
+                active-text="启"
+                inactive-text="停"
                 inline-prompt
                 @click.stop
                 @change="(checked) => handleToggleConfigStatus(row, checked)"
@@ -628,49 +629,6 @@ function createEmptyForm() {
   display: flex;
   justify-content: center;
   padding: 0 8px;
-}
-
-.default-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 80px;
-  min-height: 24px;
-}
-
-.default-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 24px;
-  flex-shrink: 0;
-  box-sizing: border-box;
-}
-
-.default-badge {
-  color: #67c23a;
-  font-size: 12px;
-  line-height: 22px;
-  background: #f0f9eb;
-  border: 1px solid #b3e19d;
-  border-radius: 4px;
-}
-
-.default-button {
-  padding: 0;
-  color: #409eff;
-  font: inherit;
-  line-height: 24px;
-  white-space: nowrap;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
-.default-button:disabled {
-  color: #a8abb2;
-  cursor: default;
 }
 
 .panel-title {

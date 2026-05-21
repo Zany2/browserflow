@@ -13,7 +13,7 @@
       <div class="workflow-filters">
         <div class="filter-item filter-item--keyword">
           <span class="filter-label">关键词</span>
-          <el-input v-model="filters.keyword" clearable placeholder="数据库自定义名称、Automa 工作流名称、描述" />
+          <el-input v-model="filters.keyword" clearable placeholder="自定义工作流名称、Automa 工作流名称、描述" />
         </div>
 
         <div class="filter-item filter-item--source">
@@ -45,13 +45,13 @@
         :row-key="getWorkflowId" empty-text="暂无工作流" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
 
-        <el-table-column label="自定义名称" min-width="120" show-overflow-tooltip>
+        <el-table-column label="自定义工作流名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.name || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="自定义描述" min-width="140" show-overflow-tooltip>
+        <el-table-column label="自定义工作流描述" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.description || '' }}</span>
           </template>
@@ -69,10 +69,14 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="是否可同步" width="104" align="center" class-name="switch-column">
+        <el-table-column label="是否可同步" width="104" align="center" class-name="quick-edit-column">
           <template #default="{ row }">
-            <div class="syncable-switch-cell">
-              <el-switch :model-value="!row.is_protected" :before-change="() => handleToggleSyncable(row)" />
+            <div class="quick-edit-cell">
+              <el-switch
+                class="quick-edit-switch"
+                :model-value="!row.is_protected"
+                :before-change="() => handleToggleSyncable(row)"
+              />
             </div>
           </template>
         </el-table-column>
@@ -209,8 +213,8 @@ const {
 const detailFields = computed(() => [
   { key: 'id', label: '服务端 ID', value: formatEmpty(detailForm.id) },
   { key: 'automa_id', label: 'Automa ID', value: formatEmpty(detailForm.automa_id) },
-  { key: 'name', label: '数据库自定义名称', editable: true },
-  { key: 'description', label: '数据库自定义描述', type: 'textarea', editable: true },
+  { key: 'name', label: '自定义工作流名称', editable: true },
+  { key: 'description', label: '自定义工作流描述', type: 'textarea', editable: true },
   { key: 'automa_name', label: 'Automa 工作流名称', value: formatEmpty(detailForm.automa_name) },
   { key: 'automa_description', label: 'Automa 工作流描述', value: formatEmpty(detailForm.automa_description) },
   { key: 'is_protected', label: '是否可同步', type: 'syncable-switch', editable: true },
@@ -636,38 +640,6 @@ function formatListDate(value) {
   color: #303133;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.syncable-switch-cell {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-width: 0;
-  overflow: visible;
-  line-height: 1;
-}
-
-.syncable-switch-cell :deep(.el-switch) {
-  flex: 0 0 auto;
-  width: 40px;
-  min-width: 40px;
-  height: 20px;
-  line-height: 20px;
-  vertical-align: middle;
-}
-
-.syncable-switch-cell :deep(.el-switch__core) {
-  flex: 0 0 auto;
-  width: 40px;
-  min-width: 40px;
-  height: 20px;
-}
-
-.syncable-switch-cell :deep(.el-switch__action) {
-  width: 16px;
-  min-width: 16px;
-  height: 16px;
 }
 
 .detail-form {

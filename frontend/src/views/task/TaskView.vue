@@ -7,41 +7,52 @@
 
     <section class="task-panel">
       <div class="task-filters">
-        <div class="filter-item filter-item--keyword">
-          <span class="filter-label">关键词</span>
-          <el-input v-model="taskFilters.keyword" clearable placeholder="任务名称或任务说明" />
+        <div class="task-filter-fields">
+          <div class="filter-item filter-item--keyword">
+            <span class="filter-label">关键词</span>
+            <el-input v-model="taskFilters.keyword" clearable placeholder="任务名称或任务说明" />
+          </div>
+          <div class="filter-item filter-item--workflow">
+            <span class="filter-label">自定义工作流名称</span>
+            <el-input v-model="taskFilters.workflow_name" clearable placeholder="模糊检索自定义工作流名称" />
+          </div>
+          <div class="filter-item filter-item--created-time">
+            <span class="filter-label">创建时间</span>
+            <AppTimeRangeFilter v-model="taskFilters.created_time_range" />
+          </div>
+          <div class="filter-item filter-item--enabled">
+            <span class="filter-label">状态</span>
+            <el-select v-model="taskFilters.enabled" clearable placeholder="全部">
+              <el-option label="全部" value="" />
+              <el-option label="启用" value="true" />
+              <el-option label="停用" value="false" />
+            </el-select>
+          </div>
         </div>
-        <div class="filter-item filter-item--workflow">
-          <span class="filter-label">工作流名称</span>
-          <el-input v-model="taskFilters.workflow_name" clearable placeholder="模糊检索工作流名称" />
+        <div class="task-filter-actions">
+          <el-button @click="resetTaskFilters">重置</el-button>
+          <el-button type="danger" :disabled="selectedTaskIds.length === 0" @click="handleBatchDeleteTasks">
+            删除选中
+          </el-button>
+          <AppSelectionSummary :count="selectedTaskIds.length" unit="任务" />
         </div>
-        <div class="filter-item filter-item--created-time">
-          <span class="filter-label">创建时间</span>
-          <AppTimeRangeFilter v-model="taskFilters.created_time_range" />
-        </div>
-        <div class="filter-item filter-item--enabled">
-          <span class="filter-label">状态</span>
-          <el-select v-model="taskFilters.enabled" clearable placeholder="全部">
-            <el-option label="全部" value="" />
-            <el-option label="启用" value="true" />
-            <el-option label="停用" value="false" />
-          </el-select>
-        </div>
-        <el-button @click="resetTaskFilters">重置</el-button>
       </div>
 
       <el-table
+        ref="taskTableRef"
         v-loading="loadingTasks"
         class="task-table adaptive-table"
         :data="pagedTasks"
         border
         height="100%"
-        row-key="id"
+        :row-key="getTaskSelectionKey"
         empty-text="暂无任务配置"
+        @selection-change="handleTaskSelectionChange"
       >
+        <el-table-column type="selection" width="40" reserve-selection />
         <el-table-column prop="name" label="任务名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="description" label="任务说明" min-width="180" show-overflow-tooltip />
-        <el-table-column label="工作流名称" min-width="160" show-overflow-tooltip>
+        <el-table-column label="自定义工作流名称" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.workflow_name || row.workflow_id || '' }}
           </template>
@@ -61,11 +72,19 @@
             {{ getTaskParamCount(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="70" align="center">
+        <el-table-column label="状态" width="86" align="center" class-name="quick-edit-column">
           <template #default="{ row }">
-            <el-tag :type="row.enabled === false ? 'info' : 'success'" effect="plain">
-              {{ row.enabled === false ? '停用' : '启用' }}
-            </el-tag>
+            <div class="quick-edit-cell">
+              <el-switch
+                class="quick-edit-switch"
+                :model-value="row.enabled !== false"
+                inline-prompt
+                active-text="启"
+                inactive-text="停"
+                :loading="isTaskStatusUpdating(row)"
+                @change="(value) => handleQuickUpdateTaskStatus(row, value)"
+              />
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="170" class-name="nowrap-column">
@@ -169,14 +188,14 @@
               <template v-if="selectedClient">
                 <el-tag effect="plain">{{ getClientIp(selectedClient) || '' }}</el-tag>
                 <span class="client-selection-text">{{ getClientSelectMeta(selectedClient) }}</span>
+                <span v-if="clientWorkflowStatusText" :class="clientWorkflowStatusClass">
+                  {{ clientWorkflowStatusText }}
+                </span>
               </template>
               <span v-else class="client-selection-empty">
                 未选择时，后端会匹配拥有该工作流的在线客户端执行
               </span>
             </div>
-            <span v-if="clientWorkflowStatusText" :class="clientWorkflowStatusClass">
-              {{ clientWorkflowStatusText }}
-            </span>
           </div>
         </el-form-item>
 
@@ -195,22 +214,26 @@
                     <el-tag v-if="param.required" size="small" type="danger" effect="plain">必填</el-tag>
                     <el-tag size="small" effect="plain">{{ formatParamTypeText(param.type) }}</el-tag>
                   </div>
-                  <span v-if="param.description" class="form-help">{{ param.description }}</span>
+                </div>
+                <div class="auto-param-control">
+                  <el-switch
+                    v-if="param.type === 'checkbox'"
+                    v-model="param.value"
+                    active-text="是"
+                    inactive-text="否"
+                  />
+                  <el-input
+                    v-else
+                    v-model="param.value"
+                    :type="param.type === 'json' ? 'textarea' : param.type === 'number' ? 'number' : 'text'"
+                    :rows="param.type === 'json' ? 4 : undefined"
+                    :placeholder="param.placeholder"
+                  />
+                  <span v-if="getParamDescriptionText(param)" class="form-help">
+                    {{ getParamDescriptionText(param) }}
+                  </span>
                   <span v-if="param.defaultText" class="form-help">默认值：{{ param.defaultText }}</span>
                 </div>
-                <el-switch
-                  v-if="param.type === 'checkbox'"
-                  v-model="param.value"
-                  active-text="是"
-                  inactive-text="否"
-                />
-                <el-input
-                  v-else
-                  v-model="param.value"
-                  :type="param.type === 'json' ? 'textarea' : param.type === 'number' ? 'number' : 'text'"
-                  :rows="param.type === 'json' ? 4 : undefined"
-                  :placeholder="param.placeholder"
-                />
               </div>
             </div>
             <span v-else class="form-help">当前工作流未配置 Param 参数。</span>
@@ -327,8 +350,10 @@ import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
 import { useDebouncedAction } from '@/composables/useDebouncedAction'
+import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import {
   getAutomaWorkflowDetail,
   listAutomaSyncCandidatesByWorkflow,
@@ -343,6 +368,7 @@ const tasks = ref([])
 const workflowOptions = ref([])
 const clientOptions = ref([])
 const loadingTasks = ref(false)
+const taskTableRef = ref(null)
 const workflowLoading = ref(false)
 const workflowParamLoading = ref(false)
 const clientLoading = ref(false)
@@ -354,6 +380,7 @@ const executeParamDialogVisible = ref(false)
 const executeParamSubmitting = ref(false)
 const executeParamTask = ref(null)
 const executeParamItems = ref([])
+const taskStatusUpdatingIds = ref(new Set())
 const taskPage = ref(1)
 const taskPageSize = ref(10)
 const pageSizes = DEFAULT_PAGE_SIZES
@@ -380,6 +407,17 @@ const taskDialogTitle = computed(() => (taskForm.id ? '编辑任务' : '新增�
 const pagedTasks = computed(() => {
   const start = (taskPage.value - 1) * taskPageSize.value
   return tasks.value.slice(start, start + taskPageSize.value)
+})
+const {
+  selectedKeys: selectedTaskIds,
+  handleSelectionChange: handleTaskSelectionChange,
+  restoreSelection: restoreTaskSelection,
+  resetSelection: resetTaskSelection,
+  retainSelectionByRows: retainTaskSelectionByRows,
+  removeSelectionKeys: removeTaskSelectionKeys,
+} = usePagedTableSelection({
+  rows: pagedTasks,
+  getRowKey: getTaskSelectionKey,
 })
 const filteredClients = computed(() => {
   const keyword = clientSelector.keyword.trim().toLowerCase()
@@ -442,6 +480,10 @@ watch([tasks, taskPageSize], () => {
   })
 })
 
+watch(pagedTasks, () => {
+  restoreTaskSelection(taskTableRef)
+})
+
 async function loadTasks() {
   loadingTasks.value = true
   try {
@@ -454,6 +496,7 @@ async function loadTasks() {
       enabled: taskFilters.enabled,
     })
     tasks.value = sortByTimeDesc(normalizeList(data, 'tasks'))
+    retainTaskSelectionByRows(tasks.value)
   } finally {
     loadingTasks.value = false
   }
@@ -462,6 +505,11 @@ async function loadTasks() {
 function searchTasksNow() {
   taskPage.value = 1
   loadTasks()
+}
+
+function getTaskSelectionKey(row) {
+  // Selection key 使用任务 ID 保持跨分页多选状态
+  return String(row?.id || '').trim()
 }
 
 async function loadWorkflowOptions() {
@@ -599,8 +647,51 @@ async function handleDeleteTask(row) {
   if (!confirmed) return
 
   await deleteTask(row.id)
+  removeTaskSelectionKeys([row.id])
   tasks.value = tasks.value.filter((item) => item.id !== row.id)
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已删除' })
+}
+
+async function handleBatchDeleteTasks() {
+  const ids = selectedTaskIds.value.slice()
+  if (ids.length === 0) return
+
+  const confirmed = await appConfirm({
+    title: '批量删除任务',
+    message: `确认删除选中的 ${ids.length} 个任务吗？`,
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
+  await Promise.all(ids.map((id) => deleteTask(id)))
+  const deletedIds = new Set(ids)
+  tasks.value = tasks.value.filter((item) => !deletedIds.has(getTaskSelectionKey(item)))
+  resetTaskSelection(taskTableRef)
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '已删除选中任务' })
+}
+
+async function handleQuickUpdateTaskStatus(row, enabled) {
+  const taskId = getTaskSelectionKey(row)
+  if (!taskId || taskStatusUpdatingIds.value.has(taskId)) return
+
+  const previousEnabled = row.enabled !== false
+  row.enabled = enabled
+  setTaskStatusUpdating(taskId, true)
+  try {
+    const payload = buildTaskPayloadFromRow(row, { enabled })
+    const data = await updateTask(taskId, payload)
+    upsertTask(mergeSavedTask(data?.task, payload, taskId))
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: enabled ? '任务已启用' : '任务已停用' })
+  } catch (error) {
+    row.enabled = previousEnabled
+    appMessage({
+      type: APP_MESSAGE_TYPE.error,
+      message: error?.message || '任务状态修改失败',
+    })
+  } finally {
+    setTaskStatusUpdating(taskId, false)
+  }
 }
 
 async function handleExecuteTask(row) {
@@ -738,6 +829,35 @@ function buildTaskPayload() {
   }
 }
 
+function buildTaskPayloadFromRow(row, overrides = {}) {
+  return {
+    name: String(row?.name || '').trim(),
+    description: String(row?.description || '').trim(),
+    workflow_id: String(row?.workflow_id || row?.automa_id || '').trim(),
+    workflow_name: String(row?.workflow_name || '').trim(),
+    client_id: String(row?.client_id || '').trim(),
+    client_name: String(row?.client_name || '').trim(),
+    client_ip: String(getTaskClientIp(row)).trim(),
+    cron_expression: String(row?.cron_expression || row?.cron || '').trim(),
+    run_once_after_create: false,
+    params: normalizeTaskParams(row?.params),
+    enabled: row?.enabled !== false,
+    ...overrides,
+  }
+}
+
+function normalizeTaskParams(params) {
+  if (!params) return {}
+  if (typeof params === 'object') return params
+
+  try {
+    const parsed = JSON.parse(params)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
 function buildParamObject(options = {}) {
   const params = {}
 
@@ -807,6 +927,20 @@ function resetTaskFilters() {
   taskFilters.workflow_name = ''
   taskFilters.created_time_range = []
   taskFilters.enabled = ''
+}
+
+function isTaskStatusUpdating(row) {
+  return taskStatusUpdatingIds.value.has(getTaskSelectionKey(row))
+}
+
+function setTaskStatusUpdating(taskId, updating) {
+  const nextIds = new Set(taskStatusUpdatingIds.value)
+  if (updating) {
+    nextIds.add(taskId)
+  } else {
+    nextIds.delete(taskId)
+  }
+  taskStatusUpdatingIds.value = nextIds
 }
 
 function upsertTask(task) {
@@ -995,6 +1129,12 @@ function formatParamTypeText(type) {
   return texts[type] || type || '文本'
 }
 
+function getParamDescriptionText(param) {
+  const description = String(param?.description || '').trim()
+  const placeholder = String(param?.placeholder || '').trim()
+  return description && description !== placeholder ? description : ''
+}
+
 function findClientById(clientId) {
   return clientOptions.value.find((item) => getClientId(item) === clientId)
 }
@@ -1115,10 +1255,19 @@ function createEmptyTaskForm() {
 
 .task-filters {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 12px 16px;
   margin-bottom: 16px;
+}
+
+.task-filter-fields {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.1fr) minmax(380px, 1.4fr) minmax(140px, 0.6fr);
+  gap: 12px 16px;
+  min-width: 0;
 }
 
 .filter-item {
@@ -1127,29 +1276,28 @@ function createEmptyTaskForm() {
   gap: 8px;
 }
 
-.filter-item--keyword {
-  width: 300px;
-}
-
-.filter-item--workflow {
-  width: 280px;
-}
-
-.filter-item--created-time {
-  width: 460px;
-}
-
 .filter-item--created-time :deep(.el-date-editor) {
   width: 100%;
 }
 
-.filter-item--enabled {
-  width: 190px;
+.filter-item :deep(.el-input),
+.filter-item :deep(.el-select) {
+  flex: 1;
+  min-width: 0;
 }
 
 .filter-label {
   flex-shrink: 0;
   color: #606266;
+}
+
+.task-filter-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-left: auto;
 }
 
 .task-table {
@@ -1215,6 +1363,12 @@ function createEmptyTaskForm() {
   min-height: 32px;
 }
 
+.client-selection-summary .form-success,
+.client-selection-summary .form-warning,
+.client-selection-summary .form-help {
+  margin-left: 4px;
+}
+
 .client-selection-text,
 .client-selection-empty,
 .form-help,
@@ -1271,6 +1425,13 @@ function createEmptyTaskForm() {
   color: #303133;
 }
 
+.auto-param-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
 .param-row {
   display: grid;
   grid-template-columns: minmax(120px, 180px) 112px minmax(0, 1fr) auto;
@@ -1304,18 +1465,33 @@ function createEmptyTaskForm() {
   }
 }
 
+@media (max-width: 1280px) {
+  .task-filter-fields {
+    flex-basis: 100%;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  }
+
+  .task-filter-actions {
+    justify-content: flex-end;
+    width: 100%;
+  }
+}
+
 @media (max-width: 640px) {
   .page-actions,
   .task-filters,
+  .task-filter-actions,
   .filter-item {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .filter-item--keyword,
-  .filter-item--workflow,
-  .filter-item--created-time,
-  .filter-item--enabled {
+  .task-filter-actions {
+    margin-left: 0;
+  }
+
+  .task-filter-fields {
+    grid-template-columns: 1fr;
     width: 100%;
   }
 }

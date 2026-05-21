@@ -9,7 +9,7 @@
         <el-input
           v-model="syncKeyword"
           clearable
-          placeholder="搜索后端自定义名称、描述"
+          placeholder="搜索后端自定义工作流名称、描述"
           @clear="searchSyncWorkflowsNow"
           @keyup.enter="searchSyncWorkflowsNow"
         />
@@ -28,12 +28,12 @@
         @selection-change="handleSyncSelectionChange"
       >
         <el-table-column type="selection" width="40" reserve-selection />
-        <el-table-column label="自定义名称" min-width="160" show-overflow-tooltip>
+        <el-table-column label="自定义工作流名称" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.name || '' }}
           </template>
         </el-table-column>
-        <el-table-column label="自定义描述" min-width="180" show-overflow-tooltip>
+        <el-table-column label="自定义工作流描述" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.description || '' }}
           </template>
