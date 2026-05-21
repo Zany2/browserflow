@@ -1,19 +1,24 @@
 <template>
-  <section class="task-record-page">
-    <header class="page-actions">
+  <section class="task-record-page server-list-page">
+    <header class="page-actions server-list-actions">
       <el-button type="primary" :icon="RefreshRight" @click="loadRecords">刷新</el-button>
     </header>
 
-    <section class="record-panel">
-      <div class="record-filters">
+    <section class="record-panel server-list-panel">
+      <div class="record-filters server-list-filters">
         <div class="record-filter-fields">
+          <div class="filter-item filter-item--task">
+            <span class="filter-label">任务名称</span>
+            <el-input v-model="recordFilters.task_name" clearable placeholder="任务名称" />
+          </div>
+
           <div class="filter-item filter-item--workflow">
             <span class="filter-label">自定义工作流名称</span>
-            <el-input v-model="recordFilters.workflow_name" clearable placeholder="模糊检索自定义工作流名称" />
+            <el-input v-model="recordFilters.workflow_name" clearable placeholder="自定义工作流名称" />
           </div>
 
           <div class="filter-item filter-item--client">
-            <span class="filter-label">客户端IP</span>
+            <span class="filter-label">客户端 IP</span>
             <el-select v-model="recordFilters.client_ip" clearable filterable placeholder="选择或检索客户端 IP"
               :loading="clientIpLoading" @visible-change="handleClientIpSelectVisible">
               <el-option label="全部" value="" />
@@ -46,7 +51,7 @@
         </div>
       </div>
 
-      <el-table ref="recordTableRef" v-loading="loadingRecords" class="record-table adaptive-table" :data="pagedRecords"
+      <el-table ref="recordTableRef" v-loading="loadingRecords" class="record-table server-list-table adaptive-table" :data="pagedRecords"
         border height="100%" :row-key="getRecordSelectionKey" empty-text="暂无执行记录"
         @selection-change="handleRecordSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
@@ -62,7 +67,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="客户端IP" min-width="140" show-overflow-tooltip>
+        <el-table-column label="客户端 IP" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.client_ip || '' }}
           </template>
@@ -194,6 +199,7 @@ const {
 } = useDebouncedAction(searchRecordsNow, 200)
 
 const recordFilters = reactive({
+  task_name: '',
   workflow_name: '',
   client_ip: '',
   execute_time_range: [],
@@ -219,7 +225,7 @@ onMounted(() => {
   loadClientIpOptions()
 })
 
-watch(() => recordFilters.workflow_name, () => {
+watch(() => [recordFilters.task_name, recordFilters.workflow_name], () => {
   scheduleFilterSearch()
 })
 
@@ -246,6 +252,7 @@ async function loadRecords() {
   try {
     const [startTime, endTime] = getExecuteTimeRange()
     const data = await listTaskRecords({
+      task_name: recordFilters.task_name.trim(),
       workflow_name: recordFilters.workflow_name.trim(),
       client_ip: recordFilters.client_ip.trim(),
       start_time: startTime,
@@ -308,6 +315,7 @@ async function handleRetryRecord(row) {
 }
 
 function resetRecordFilters() {
+  recordFilters.task_name = ''
   recordFilters.workflow_name = ''
   recordFilters.client_ip = ''
   recordFilters.execute_time_range = []
@@ -374,38 +382,8 @@ function formatDate(value) {
 </script>
 
 <style scoped lang="scss">
-.task-record-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
-}
-
-.page-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.record-panel {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-}
-
 .record-filters {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px 16px;
-  margin-bottom: 16px;
 }
 
 .record-filter-fields,
@@ -419,7 +397,12 @@ function formatDate(value) {
 .record-filter-fields {
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(280px, 1.1fr) minmax(220px, 0.9fr) minmax(380px, 1.4fr) minmax(140px, 0.6fr);
+  grid-template-columns:
+    minmax(220px, 0.95fr)
+    minmax(280px, 1.1fr)
+    minmax(210px, 0.85fr)
+    minmax(360px, 1.35fr)
+    minmax(130px, 0.55fr);
   gap: 12px 16px;
   min-width: 0;
 }
@@ -448,11 +431,6 @@ function formatDate(value) {
 .filter-label {
   flex-shrink: 0;
   color: #606266;
-}
-
-.record-table {
-  flex: 1;
-  min-height: 0;
 }
 
 .detail-form {
@@ -491,7 +469,18 @@ function formatDate(value) {
 @media (max-width: 1280px) {
   .record-filter-fields {
     flex-basis: 100%;
-    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .filter-item--task,
+  .filter-item--workflow,
+  .filter-item--execute-time {
+    grid-column: span 2;
+  }
+
+  .filter-item--client,
+  .filter-item--status {
+    grid-column: span 3;
   }
 
   .record-filter-actions {
@@ -514,6 +503,14 @@ function formatDate(value) {
   .record-filter-fields {
     grid-template-columns: 1fr;
     width: 100%;
+  }
+
+  .filter-item--task,
+  .filter-item--workflow,
+  .filter-item--client,
+  .filter-item--execute-time,
+  .filter-item--status {
+    grid-column: auto;
   }
 }
 </style>

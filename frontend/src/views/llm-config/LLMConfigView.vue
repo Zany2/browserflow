@@ -190,9 +190,6 @@
                 class="quick-edit-switch"
                 :model-value="row.is_active"
                 :loading="isStatusUpdating(row.id)"
-                active-text="启"
-                inactive-text="停"
-                inline-prompt
                 @click.stop
                 @change="(checked) => handleToggleConfigStatus(row, checked)"
               />

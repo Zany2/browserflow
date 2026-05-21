@@ -1,12 +1,12 @@
 <template>
-  <section class="task-page">
-    <header class="page-actions">
+  <section class="task-page server-list-page">
+    <header class="page-actions server-list-actions">
       <el-button :icon="RefreshRight" @click="loadTasks">刷新</el-button>
       <el-button type="primary" :icon="Plus" @click="handleCreateTask">新增任务</el-button>
     </header>
 
-    <section class="task-panel">
-      <div class="task-filters">
+    <section class="task-panel server-list-panel">
+      <div class="task-filters server-list-filters">
         <div class="task-filter-fields">
           <div class="filter-item filter-item--keyword">
             <span class="filter-label">关键词</span>
@@ -14,7 +14,7 @@
           </div>
           <div class="filter-item filter-item--workflow">
             <span class="filter-label">自定义工作流名称</span>
-            <el-input v-model="taskFilters.workflow_name" clearable placeholder="模糊检索自定义工作流名称" />
+            <el-input v-model="taskFilters.workflow_name" clearable placeholder="自定义工作流名称" />
           </div>
           <div class="filter-item filter-item--created-time">
             <span class="filter-label">创建时间</span>
@@ -41,7 +41,7 @@
       <el-table
         ref="taskTableRef"
         v-loading="loadingTasks"
-        class="task-table adaptive-table"
+        class="task-table server-list-table adaptive-table"
         :data="pagedTasks"
         border
         height="100%"
@@ -57,7 +57,7 @@
             {{ row.workflow_name || row.workflow_id || '' }}
           </template>
         </el-table-column>
-        <el-table-column label="执行客户端IP" min-width="140" show-overflow-tooltip>
+        <el-table-column label="执行客户端 IP" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getTaskClientIp(row) }}
           </template>
@@ -78,9 +78,6 @@
               <el-switch
                 class="quick-edit-switch"
                 :model-value="row.enabled !== false"
-                inline-prompt
-                active-text="启"
-                inactive-text="停"
                 :loading="isTaskStatusUpdating(row)"
                 @change="(value) => handleQuickUpdateTaskStatus(row, value)"
               />
@@ -1228,38 +1225,9 @@ function createEmptyTaskForm() {
 </script>
 
 <style scoped lang="scss">
-.task-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
-}
-
-.page-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.task-panel {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-}
-
 .task-filters {
-  display: flex;
   align-items: flex-start;
-  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px 16px;
-  margin-bottom: 16px;
 }
 
 .task-filter-fields {
@@ -1298,11 +1266,6 @@ function createEmptyTaskForm() {
   flex-wrap: wrap;
   gap: 12px;
   margin-left: auto;
-}
-
-.task-table {
-  flex: 1;
-  min-height: 0;
 }
 
 .task-config-form :deep(.el-form-item__label) {

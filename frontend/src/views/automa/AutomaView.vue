@@ -1,7 +1,7 @@
 <template>
-  <section class="automa-page">
-    <header class="page-header">
-      <div class="header-actions">
+  <section class="automa-page server-list-page">
+    <header class="page-header server-list-actions">
+      <div class="header-actions server-list-actions__inner">
         <el-button @click="createDialogVisible = true">新增</el-button>
         <el-button @click="importDialogVisible = true">导入</el-button>
         <el-button type="primary" @click="syncDialogVisible = true">客户端同步</el-button>
@@ -9,11 +9,11 @@
       </div>
     </header>
 
-    <section class="workflow-panel">
-      <div class="workflow-filters">
+    <section class="workflow-panel server-list-panel">
+      <div class="workflow-filters server-list-filters">
         <div class="filter-item filter-item--keyword">
           <span class="filter-label">关键词</span>
-          <el-input v-model="filters.keyword" clearable placeholder="自定义工作流名称、Automa 工作流名称、描述" />
+          <el-input v-model="filters.keyword" clearable placeholder="自定义工作流名称、工作流名称" />
         </div>
 
         <div class="filter-item filter-item--source">
@@ -30,6 +30,7 @@
           <el-select v-model="filters.source_ip" clearable filterable placeholder="选择或检索客户端 IP"
             :loading="clientIpLoading" :value-on-clear="''" @clear="handleClientIpClear"
             @visible-change="handleClientIpSelectVisible">
+            <el-option label="全部" value="" />
             <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
           </el-select>
         </div>
@@ -41,7 +42,7 @@
         <AppSelectionSummary :count="selectedWorkflowIds.length" unit="工作流" />
       </div>
 
-      <el-table ref="workflowTableRef" v-loading="loading" class="workflow-table adaptive-table" :data="pagedWorkflows" border height="100%"
+      <el-table ref="workflowTableRef" v-loading="loading" class="workflow-table server-list-table adaptive-table" :data="pagedWorkflows" border height="100%"
         :row-key="getWorkflowId" empty-text="暂无工作流" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
 
@@ -559,52 +560,6 @@ function formatListDate(value) {
 </script>
 
 <style scoped lang="scss">
-.automa-page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.page-header,
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.page-header {
-  justify-content: flex-end;
-  flex-shrink: 0;
-}
-
-.header-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.workflow-panel {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-  padding: 14px;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-}
-
-.workflow-filters {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
 .filter-item {
   display: flex;
   align-items: center;
@@ -626,11 +581,6 @@ function formatListDate(value) {
 .filter-label {
   flex-shrink: 0;
   color: #606266;
-}
-
-.workflow-table {
-  flex: 1;
-  min-height: 0;
 }
 
 .field-value {

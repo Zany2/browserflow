@@ -243,6 +243,27 @@ func FindWorkflowIDsByName(ctx context.Context, workflowName string) ([]string, 
 	return workflowIDs, nil
 }
 
+// FindTaskIDsByName finds task ids by fuzzy name. 通过任务名称模糊查找任务 ID
+func FindTaskIDsByName(ctx context.Context, taskName string) ([]int64, error) {
+	columns := dao.Tasks.Columns()
+	records, err := dao.Tasks.Ctx(ctx).
+		Fields(columns.Id).
+		Where(columns.Name+" LIKE ?", "%"+taskName+"%").
+		All()
+	if err != nil {
+		return nil, err
+	}
+
+	taskIDs := make([]int64, 0, len(records))
+	for _, record := range records {
+		taskID := gconv.Int64(record[columns.Id])
+		if taskID > 0 {
+			taskIDs = append(taskIDs, taskID)
+		}
+	}
+	return taskIDs, nil
+}
+
 // NormalizeTriggerType keeps execution records in known trigger types. ???????????
 func NormalizeTriggerType(triggerType string) string {
 	triggerType = strings.TrimSpace(triggerType)
