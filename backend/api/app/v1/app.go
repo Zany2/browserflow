@@ -11,4 +11,6 @@ type RuntimeReq struct {
 type RuntimeRes struct {
 	Mode           string   `json:"mode"`
 	DisabledRoutes []string `json:"disabled_routes"`
+	// FrontendURL configured frontend access base URL 前端访问基础地址
+	FrontendURL string `json:"frontend_url"`
 }

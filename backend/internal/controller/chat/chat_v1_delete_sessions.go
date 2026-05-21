@@ -5,11 +5,12 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/chat/v1"
+	"github.com/Zany2/browserflow/backend/utility/chatruntime"
 )
 
 // ChatSessionDeleteMany deletes chat sessions in batch 批量删除对话会话
 func (c *ControllerV1) ChatSessionDeleteMany(ctx context.Context, req *v1.ChatSessionDeleteManyReq) (res *v1.ChatSessionDeleteManyRes, err error) {
-	db, _, err := ensureRuntime(ctx)
+	db, _, err := chatruntime.Ensure(ctx)
 	if err != nil {
 		return nil, err
 	}

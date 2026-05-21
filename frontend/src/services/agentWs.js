@@ -10,6 +10,7 @@ const WORKFLOW_INVENTORY_INTERVAL_MS = 60000
 // AUTOMA_VERSION_PROBE_INTERVAL_MS version fallback probe interval 版本兜底探测间隔
 const AUTOMA_VERSION_PROBE_INTERVAL_MS = 30000
 const WORKFLOW_INVENTORY_REFRESH_COMMAND = 'automa.workflow.inventory.refresh'
+const AUTOMA_WORKFLOW_RESULT_EVENT = '__browserflow_automa_workflow_result__'
 
 // createAgentSocket creates websocket channel 创建客户端 websocket 通道
 export function createAgentSocket({
@@ -21,6 +22,7 @@ export function createAgentSocket({
   getAutomaInfo,
   getWorkflows,
   onCommand,
+  onCommandResult,
   onStatus,
   onError,
   onRegistered,
@@ -29,10 +31,14 @@ export function createAgentSocket({
   onNoReconnect,
   enableHeartbeat = false,
   enableWorkflowInventory = false,
+  enableAutomaStatusPolling = true,
+  reportAutomaStatusOnWindowLoad = false,
 }) {
   let socket = null
   let reconnectTimer = null
   let statusTimer = null
+  let windowLoadStatusTimer = 0
+  let windowLoadStatusHandler = null
   // heartbeatTimer heartbeat interval timer 心跳定时器
   let heartbeatTimer = null
   // workflowInventoryTimer inventory check timer 工作流清单检查定时器
@@ -51,6 +57,10 @@ export function createAgentSocket({
   // automaRefreshTimer pending page refresh timer 待执行页面刷新定时器
   let automaRefreshTimer = null
   let currentClientIp = ''
+  // workflowResultCommandIds keeps async workflow command mapping 保存异步工作流命令映射
+  let workflowResultCommandIds = new Map()
+  // workflowCommandPayloads keeps command context for final result logs 保存命令上下文用于最终结果展示
+  let workflowCommandPayloads = new Map()
 
   const getCurrentAutomaInstalled = () => Boolean(getAutomaInstalled?.() || lastKnownAutomaInstalled)
 
@@ -149,6 +159,32 @@ export function createAgentSocket({
     }
   }
 
+  // scheduleWindowLoadAutomaStatus reports one status after page load 页面完全加载后补充上报一次插件状态
+  const scheduleWindowLoadAutomaStatus = () => {
+    if (!reportAutomaStatusOnWindowLoad) return
+
+    clearWindowLoadAutomaStatus()
+    const report = () => {
+      if (stopped) return
+      sendAutomaStatus()
+    }
+    if (document.readyState === 'complete') {
+      windowLoadStatusTimer = window.setTimeout(report, 0)
+      return
+    }
+
+    windowLoadStatusHandler = report
+    window.addEventListener('load', windowLoadStatusHandler, { once: true })
+  }
+
+  // clearWindowLoadAutomaStatus clears one-shot load report 清理页面加载后的一次性上报
+  const clearWindowLoadAutomaStatus = () => {
+    if (windowLoadStatusTimer) window.clearTimeout(windowLoadStatusTimer)
+    if (windowLoadStatusHandler) window.removeEventListener('load', windowLoadStatusHandler)
+    windowLoadStatusTimer = 0
+    windowLoadStatusHandler = null
+  }
+
   // sendHeartbeat reports liveness only 上报在线心跳
   const sendHeartbeat = () => {
     if (!enableHeartbeat) return
@@ -166,6 +202,60 @@ export function createAgentSocket({
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
       ...payload,
+    })
+  }
+
+  // trackWorkflowCommand remembers async workflow command id 记录异步工作流命令标识
+  const trackWorkflowCommand = (payload) => {
+    if (payload?.command !== 'automa.workflow.run') return
+
+    const commandId = String(payload.command_id || '').trim()
+    const data = payload.payload || {}
+    const waitResult = Boolean(data.wait_result ?? data.waitResult ?? false)
+    const executionId = String(data.execution_id || data.executionId || '').trim()
+
+    if (!commandId || !executionId || waitResult) return
+    workflowResultCommandIds.set(executionId, commandId)
+    workflowCommandPayloads.set(executionId, data)
+  }
+
+  // untrackWorkflowCommand removes failed async workflow mapping 清理失败的异步工作流映射
+  const untrackWorkflowCommand = (payload) => {
+    const data = payload?.payload || {}
+    const executionId = String(data.execution_id || data.executionId || '').trim()
+    if (executionId) {
+      workflowResultCommandIds.delete(executionId)
+      workflowCommandPayloads.delete(executionId)
+    }
+  }
+
+  // handleWorkflowResultEvent forwards async final result 回传异步工作流最终结果
+  const handleWorkflowResultEvent = (event) => {
+    const detail = event.detail || {}
+    const executionId = String(
+      detail.execution_id || detail.executionId || detail.request_id || detail.requestId || '',
+    ).trim()
+    const commandId = workflowResultCommandIds.get(executionId)
+    if (!commandId) return
+
+    workflowResultCommandIds.delete(executionId)
+    const commandPayload = workflowCommandPayloads.get(executionId) || {}
+    workflowCommandPayloads.delete(executionId)
+    const success = detail.ok !== false && detail.status !== 'error'
+    onCommandResult?.({
+      command: 'automa.workflow.run',
+      payload: commandPayload,
+      result: detail,
+      success,
+      error: success ? '' : String(detail.message || detail.error || '').trim(),
+      async: true,
+    })
+    sendResult({
+      type: 'agent_result',
+      command_id: commandId,
+      success,
+      data: detail,
+      error: success ? undefined : String(detail.message || detail.error || '').trim(),
     })
   }
 
@@ -269,11 +359,21 @@ export function createAgentSocket({
 
     if (payload.type !== 'agent_command') return
 
+    trackWorkflowCommand(payload)
+
     try {
       const data =
         payload.command === WORKFLOW_INVENTORY_REFRESH_COMMAND
           ? await sendWorkflowInventory({ force: true })
           : await onCommand(payload.command, payload.payload || {}, payload)
+      onCommandResult?.({
+        command: payload.command,
+        payload: payload.payload || {},
+        result: data,
+        success: true,
+        error: '',
+        async: false,
+      })
       sendResult({
         type: 'agent_result',
         command_id: payload.command_id,
@@ -281,6 +381,15 @@ export function createAgentSocket({
         data,
       })
     } catch (error) {
+      untrackWorkflowCommand(payload)
+      onCommandResult?.({
+        command: payload.command,
+        payload: payload.payload || {},
+        result: null,
+        success: false,
+        error: error.message,
+        async: false,
+      })
       sendResult({
         type: 'agent_result',
         command_id: payload.command_id,
@@ -301,6 +410,7 @@ export function createAgentSocket({
     if (statusTimer) window.clearInterval(statusTimer)
     if (heartbeatTimer) window.clearInterval(heartbeatTimer)
     if (workflowInventoryTimer) window.clearInterval(workflowInventoryTimer)
+    clearWindowLoadAutomaStatus()
     statusTimer = null
     heartbeatTimer = null
     workflowInventoryTimer = null
@@ -360,18 +470,24 @@ export function createAgentSocket({
 
     socket = new WebSocket(wsUrl || getWSURL())
 
-    socket.addEventListener('open', () => {
+    socket.addEventListener('open', async () => {
       reconnectCount = 0
       clearSocketTimers()
       resetWorkflowInventoryCache()
-      registerAgent()
-      statusTimer = window.setInterval(sendAutomaStatus, AUTOMA_STATUS_INTERVAL_MS)
+      try {
+        await registerAgent()
+      } catch (error) {
+        onError?.(error)
+      }
+      scheduleWindowLoadAutomaStatus()
+      if (enableAutomaStatusPolling) {
+        statusTimer = window.setInterval(sendAutomaStatus, AUTOMA_STATUS_INTERVAL_MS)
+      }
       if (enableHeartbeat) {
         heartbeatTimer = window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS)
       }
       if (enableWorkflowInventory) {
         workflowInventoryTimer = window.setInterval(sendWorkflowInventory, WORKFLOW_INVENTORY_INTERVAL_MS)
-        window.setTimeout(sendWorkflowInventory, 1000)
       }
     })
 
@@ -392,10 +508,15 @@ export function createAgentSocket({
     })
   }
 
+  window.addEventListener(AUTOMA_WORKFLOW_RESULT_EVENT, handleWorkflowResultEvent)
+
   connect()
 
   return () => {
     stopped = true
+    window.removeEventListener(AUTOMA_WORKFLOW_RESULT_EVENT, handleWorkflowResultEvent)
+    workflowResultCommandIds.clear()
+    workflowCommandPayloads.clear()
     if (reconnectTimer) window.clearTimeout(reconnectTimer)
     if (automaRefreshTimer) window.clearTimeout(automaRefreshTimer)
     clearSocketTimers()

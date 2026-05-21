@@ -6,7 +6,8 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
-	"github.com/gogf/gf/v2/frame/g"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/clientops"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
 )
@@ -14,7 +15,7 @@ import (
 // ClientBan bans one client 拉黑单个客户端
 func (c *ControllerV1) ClientBan(ctx context.Context, req *v1.ClientBanReq) (res *v1.ClientBanRes, err error) {
 	// Query target client 查询目标客户端
-	record, err := queryClientRecord(ctx, req.ID)
+	record, err := clientops.QueryRecord(ctx, req.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -24,18 +25,16 @@ func (c *ControllerV1) ClientBan(ctx context.Context, req *v1.ClientBanReq) (res
 
 	// Persist ban state 持久化拉黑状态
 	columns := dao.Clients.Columns()
-	now := gtime.Now()
 	clientID := strings.TrimSpace(gconv.String(record[columns.ClientId]))
 	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
 	reason := strings.TrimSpace(req.Reason)
 	_, err = dao.Clients.Ctx(ctx).
 		Where(columns.ClientIp, clientIP).
-		Data(g.Map{
-			columns.IsBanned:       true,
-			columns.BanReason:      reason,
-			columns.Status:         "offline",
-			columns.DisconnectedAt: now,
-			columns.UpdatedAt:      now,
+		Data(do.Clients{
+			IsBanned:       true,
+			BanReason:      reason,
+			Status:         "offline",
+			DisconnectedAt: gtime.Now(),
 		}).
 		Update()
 	if err != nil {
@@ -43,12 +42,12 @@ func (c *ControllerV1) ClientBan(ctx context.Context, req *v1.ClientBanReq) (res
 	}
 
 	// Notify connected client to pause current socket 通知在线客户端暂停当前连接
-	sent := notifyClientBanned(ctx, clientIP, clientID, reason)
+	sent := clientops.NotifyBanned(ctx, clientIP, clientID, reason)
 	message := "客户端已拉黑"
 	if sent > 0 {
 		message = "客户端已拉黑，并已通知客户端暂停当前连接"
 	}
-	client, err := clientRecordToEntity(record)
+	client, err := clientops.RecordToEntity(record)
 	if err != nil {
 		return nil, err
 	}

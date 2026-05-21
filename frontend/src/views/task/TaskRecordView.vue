@@ -45,19 +45,19 @@
         row-key="id" empty-text="暂无执行记录">
         <el-table-column label="任务名称" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.task_name || '-' }}
+            {{ row.task_name || '' }}
           </template>
         </el-table-column>
 
         <el-table-column label="工作流名称" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.workflow_name || '-' }}
+            {{ row.workflow_name || '' }}
           </template>
         </el-table-column>
 
         <el-table-column label="客户端IP" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.client_ip || '-' }}
+            {{ row.client_ip || '' }}
           </template>
         </el-table-column>
 
@@ -87,7 +87,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="错误信息" min-width="160">
+        <el-table-column label="错误信息" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.error_message || '' }}
           </template>
@@ -110,14 +110,14 @@
     <AppDialog v-model="recordDetailVisible" title="执行记录详情" width="720px">
       <div v-if="recordDetail" class="detail-form">
         <el-descriptions border :column="2" class="detail-descriptions">
-          <el-descriptions-item label="记录 ID">{{ recordDetail.id || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="任务">{{ recordDetail.task_name || recordDetail.task_id || '-'
+          <el-descriptions-item label="记录 ID">{{ recordDetail.id || '' }}</el-descriptions-item>
+          <el-descriptions-item label="任务">{{ recordDetail.task_name || recordDetail.task_id || ''
           }}</el-descriptions-item>
-          <el-descriptions-item label="工作流">{{ recordDetail.workflow_name || recordDetail.workflow_id || '-'
+          <el-descriptions-item label="工作流">{{ recordDetail.workflow_name || recordDetail.workflow_id || ''
           }}</el-descriptions-item>
-          <el-descriptions-item label="客户端">{{ recordDetail.client_name || recordDetail.client_id || '-'
+          <el-descriptions-item label="客户端">{{ recordDetail.client_name || recordDetail.client_id || ''
           }}</el-descriptions-item>
-          <el-descriptions-item label="客户端 IP">{{ recordDetail.client_ip || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="客户端 IP">{{ recordDetail.client_ip || '' }}</el-descriptions-item>
           <el-descriptions-item label="触发方式">{{ getTriggerText(recordDetail.trigger_type) }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ recordDetail.status_text || getStatusText(recordDetail.status)
           }}</el-descriptions-item>
@@ -130,7 +130,7 @@
 
         <div class="detail-block">
           <h3>错误信息</h3>
-          <pre class="detail-json">{{ recordDetail.error_message || '-' }}</pre>
+          <pre class="detail-json">{{ recordDetail.error_message || '' }}</pre>
         </div>
 
         <div class="detail-block">
@@ -157,14 +157,17 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
+import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { listClients } from '@/services/client'
 import { executeTask, getTaskRecordDetail, listTaskRecords } from '@/services/task'
+import { formatDate as formatBaseDate, formatJSON } from '@/utils/format'
+import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList } from '@/utils/list'
 
 const records = ref([])
 const clientIpOptions = ref([])
@@ -172,11 +175,13 @@ const loadingRecords = ref(false)
 const clientIpLoading = ref(false)
 const recordPage = ref(1)
 const recordPageSize = ref(10)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
 const recordDetailVisible = ref(false)
 const recordDetail = ref(null)
-const filterSearchDelay = 200
-let filterSearchTimer = null
+const {
+  run: scheduleFilterSearch,
+  cancel: clearFilterSearchTimer,
+} = useDebouncedAction(searchRecordsNow, 200)
 
 const recordFilters = reactive({
   workflow_name: '',
@@ -193,10 +198,6 @@ const pagedRecords = computed(() => {
 onMounted(() => {
   loadRecords()
   loadClientIpOptions()
-})
-
-onBeforeUnmount(() => {
-  clearFilterSearchTimer()
 })
 
 watch(() => recordFilters.workflow_name, () => {
@@ -251,21 +252,9 @@ function handleClientIpSelectVisible(opened) {
   if (opened) loadClientIpOptions()
 }
 
-// Filter debounce 手动输入筛选条件 200ms 防抖
-function scheduleFilterSearch() {
-  clearFilterSearchTimer()
-  filterSearchTimer = window.setTimeout(() => {
-    filterSearchTimer = null
-    recordPage.value = 1
-    loadRecords()
-  }, filterSearchDelay)
-}
-
-function clearFilterSearchTimer() {
-  if (!filterSearchTimer) return
-
-  window.clearTimeout(filterSearchTimer)
-  filterSearchTimer = null
+function searchRecordsNow() {
+  recordPage.value = 1
+  loadRecords()
 }
 
 async function openRecordDetail(row) {
@@ -303,11 +292,6 @@ function getExecuteTimeRange() {
   return [range[0] || '', range[1] || '']
 }
 
-function normalizeList(data, fallbackKey) {
-  const list = data?.list || data?.[fallbackKey] || []
-  return Array.isArray(list) ? list : []
-}
-
 function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
 }
@@ -337,7 +321,7 @@ function getStatusText(status) {
   if (status === 'success' || status === 'done') return '成功'
   if (status === 'failed' || status === 'error') return '失败'
   if (status === 'cancelled') return '已取消'
-  return status || '-'
+  return status || ''
 }
 
 function getTriggerText(triggerType) {
@@ -355,31 +339,8 @@ function formatDuration(value) {
   return `${(duration / 1000).toFixed(duration >= 10000 ? 0 : 1)}s`
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function formatDate(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-
-  const year = date.getFullYear()
-  const month = padDatePart(date.getMonth() + 1)
-  const day = padDatePart(date.getDate())
-  const hour = padDatePart(date.getHours())
-  const minute = padDatePart(date.getMinutes())
-  const second = padDatePart(date.getSeconds())
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-}
-
-function padDatePart(value) {
-  return String(value).padStart(2, '0')
-}
-
-function formatJSON(value) {
-  return JSON.stringify(value ?? {}, null, 2)
+  return formatBaseDate(value, { fallback: '' })
 }
 </script>
 

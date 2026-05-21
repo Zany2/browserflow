@@ -7,7 +7,10 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
+	"github.com/Zany2/browserflow/backend/internal/consts"
+	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
@@ -17,25 +20,55 @@ import (
 
 // WorkflowList returns local-file workflow records 返回本地文件中的工作流列表
 func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq) (res *v1.WorkflowListRes, err error) {
-	state.DBMu.Lock()
-	if state.DB == nil {
-		dbPath := os.Getenv("DB_PATH")
-		if dbPath == "" {
-			dbPath = g.Cfg().MustGet(ctx, "localStorage.path", "data/browserflow.db").String()
+	var records []*model.AutomaWorkflowRecord
+	if consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer {
+		columns := dao.AutomaWorkflows.Columns()
+		items := []entity.AutomaWorkflows{}
+		if err = dao.AutomaWorkflows.Ctx(ctx).OrderDesc(columns.UpdatedAt).Scan(&items); err != nil {
+			return nil, err
 		}
-		state.DB, err = storage.NewBoltDB(dbPath)
+		records = make([]*model.AutomaWorkflowRecord, 0, len(items))
+		for index := range items {
+			item := items[index]
+			record := &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
+			if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {
+				record.FirstSyncedAt = item.FirstSyncedAt.Time
+			}
+			if item.LastSyncedAt != nil && !item.LastSyncedAt.IsZero() {
+				record.LastSyncedAt = item.LastSyncedAt.Time
+			}
+			if item.CreatedAt != nil && !item.CreatedAt.IsZero() {
+				record.CreatedAt = item.CreatedAt.Time
+			}
+			if item.UpdatedAt != nil && !item.UpdatedAt.IsZero() {
+				record.UpdatedAt = item.UpdatedAt.Time
+			}
+			records = append(records, record)
+		}
+	} else {
+		state.DBMu.Lock()
+		if state.DB == nil {
+			dbPath := os.Getenv("DB_PATH")
+			if dbPath == "" {
+				dbPath = g.Cfg().MustGet(ctx, "localStorage.path", "data/browserflow.db").String()
+			}
+			state.DB, err = storage.NewBoltDB(dbPath)
+			if err != nil {
+				state.DBMu.Unlock()
+				return nil, err
+			}
+		}
+		if state.LLMClient == nil {
+			state.LLMClient = llm.NewClient()
+		}
+		db := state.DB
+		state.DBMu.Unlock()
+
+		records, err = db.ListAutomaWorkflowRecords()
 		if err != nil {
-			state.DBMu.Unlock()
 			return nil, err
 		}
 	}
-	if state.LLMClient == nil {
-		state.LLMClient = llm.NewClient()
-	}
-	db := state.DB
-	state.DBMu.Unlock()
-
-	records, err := db.ListAutomaWorkflowRecords()
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +89,7 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 			continue
 		}
 		if keyword != "" {
-			text := strings.ToLower(strings.Join([]string{record.AutomaID, record.Name, record.Description, record.SourceIP}, " "))
+			text := strings.ToLower(strings.Join([]string{record.AutomaID, record.Name, record.Description, record.AutomaName, record.AutomaDescription, record.SourceIP}, " "))
 			if !strings.Contains(text, keyword) {
 				continue
 			}
@@ -91,7 +124,15 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		if record.Source == 2 {
 			sourceText = "客户端同步"
 		}
-		item := v1.WorkflowListResModel{Id: record.ID, AutomaId: record.AutomaID, Name: record.Name, Description: record.Description, Source: sourceText, SourceIp: record.SourceIP, CreatedAtAutoma: record.CreatedAtAutoma, UpdatedAtAutoma: record.UpdatedAtAutoma, IsDisabled: record.IsDisabled, IsProtected: record.IsProtected, NodeCount: record.NodeCount, EdgeCount: record.EdgeCount, ContentHash: record.ContentHash, Revision: record.Revision}
+		automaName := strings.TrimSpace(record.AutomaName)
+		if automaName == "" {
+			automaName = record.Name
+		}
+		automaDescription := strings.TrimSpace(record.AutomaDescription)
+		if automaDescription == "" {
+			automaDescription = record.Description
+		}
+		item := v1.WorkflowListResModel{Id: record.ID, AutomaId: record.AutomaID, Name: record.Name, Description: record.Description, AutomaName: automaName, AutomaDescription: automaDescription, Source: sourceText, SourceIp: record.SourceIP, CreatedAtAutoma: record.CreatedAtAutoma, UpdatedAtAutoma: record.UpdatedAtAutoma, IsDisabled: record.IsDisabled, IsProtected: record.IsProtected, NodeCount: record.NodeCount, EdgeCount: record.EdgeCount, ContentHash: record.ContentHash, Revision: record.Revision}
 		if !record.CreatedAt.IsZero() {
 			item.CreatedAt = gtime.NewFromTime(record.CreatedAt)
 		}

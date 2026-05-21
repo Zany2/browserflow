@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	onlineTTL    = 90 * time.Second   // onlineTTL client online heartbeat ttl 客户端在线心跳过期时间
-	inventoryTTL = 24 * time.Hour     // inventoryTTL workflow inventory ttl 工作流清单过期时间
-	reverseTTL   = 7 * 24 * time.Hour // reverseTTL workflow reverse index ttl 工作流反向索引过期时间
+	onlineTTL    = 45 * time.Second // onlineTTL client online heartbeat ttl 客户端在线心跳过期时间
+	inventoryTTL = 6 * time.Hour    // inventoryTTL workflow inventory ttl 工作流清单过期时间
+	reverseTTL   = 6 * time.Hour    // reverseTTL workflow reverse index ttl 工作流反向索引过期时间
 )
 
 // WorkflowItem cached workflow summary 缓存工作流摘要
@@ -296,7 +296,6 @@ func buildItem(clientIP string, workflow g.Map, reportedAt int64) (WorkflowItem,
 		hashGlobalDataValue = ""
 	}
 	coreWorkflowData := g.Map{
-		"id":          strings.TrimSpace(gconv.String(workflow["id"])),
 		"name":        strings.TrimSpace(gconv.String(workflow["name"])),
 		"icon":        strings.TrimSpace(gconv.String(workflow["icon"])),
 		"table":       hashTableValue,

@@ -8,6 +8,7 @@ import (
 	"github.com/Zany2/browserflow/backend/api/automa/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/utility/state"
+	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
 	"github.com/gogf/gf/v2/util/guid"
 )
 
@@ -33,25 +34,22 @@ func (c *ControllerV1) AutomaWorkflowRun(ctx context.Context, req *v1.AutomaWork
 	}
 	commandID := "cmd_" + guid.S()
 	resultCh := make(chan model.AgentCommandResult, 1)
-	state.PendingCommands[commandID] = resultCh
+	state.SetPendingCommand(commandID, resultCh)
 	agent.LastSeenAt = time.Now()
 	state.AgentMu.Unlock()
 
-	agent.Client.WriteMu.Lock()
-	err = agent.Client.Conn.WriteJSON(model.WSResponse{Type: "agent_command", BrowserID: agent.BrowserID, CommandID: commandID, Command: "automa.workflow.run", Payload: map[string]any{"id": req.ID, "variables": req.Variables}})
-	agent.Client.WriteMu.Unlock()
-	if err != nil {
+	if sent := websockets.SendConnectionMessage(agent.ConnectionID, &model.WSResponse{Type: "agent_command", BrowserID: agent.BrowserID, CommandID: commandID, Command: "automa.workflow.run", Payload: map[string]any{"id": req.ID, "variables": req.Variables}}); sent <= 0 {
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
-		return nil, err
+		return nil, errors.New("browser agent is offline")
 	}
 	select {
 	case result := <-resultCh:
 		return &v1.AutomaWorkflowRunRes{Result: &result}, nil
 	case <-ctx.Done():
 		state.AgentMu.Lock()
-		delete(state.PendingCommands, commandID)
+		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		return nil, ctx.Err()
 	}

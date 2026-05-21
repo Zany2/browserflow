@@ -20,8 +20,9 @@ func (e *Executor) Batch(ctx context.Context, operations []model.BrowserExecutor
 		switch strings.ToLower(strings.TrimSpace(op.Type)) {
 		case "navigate":
 			url, _ := op.Params["url"].(string)
+			waitUntil, _ := op.Params["wait_until"].(string)
 			timeout := jsonNumberToInt(op.Params["timeout"], 60)
-			result, err = e.Navigate(ctx, url, timeout)
+			result, err = e.Navigate(ctx, url, waitUntil, timeout)
 		case "click":
 			identifier, _ := op.Params["identifier"].(string)
 			result, err = e.Click(ctx, identifier)
@@ -75,12 +76,44 @@ func (e *Executor) Batch(ctx context.Context, operations []model.BrowserExecutor
 		case "page-content":
 			limit := jsonNumberToInt(op.Params["limit"], 0)
 			result, err = e.PageContent(ctx, limit)
+		case "get-text":
+			identifier, _ := op.Params["identifier"].(string)
+			result, err = e.GetText(ctx, identifier)
 		case "get-value":
 			identifier, _ := op.Params["identifier"].(string)
 			result, err = e.GetValue(ctx, identifier)
 		case "element-info":
 			identifier, _ := op.Params["identifier"].(string)
 			result, err = e.ElementInfo(ctx, identifier, jsonStringSlice(op.Params["attributes"]))
+		case "extract":
+			selector, _ := op.Params["selector"].(string)
+			result, err = e.Extract(ctx, selector, jsonStringSlice(op.Params["fields"]), jsonBool(op.Params["multiple"], false))
+		case "screenshot":
+			format, _ := op.Params["format"].(string)
+			result, err = e.Screenshot(ctx, jsonBool(op.Params["full_page"], false), format, jsonNumberToInt(op.Params["quality"], 0))
+		case "evaluate":
+			script, _ := op.Params["script"].(string)
+			result, err = e.Evaluate(ctx, script)
+		case "cookies":
+			result, err = e.Cookies(ctx, model.BrowserExecutorCookieOptions{
+				Action:   jsonString(op.Params["action"], "list"),
+				Name:     jsonString(op.Params["name"], ""),
+				Value:    jsonString(op.Params["value"], ""),
+				URL:      jsonString(op.Params["url"], ""),
+				Domain:   jsonString(op.Params["domain"], ""),
+				Path:     jsonString(op.Params["path"], ""),
+				Secure:   jsonBool(op.Params["secure"], false),
+				HTTPOnly: jsonBool(op.Params["http_only"], false),
+				SameSite: jsonString(op.Params["same_site"], ""),
+				Expires:  jsonNumberToFloat(op.Params["expires"], 0),
+			})
+		case "storage":
+			result, err = e.Storage(ctx, model.BrowserExecutorStorageOptions{
+				Action: jsonString(op.Params["action"], "list"),
+				Type:   jsonString(op.Params["type"], "local"),
+				Key:    jsonString(op.Params["key"], ""),
+				Value:  jsonString(op.Params["value"], ""),
+			})
 		case "page-structure":
 			result, err = e.PageStructure(ctx, model.BrowserExecutorPageStructureOptions{
 				IncludeLinks:   jsonBool(op.Params["include_links"], true),
@@ -167,6 +200,7 @@ func (e *Executor) Batch(ctx context.Context, operations []model.BrowserExecutor
 				Identifier: identifier,
 				Value:      op.Params["value"],
 				Text:       text,
+				WaitUntil:  jsonString(op.Params["wait_until"], ""),
 				Fields:     jsonFormFields(op.Params["fields"]),
 				Submit:     jsonBool(op.Params["submit"], false),
 				Clear:      jsonBool(op.Params["clear"], true),
@@ -250,6 +284,16 @@ func jsonBool(value any, fallback bool) bool {
 		return typed
 	}
 	return fallback
+}
+
+func jsonString(value any, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return fmt.Sprintf("%v", value)
 }
 
 func jsonStringSlice(value any) []string {

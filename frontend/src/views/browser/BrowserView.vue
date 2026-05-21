@@ -18,7 +18,6 @@
           type="primary"
           :icon="Download"
           :loading="executorSkillExporting"
-          :disabled="!status.running"
           @click="handleExportExecutorSkill"
         >
           导出控制 Skill
@@ -50,6 +49,7 @@
           >
             删除选中
           </el-button>
+          <AppSelectionSummary :count="selectedInstanceIds.length" unit="配置" />
         </div>
 
         <el-table
@@ -71,10 +71,10 @@
               />
             </template>
           </el-table-column>
-          <el-table-column prop="name" label="名称" min-width="120">
+          <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip>
             <template #default="{ row }">
               <div class="instance-name">
-                <span class="instance-name__text" :title="row.name">{{ row.name }}</span>
+                <span class="instance-name__text">{{ row.name }}</span>
                 <el-tag v-if="row.is_current" size="small" type="primary">当前</el-tag>
                 <el-tag v-if="row.is_active" size="small" type="success">运行</el-tag>
               </div>
@@ -92,10 +92,20 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="默认" width="60" align="center" class-name="action-column">
+          <el-table-column label="默认" width="96" align="center" class-name="action-column default-column">
             <template #default="{ row }">
-              <el-tag v-if="row.is_default" type="success" effect="plain">默认</el-tag>
-              <span v-else></span>
+              <div :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`" class="default-cell">
+                <span v-if="row.is_default" class="default-action default-badge">默认</span>
+                <button
+                  v-else
+                  class="default-action default-button"
+                  type="button"
+                  :disabled="isDefaultUpdating(row.id)"
+                  @click.stop="handleSetDefaultInstance(row)"
+                >
+                  {{ isDefaultUpdating(row.id) ? '设置中' : '设为默认' }}
+                </button>
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="类型" width="66">
@@ -213,15 +223,15 @@
               {{ status.running ? '运行中' : '未启动' }}
             </el-descriptions-item>
             <el-descriptions-item label="当前配置">
-              {{ status.instance?.name || '-' }}
+              {{ status.instance?.name || '' }}
             </el-descriptions-item>
             <el-descriptions-item label="运行时长">
               {{ uptimeText }}
             </el-descriptions-item>
             <el-descriptions-item label="调试地址">
               <div class="runtime-copy">
-                <span class="runtime-value" :title="status.control_url || '-'">
-                  {{ status.control_url || '-' }}
+                <span class="runtime-value" :title="status.control_url || ''">
+                  {{ status.control_url || '' }}
                 </span>
                 <el-button link type="primary" :disabled="!status.control_url" @click="copyRuntimeValue(status.control_url)">
                   复制
@@ -230,8 +240,8 @@
             </el-descriptions-item>
             <el-descriptions-item label="Agent 页面">
               <div class="runtime-copy">
-                <span class="runtime-value" :title="status.agent_url || '-'">
-                  {{ status.agent_url || '-' }}
+                <span class="runtime-value" :title="status.agent_url || ''">
+                  {{ status.agent_url || '' }}
                 </span>
                 <el-button link type="primary" :disabled="!status.agent_url" @click="copyRuntimeValue(status.agent_url)">
                   复制
@@ -254,6 +264,9 @@ import { Check, Download, Plus, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { copyText, downloadBlob } from '@/utils/browser'
+import { getSafePage } from '@/utils/list'
 import {
   createBrowserInstance,
   deleteBrowserInstance,
@@ -278,6 +291,7 @@ const instancePageSizes = [10, 30, 60]
 const saving = ref(false)
 const starting = ref(false)
 const defaultSaving = ref(false)
+const defaultUpdatingIds = ref([])
 const launchArgsText = ref('')
 const agents = ref([])
 const runtimeNow = ref(Date.now())
@@ -462,6 +476,21 @@ async function handleDefaultChange(checked) {
   }
 }
 
+async function handleSetDefaultInstance(instance) {
+  if (instance.is_default) return
+
+  defaultUpdatingIds.value = Array.from(new Set([...defaultUpdatingIds.value, instance.id]))
+  try {
+    // Default shortcut 列表快捷设置默认配置，后端保存时会清理其他默认项
+    await updateBrowserInstance(instance.id, buildInstancePayload(instance, { is_default: true }))
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '已设为默认配置' })
+    await loadAll()
+    syncSelectedDefaultFlag()
+  } finally {
+    defaultUpdatingIds.value = defaultUpdatingIds.value.filter((id) => id !== instance.id)
+  }
+}
+
 async function handleStart(row, saveBeforeStart = false) {
   if (!row.id) {
     appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先保存浏览器配置' })
@@ -487,14 +516,9 @@ async function handleStart(row, saveBeforeStart = false) {
 }
 
 async function handleExportExecutorSkill() {
-  if (!status.value.running) {
-    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先启动浏览器' })
-    return
-  }
-
   executorSkillExporting.value = true
   try {
-    // Export Skill 下载当前浏览器控制 Skill，供大模型直接操作浏览器
+    // Export Skill downloads static browser-control instructions 导出静态浏览器控制 Skill
     const blob = await exportBrowserExecutorSkill()
     downloadBlob(blob, 'SKILL_BROWSER_EXECUTOR.md')
     appMessage({ type: APP_MESSAGE_TYPE.success, message: '浏览器控制 Skill 已导出' })
@@ -503,18 +527,6 @@ async function handleExportExecutorSkill() {
   } finally {
     executorSkillExporting.value = false
   }
-}
-
-function downloadBlob(blob, filename) {
-  // Download file 创建临时链接触发浏览器下载
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
 }
 
 async function handleStop(row) {
@@ -535,7 +547,7 @@ async function handleSwitch(row) {
 async function copyRuntimeValue(value) {
   if (!value) return
 
-  await navigator.clipboard.writeText(value)
+  await copyText(value)
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '已复制' })
 }
 
@@ -607,11 +619,6 @@ function getTimeValue(value) {
   return value ? new Date(value).getTime() || 0 : 0
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function getRuntimeSeconds() {
   if (!status.value.running) return 0
 
@@ -646,12 +653,43 @@ function getAutomaTagType(instance) {
 }
 
 function buildPayload() {
-  return {
-    ...form,
+  // Payload whitelist 表单入参白名单，避免运行态字段回传
+  return buildInstancePayload(form, {
     launch_args: launchArgsText.value
       .split('\n')
       .map((item) => item.trim())
       .filter(Boolean),
+  })
+}
+
+function buildInstancePayload(instance, overrides = {}) {
+  const nextInstance = { ...instance, ...overrides }
+  return {
+    name: nextInstance.name,
+    description: nextInstance.description,
+    is_default: Boolean(nextInstance.is_default),
+    type: nextInstance.type,
+    bin_path: nextInstance.bin_path,
+    user_data_dir: nextInstance.user_data_dir,
+    control_url: nextInstance.control_url,
+    user_agent: nextInstance.user_agent,
+    headless: nextInstance.headless,
+    no_sandbox: nextInstance.no_sandbox,
+    launch_args: Array.isArray(nextInstance.launch_args) ? nextInstance.launch_args : [],
+    proxy: nextInstance.proxy,
+  }
+}
+
+function isDefaultUpdating(instanceId) {
+  return defaultUpdatingIds.value.includes(instanceId)
+}
+
+function syncSelectedDefaultFlag() {
+  if (!form.id) return
+
+  const current = instances.value.find((instance) => instance.id === form.id)
+  if (current) {
+    form.is_default = Boolean(current.is_default)
   }
 }
 
@@ -827,6 +865,55 @@ function createEmptyForm() {
 
 .instance-panel :deep(.operation-column .el-button) {
   flex-shrink: 0;
+}
+
+.instance-panel :deep(.default-column .cell) {
+  display: flex;
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.default-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  min-height: 24px;
+}
+
+.default-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 24px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.default-badge {
+  color: #67c23a;
+  font-size: 12px;
+  line-height: 22px;
+  background: #f0f9eb;
+  border: 1px solid #b3e19d;
+  border-radius: 4px;
+}
+
+.default-button {
+  padding: 0;
+  color: #409eff;
+  font: inherit;
+  line-height: 24px;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.default-button:disabled {
+  color: #a8abb2;
+  cursor: default;
 }
 
 .table-toolbar {

@@ -16,7 +16,7 @@ import (
 )
 
 // Navigate opens a URL in the active page. Navigate opens URL in current page.
-func (e *Executor) Navigate(ctx context.Context, url string, timeoutSeconds int) (*model.BrowserExecutorOperationResult, error) {
+func (e *Executor) Navigate(ctx context.Context, url string, waitUntil string, timeoutSeconds int) (*model.BrowserExecutorOperationResult, error) {
 	if !strings.Contains(url, "://") {
 		url = "https://" + url
 	}
@@ -30,16 +30,16 @@ func (e *Executor) Navigate(ctx context.Context, url string, timeoutSeconds int)
 			return operationFail("", err), err
 		}
 	}
-	if err = page.Timeout(timeout).WaitLoad(); err != nil {
+	if err = waitForNavigationState(page, waitUntil, timeout); err != nil {
 		return operationFail("", err), err
 	}
 	e.InvalidateSnapshot()
-	return operationOK("Page opened", map[string]any{"url": url, "created_tab": created}), nil
+	return operationOK("Page opened", map[string]any{"url": url, "created_tab": created, "wait_until": normalizeWaitUntil(waitUntil)}), nil
 }
 
 // Click clicks an element. Click clicks element by identifier.
 func (e *Executor) Click(ctx context.Context, identifier string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -59,7 +59,7 @@ func (e *Executor) Click(ctx context.Context, identifier string) (*model.Browser
 
 // Type types text into an element. Type inputs text by identifier.
 func (e *Executor) Type(ctx context.Context, identifier string, text string, clear bool) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -84,7 +84,7 @@ func (e *Executor) Type(ctx context.Context, identifier string, text string, cle
 
 // Select selects an option by value or visible text. 选择下拉选项。
 func (e *Executor) Select(ctx context.Context, identifier string, value string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -103,7 +103,7 @@ func (e *Executor) Select(ctx context.Context, identifier string, value string) 
 
 // PressKey presses one key or shortcut. PressKey sends a key or shortcut.
 func (e *Executor) PressKey(ctx context.Context, key string, ctrl bool, shift bool, alt bool, meta bool) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -133,7 +133,7 @@ func (e *Executor) PressKey(ctx context.Context, key string, ctrl bool, shift bo
 
 // Wait waits for page, element, or time. Wait waits for page, element, or duration.
 func (e *Executor) Wait(ctx context.Context, identifier string, state string, timeoutSeconds int, count int) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -188,7 +188,7 @@ func (e *Executor) Wait(ctx context.Context, identifier string, state string, ti
 
 // Reload reloads the current page. 刷新当前页面。
 func (e *Executor) Reload(ctx context.Context) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -201,7 +201,7 @@ func (e *Executor) Reload(ctx context.Context) (*model.BrowserExecutorOperationR
 
 // GoBack navigates browser history backward. 浏览器历史后退。
 func (e *Executor) GoBack(ctx context.Context) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -214,7 +214,7 @@ func (e *Executor) GoBack(ctx context.Context) (*model.BrowserExecutorOperationR
 
 // GoForward navigates browser history forward. 浏览器历史前进。
 func (e *Executor) GoForward(ctx context.Context) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -227,7 +227,7 @@ func (e *Executor) GoForward(ctx context.Context) (*model.BrowserExecutorOperati
 
 // Hover moves cursor over an element. 鼠标悬停到元素上。
 func (e *Executor) Hover(ctx context.Context, identifier string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -243,7 +243,7 @@ func (e *Executor) Hover(ctx context.Context, identifier string) (*model.Browser
 
 // Resize changes viewport size. 调整视口大小。
 func (e *Executor) Resize(ctx context.Context, width int, height int) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -285,7 +285,7 @@ func (e *Executor) ClosePage(ctx context.Context) (*model.BrowserExecutorOperati
 
 // FillForm fills multiple form fields in one operation. 一次性填写多个表单字段。
 func (e *Executor) FillForm(ctx context.Context, fields []model.BrowserExecutorFormField, submit bool, timeoutSeconds int) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -326,7 +326,7 @@ func (e *Executor) FillForm(ctx context.Context, fields []model.BrowserExecutorF
 
 // Drag drags one element to another element. 拖拽一个元素到另一个元素。
 func (e *Executor) Drag(ctx context.Context, fromIdentifier string, toIdentifier string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -370,7 +370,7 @@ func (e *Executor) Drag(ctx context.Context, fromIdentifier string, toIdentifier
 
 // FileUpload sets local file paths on a file input. 设置文件输入框的本地文件路径。
 func (e *Executor) FileUpload(ctx context.Context, identifier string, filePaths []string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -391,7 +391,7 @@ func (e *Executor) FileUpload(ctx context.Context, identifier string, filePaths 
 
 // HandleDialog arms a handler for the next JavaScript dialog. 预置下一个 JavaScript 弹窗处理器。
 func (e *Executor) HandleDialog(ctx context.Context, accept bool, text string, timeoutSeconds int) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -415,7 +415,7 @@ func (e *Executor) HandleDialog(ctx context.Context, accept bool, text string, t
 
 // PageInfo returns active page information. PageInfo returns active page metadata.
 func (e *Executor) PageInfo(ctx context.Context) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -478,7 +478,7 @@ func (e *Executor) ElementRefs(ctx context.Context, category string, limit int) 
 
 // ElementInfo returns compact diagnostics for one element. ElementInfo 返回单个元素诊断信息。
 func (e *Executor) ElementInfo(ctx context.Context, identifier string, attributes []string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -529,7 +529,7 @@ func (e *Executor) ElementInfo(ctx context.Context, identifier string, attribute
 
 // PageStructure returns compact structured page data. PageStructure 返回紧凑页面结构。
 func (e *Executor) PageStructure(ctx context.Context, options model.BrowserExecutorPageStructureOptions) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -608,7 +608,7 @@ func (e *Executor) PageStructure(ctx context.Context, options model.BrowserExecu
 
 // GetText returns element text. GetText returns element text by identifier.
 func (e *Executor) GetText(ctx context.Context, identifier string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -625,7 +625,7 @@ func (e *Executor) GetText(ctx context.Context, identifier string) (*model.Brows
 
 // GetValue returns element value. 返回元素值。
 func (e *Executor) GetValue(ctx context.Context, identifier string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -651,7 +651,7 @@ func (e *Executor) PageText(ctx context.Context, limit int) (*model.BrowserExecu
 
 // PageContent returns current page HTML with optional limit. 返回页面 HTML。
 func (e *Executor) PageContent(ctx context.Context, limit int) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -665,7 +665,7 @@ func (e *Executor) PageContent(ctx context.Context, limit int) (*model.BrowserEx
 
 // Extract extracts text/href/value from selected elements. Extract reads selected data from the page.
 func (e *Executor) Extract(ctx context.Context, selector string, fields []string, multiple bool) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -699,7 +699,7 @@ func (e *Executor) Extract(ctx context.Context, selector string, fields []string
 
 // Screenshot captures a page screenshot as base64. Screenshot returns base64 image data.
 func (e *Executor) Screenshot(ctx context.Context, fullPage bool, format string, quality int) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -722,7 +722,7 @@ func (e *Executor) Screenshot(ctx context.Context, fullPage bool, format string,
 
 // ElementScreenshot captures one element as base64 image data. ElementScreenshot 截取单个元素图片。
 func (e *Executor) ElementScreenshot(ctx context.Context, identifier string, format string, quality int) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -746,7 +746,7 @@ func (e *Executor) ElementScreenshot(ctx context.Context, identifier string, for
 
 // Evaluate executes JavaScript. Evaluate executes page JavaScript.
 func (e *Executor) Evaluate(ctx context.Context, script string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -755,6 +755,146 @@ func (e *Executor) Evaluate(ctx context.Context, script string) (*model.BrowserE
 		return operationFail("", err), err
 	}
 	return operationOK("Script evaluated", map[string]any{"result": result.Value.String()}), nil
+}
+
+// Cookies manages browser cookies. Cookies lists, sets, deletes, or clears browser cookies.
+func (e *Executor) Cookies(ctx context.Context, options model.BrowserExecutorCookieOptions) (*model.BrowserExecutorOperationResult, error) {
+	if e.runtime == nil || e.runtime.Browser == nil {
+		err := fmt.Errorf("browser runtime is unavailable")
+		return operationFail("", err), err
+	}
+
+	action := strings.ToLower(strings.TrimSpace(options.Action))
+	if action == "" {
+		action = "list"
+	}
+	switch action {
+	case "list", "get":
+		cookies, err := e.runtime.Browser.GetCookies()
+		if err != nil {
+			return operationFail("", err), err
+		}
+		return operationOK("Cookies listed", map[string]any{"cookies": cookies, "count": len(cookies)}), nil
+	case "set":
+		if strings.TrimSpace(options.Name) == "" {
+			err := fmt.Errorf("cookie name cannot be empty")
+			return operationFail("", err), err
+		}
+		cookieURL := options.URL
+		if strings.TrimSpace(cookieURL) == "" && strings.TrimSpace(options.Domain) == "" {
+			cookieURL = e.currentPageURL(ctx)
+		}
+		cookie := &proto.NetworkCookieParam{
+			Name:     options.Name,
+			Value:    options.Value,
+			URL:      cookieURL,
+			Domain:   options.Domain,
+			Path:     options.Path,
+			Secure:   options.Secure,
+			HTTPOnly: options.HTTPOnly,
+			SameSite: normalizeSameSite(options.SameSite),
+		}
+		if options.Expires > 0 {
+			cookie.Expires = proto.TimeSinceEpoch(options.Expires)
+		}
+		if err := e.runtime.Browser.SetCookies([]*proto.NetworkCookieParam{cookie}); err != nil {
+			return operationFail("", err), err
+		}
+		return operationOK("Cookie set", map[string]any{"name": options.Name, "url": cookie.URL, "domain": options.Domain}), nil
+	case "delete", "remove":
+		if strings.TrimSpace(options.Name) == "" {
+			err := fmt.Errorf("cookie name cannot be empty")
+			return operationFail("", err), err
+		}
+		cookieURL := options.URL
+		if strings.TrimSpace(cookieURL) == "" && strings.TrimSpace(options.Domain) == "" {
+			cookieURL = e.currentPageURL(ctx)
+		}
+		deleteReq := proto.NetworkDeleteCookies{
+			Name:   options.Name,
+			URL:    cookieURL,
+			Domain: options.Domain,
+			Path:   options.Path,
+		}
+		if err := deleteReq.Call(e.runtime.Browser); err != nil {
+			return operationFail("", err), err
+		}
+		return operationOK("Cookie deleted", map[string]any{"name": options.Name, "url": deleteReq.URL, "domain": options.Domain}), nil
+	case "clear":
+		if err := e.runtime.Browser.SetCookies(nil); err != nil {
+			return operationFail("", err), err
+		}
+		return operationOK("Cookies cleared", nil), nil
+	default:
+		err := fmt.Errorf("unknown cookies action: %s", options.Action)
+		return operationFail("", err), err
+	}
+}
+
+// Storage manages localStorage or sessionStorage on the active page. Storage manages web storage.
+func (e *Executor) Storage(ctx context.Context, options model.BrowserExecutorStorageOptions) (*model.BrowserExecutorOperationResult, error) {
+	page, err := e.businessPage()
+	if err != nil {
+		return operationFail("", err), err
+	}
+	action := strings.ToLower(strings.TrimSpace(options.Action))
+	if action == "" {
+		action = "list"
+	}
+	storageType := strings.ToLower(strings.TrimSpace(options.Type))
+	if storageType == "" {
+		storageType = "local"
+	}
+	if action == "get" || action == "set" || action == "delete" || action == "remove" {
+		if strings.TrimSpace(options.Key) == "" {
+			err := fmt.Errorf("storage key cannot be empty")
+			return operationFail("", err), err
+		}
+	}
+	result, err := page.Eval(`(action, storageType, key, value) => {
+		const store = storageType === 'session' ? window.sessionStorage : window.localStorage;
+		const data = { action, type: storageType === 'session' ? 'session' : 'local' };
+		if (action === 'list') {
+			data.items = {};
+			for (let i = 0; i < store.length; i += 1) {
+				const itemKey = store.key(i);
+				data.items[itemKey] = store.getItem(itemKey);
+			}
+			data.count = store.length;
+			return data;
+		}
+		if (action === 'get') {
+			data.key = key;
+			data.value = store.getItem(key);
+			data.exists = data.value !== null;
+			return data;
+		}
+		if (action === 'set') {
+			store.setItem(key, value);
+			data.key = key;
+			data.value = value;
+			return data;
+		}
+		if (action === 'delete' || action === 'remove') {
+			store.removeItem(key);
+			data.key = key;
+			return data;
+		}
+		if (action === 'clear') {
+			store.clear();
+			return data;
+		}
+		throw new Error('unknown storage action: ' + action);
+	}`, action, storageType, options.Key, options.Value)
+	if err != nil {
+		return operationFail("", err), err
+	}
+	data := map[string]any{}
+	if raw := result.Value.String(); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &data)
+	}
+	e.InvalidateSnapshot()
+	return operationOK("Storage operation completed", data), nil
 }
 
 // Tabs manages browser tabs. Tabs lists, creates, switches, or closes tabs.
@@ -822,7 +962,7 @@ func (e *Executor) Tabs(ctx context.Context, action string, url string, index in
 
 // Scroll scrolls the page or a target element. 滚动页面或目标元素。
 func (e *Executor) Scroll(ctx context.Context, direction string, pixels int, identifier string) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -866,7 +1006,7 @@ func (e *Executor) Scroll(ctx context.Context, direction string, pixels int, ide
 
 // Mouse runs coordinate based mouse operations. Mouse 执行坐标鼠标操作。
 func (e *Executor) Mouse(ctx context.Context, options model.BrowserExecutorMouseOptions) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -931,7 +1071,7 @@ func (e *Executor) Mouse(ctx context.Context, options model.BrowserExecutorMouse
 
 // Window manages browser window bounds and state. Window 执行浏览器窗口操作。
 func (e *Executor) Window(ctx context.Context, options model.BrowserExecutorWindowOptions) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -987,7 +1127,7 @@ func (e *Executor) Act(ctx context.Context, options model.BrowserExecutorActOpti
 	valueText := firstNonEmpty(options.Text, stringValue(options.Value))
 	switch intent {
 	case "navigate", "open", "goto":
-		return e.Navigate(ctx, valueText, options.Timeout)
+		return e.Navigate(ctx, valueText, options.WaitUntil, options.Timeout)
 	case "click", "press":
 		return e.Click(ctx, options.Identifier)
 	case "type", "input", "fill":
@@ -1025,6 +1165,38 @@ func (e *Executor) AppendObserve(ctx context.Context, result *model.BrowserExecu
 	return result, err
 }
 
+func waitForNavigationState(page *rod.Page, waitUntil string, timeout time.Duration) error {
+	waitUntil = normalizeWaitUntil(waitUntil)
+	switch waitUntil {
+	case "none":
+		return nil
+	case "dom-stable":
+		return page.Timeout(timeout).WaitDOMStable(500*time.Millisecond, 0)
+	case "request-idle":
+		page.Timeout(timeout).WaitRequestIdle(500*time.Millisecond, nil, nil, nil)()
+		return nil
+	case "page-stable":
+		return page.Timeout(timeout).WaitStable(500 * time.Millisecond)
+	default:
+		return page.Timeout(timeout).WaitLoad()
+	}
+}
+
+func normalizeWaitUntil(waitUntil string) string {
+	switch strings.ToLower(strings.TrimSpace(waitUntil)) {
+	case "none", "no-wait":
+		return "none"
+	case "dom-stable", "dom":
+		return "dom-stable"
+	case "request-idle", "network-idle", "networkidle":
+		return "request-idle"
+	case "page-stable", "stable":
+		return "page-stable"
+	default:
+		return "load"
+	}
+}
+
 func secondsOrDefault(seconds int, fallback int) time.Duration {
 	if seconds <= 0 {
 		seconds = fallback
@@ -1049,6 +1221,19 @@ func mouseButton(button string) proto.InputMouseButton {
 		return proto.InputMouseButtonMiddle
 	default:
 		return proto.InputMouseButtonLeft
+	}
+}
+
+func normalizeSameSite(value string) proto.NetworkCookieSameSite {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "strict":
+		return proto.NetworkCookieSameSiteStrict
+	case "lax":
+		return proto.NetworkCookieSameSiteLax
+	case "none":
+		return proto.NetworkCookieSameSiteNone
+	default:
+		return ""
 	}
 }
 
@@ -1115,7 +1300,7 @@ func normalizeKey(key string) input.Key {
 }
 
 func (e *Executor) pageText(ctx context.Context, limit int) (string, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return "", err
 	}
@@ -1261,7 +1446,7 @@ func (e *Executor) submitForm(ctx context.Context, page *rod.Page) error {
 }
 
 func (e *Executor) setChecked(ctx context.Context, identifier string, checked bool) (*model.BrowserExecutorOperationResult, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return operationFail("", err), err
 	}
@@ -1316,6 +1501,18 @@ func stringValue(value any) string {
 		return ""
 	}
 	return fmt.Sprintf("%v", value)
+}
+
+func (e *Executor) currentPageURL(ctx context.Context) string {
+	page, err := e.businessPage()
+	if err != nil {
+		return ""
+	}
+	info, err := page.Info()
+	if err != nil || info == nil {
+		return ""
+	}
+	return info.URL
 }
 
 func wrapEvaluateScript(script string) string {

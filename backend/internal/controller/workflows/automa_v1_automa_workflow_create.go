@@ -11,12 +11,17 @@ import (
 	"time"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
+	"github.com/Zany2/browserflow/backend/internal/consts"
+	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
@@ -25,23 +30,27 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 	if len(req.WorkflowFiles) == 0 {
 		return nil, gerror.New("工作流列表不能为空")
 	}
-	state.DBMu.Lock()
-	if state.DB == nil {
-		dbPath := os.Getenv("DB_PATH")
-		if dbPath == "" {
-			dbPath = g.Cfg().MustGet(ctx, "localStorage.path", "data/browserflow.db").String()
+	serverMode := consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer
+	var db *storage.BoltDB
+	if !serverMode {
+		state.DBMu.Lock()
+		if state.DB == nil {
+			dbPath := os.Getenv("DB_PATH")
+			if dbPath == "" {
+				dbPath = g.Cfg().MustGet(ctx, "localStorage.path", "data/browserflow.db").String()
+			}
+			state.DB, err = storage.NewBoltDB(dbPath)
+			if err != nil {
+				state.DBMu.Unlock()
+				return nil, err
+			}
 		}
-		state.DB, err = storage.NewBoltDB(dbPath)
-		if err != nil {
-			state.DBMu.Unlock()
-			return nil, err
+		if state.LLMClient == nil {
+			state.LLMClient = llm.NewClient()
 		}
+		db = state.DB
+		state.DBMu.Unlock()
 	}
-	if state.LLMClient == nil {
-		state.LLMClient = llm.NewClient()
-	}
-	db := state.DB
-	state.DBMu.Unlock()
 
 	var metas []v1.WorkflowCreateMeta
 	if workflowMetas := strings.TrimSpace(req.WorkflowMetas); workflowMetas != "" {
@@ -105,7 +114,7 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 		if hashGlobalDataValue == nil {
 			hashGlobalDataValue = ""
 		}
-		coreJSONBytes, err := json.Marshal(g.Map{"id": strings.TrimSpace(gconv.String(payload["id"])), "name": strings.TrimSpace(gconv.String(payload["name"])), "icon": strings.TrimSpace(gconv.String(payload["icon"])), "table": hashTableValue, "drawflow": hashDrawflowValue, "settings": hashSettingsValue, "globalData": hashGlobalDataValue, "description": strings.TrimSpace(gconv.String(payload["description"]))})
+		coreJSONBytes, err := json.Marshal(g.Map{"name": strings.TrimSpace(gconv.String(payload["name"])), "icon": strings.TrimSpace(gconv.String(payload["icon"])), "table": hashTableValue, "drawflow": hashDrawflowValue, "settings": hashSettingsValue, "globalData": hashGlobalDataValue, "description": strings.TrimSpace(gconv.String(payload["description"]))})
 		if err != nil {
 			return nil, err
 		}
@@ -122,13 +131,15 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 		if automaID == "" {
 			automaID = "generated:" + contentHash[:20]
 		}
+		automaName := strings.TrimSpace(gconv.String(payload["name"]))
+		automaDescription := strings.TrimSpace(gconv.String(payload["description"]))
 		name := strings.TrimSpace(meta.Name)
 		if name == "" {
-			name = strings.TrimSpace(gconv.String(payload["name"]))
+			name = automaName
 		}
 		description := strings.TrimSpace(meta.Description)
 		if description == "" {
-			description = strings.TrimSpace(gconv.String(payload["description"]))
+			description = automaDescription
 		}
 		drawflowValue := payload["drawflow"]
 		if drawflowText, ok := drawflowValue.(string); ok {
@@ -151,8 +162,28 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 		if meta.Source != 1 && meta.Source != 2 {
 			meta.Source = 1
 		}
-		parsed := &model.AutomaWorkflowRecord{AutomaID: automaID, Name: name, Description: description, Source: meta.Source, IsProtected: meta.IsProtected, AutomaVersion: strings.TrimSpace(gconv.String(payload["version"])), ExtVersion: strings.TrimSpace(gconv.String(payload["extVersion"])), CreatedAtAutoma: gconv.Int64(payload["createdAt"]), UpdatedAtAutoma: gconv.Int64(payload["updatedAt"]), IsDisabled: gconv.Bool(payload["isDisabled"]), NodeCount: nodeCount, EdgeCount: edgeCount, RawJSON: string(rawBytes), NormalizedJSON: string(rawBytes), ContentHash: contentHash}
-		existing, getErr := db.GetAutomaWorkflowRecord(parsed.AutomaID)
+		parsed := &model.AutomaWorkflowRecord{AutomaID: automaID, Name: name, Description: description, AutomaName: automaName, AutomaDescription: automaDescription, Source: meta.Source, IsProtected: meta.IsProtected, AutomaVersion: strings.TrimSpace(gconv.String(payload["version"])), ExtVersion: strings.TrimSpace(gconv.String(payload["extVersion"])), CreatedAtAutoma: gconv.Int64(payload["createdAt"]), UpdatedAtAutoma: gconv.Int64(payload["updatedAt"]), IsDisabled: gconv.Bool(payload["isDisabled"]), NodeCount: nodeCount, EdgeCount: edgeCount, RawJSON: string(rawBytes), NormalizedJSON: string(rawBytes), ContentHash: contentHash}
+		var existing *model.AutomaWorkflowRecord
+		var getErr error
+		if serverMode {
+			columns := dao.AutomaWorkflows.Columns()
+			item := entity.AutomaWorkflows{}
+			getErr = dao.AutomaWorkflows.Ctx(ctx).Where(columns.AutomaId, parsed.AutomaID).Scan(&item)
+			if getErr == nil && item.Id > 0 {
+				existing = &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceUserAgent: item.SourceUserAgent, IsProtected: item.IsProtected, ContentHash: item.ContentHash, Revision: item.Revision}
+				if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {
+					existing.FirstSyncedAt = item.FirstSyncedAt.Time
+				}
+				if item.LastSyncedAt != nil && !item.LastSyncedAt.IsZero() {
+					existing.LastSyncedAt = item.LastSyncedAt.Time
+				}
+				if item.CreatedAt != nil && !item.CreatedAt.IsZero() {
+					existing.CreatedAt = item.CreatedAt.Time
+				}
+			}
+		} else {
+			existing, getErr = db.GetAutomaWorkflowRecord(parsed.AutomaID)
+		}
 		stateText := "created"
 		if getErr == nil && existing != nil {
 			parsed.ID = existing.ID
@@ -166,9 +197,63 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 			if strings.TrimSpace(existing.ContentHash) != parsed.ContentHash {
 				parsed.Revision++
 				stateText = "updated"
+				if strings.TrimSpace(meta.Name) == "" {
+					parsed.Name = existing.Name
+				}
+				if strings.TrimSpace(meta.Description) == "" {
+					parsed.Description = existing.Description
+				}
 			}
 			if parsed.ContentHash == existing.ContentHash {
 				stateText = "unchanged"
+				metadataData := do.AutomaWorkflows{}
+				metadataChanged := false
+				if strings.TrimSpace(meta.Name) != "" && strings.TrimSpace(existing.Name) != parsed.Name {
+					metadataData.Name = parsed.Name
+					metadataChanged = true
+				}
+				if strings.TrimSpace(meta.Description) != "" && strings.TrimSpace(existing.Description) != parsed.Description {
+					metadataData.Description = parsed.Description
+					metadataChanged = true
+				}
+				if existing.Source != parsed.Source {
+					metadataData.Source = parsed.Source
+					metadataChanged = true
+				}
+				if existing.IsProtected != parsed.IsProtected {
+					metadataData.IsProtected = parsed.IsProtected
+					metadataChanged = true
+				}
+				if strings.TrimSpace(existing.AutomaName) != parsed.AutomaName {
+					metadataData.AutomaName = parsed.AutomaName
+					metadataChanged = true
+				}
+				if strings.TrimSpace(existing.AutomaDescription) != parsed.AutomaDescription {
+					metadataData.AutomaDescription = parsed.AutomaDescription
+					metadataChanged = true
+				}
+				if metadataChanged {
+					stateText = "updated"
+					if serverMode {
+						if _, err = dao.AutomaWorkflows.Ctx(ctx).WherePri(parsed.ID).Data(metadataData).Update(); err != nil {
+							return nil, err
+						}
+					} else {
+						if strings.TrimSpace(meta.Name) != "" {
+							existing.Name = parsed.Name
+						}
+						if strings.TrimSpace(meta.Description) != "" {
+							existing.Description = parsed.Description
+						}
+						existing.AutomaName = parsed.AutomaName
+						existing.AutomaDescription = parsed.AutomaDescription
+						existing.Source = parsed.Source
+						existing.IsProtected = parsed.IsProtected
+						if err = db.SaveAutomaWorkflowRecord(existing); err != nil {
+							return nil, err
+						}
+					}
+				}
 			}
 		} else {
 			parsed.Revision = 1
@@ -177,8 +262,25 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 			if parsed.FirstSyncedAt.IsZero() {
 				parsed.FirstSyncedAt = time.Time{}
 			}
-			if err = db.SaveAutomaWorkflowRecord(parsed); err != nil {
-				return nil, err
+			if serverMode {
+				saveData := do.AutomaWorkflows{AutomaId: parsed.AutomaID, Name: parsed.Name, Description: parsed.Description, AutomaName: parsed.AutomaName, AutomaDescription: parsed.AutomaDescription, Source: parsed.Source, SourceIp: parsed.SourceIP, SourceUserAgent: parsed.SourceUserAgent, AutomaVersion: parsed.AutomaVersion, ExtVersion: parsed.ExtVersion, CreatedAtAutoma: parsed.CreatedAtAutoma, UpdatedAtAutoma: parsed.UpdatedAtAutoma, IsDisabled: parsed.IsDisabled, IsProtected: parsed.IsProtected, NodeCount: parsed.NodeCount, EdgeCount: parsed.EdgeCount, RawJson: parsed.RawJSON, NormalizedJson: parsed.NormalizedJSON, ContentHash: parsed.ContentHash, Revision: parsed.Revision}
+				if !parsed.FirstSyncedAt.IsZero() {
+					saveData.FirstSyncedAt = gtime.NewFromTime(parsed.FirstSyncedAt)
+				}
+				if !parsed.LastSyncedAt.IsZero() {
+					saveData.LastSyncedAt = gtime.NewFromTime(parsed.LastSyncedAt)
+				}
+				if parsed.ID > 0 {
+					if _, err = dao.AutomaWorkflows.Ctx(ctx).WherePri(parsed.ID).Data(saveData).Update(); err != nil {
+						return nil, err
+					}
+				} else if _, err = dao.AutomaWorkflows.Ctx(ctx).Data(saveData).InsertAndGetId(); err != nil {
+					return nil, err
+				}
+			} else {
+				if err = db.SaveAutomaWorkflowRecord(parsed); err != nil {
+					return nil, err
+				}
 			}
 		}
 		switch stateText {

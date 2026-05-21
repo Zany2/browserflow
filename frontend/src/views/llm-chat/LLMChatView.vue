@@ -34,6 +34,7 @@
         >
           删除选中
         </el-button>
+        <AppSelectionSummary :count="selectedSessionIds.length" unit="会话" />
       </div>
 
       <div class="session-list">
@@ -64,17 +65,17 @@
       </div>
 
       <AppPagination
+        v-if="sessions.length > sessionPageSize"
         v-model:current-page="sessionCurrentPage"
         v-model:page-size="sessionPageSize"
         class="session-pagination"
-        :page-sizes="sessionPageSizes"
+        compact
         :total="sessions.length"
-        layout="prev, pager, next, sizes"
       />
     </aside>
 
     <main class="chat-panel">
-      <div ref="messageListRef" class="message-list">
+      <div ref="messageListRef" class="message-list" @scroll="handleMessageListScroll">
         <el-empty v-if="!currentSession" description="请选择或新建一个会话" />
         <template v-else>
           <div
@@ -98,7 +99,14 @@
         </template>
       </div>
 
-      <footer class="chat-input-bar">
+      <footer class="chat-input-bar" :style="chatInputBarStyle">
+        <div
+          class="chat-input-resizer"
+          role="separator"
+          aria-orientation="horizontal"
+          title="拖动调整输入框高度"
+          @pointerdown="handleInputResizeStart"
+        ></div>
         <el-input
           v-model="inputMessage"
           class="chat-input"
@@ -125,11 +133,13 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Delete, Plus, Promotion } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { getSafePage } from '@/utils/list'
 import {
   createChatSession,
   deleteChatSession,
@@ -148,13 +158,26 @@ const selectedConfigId = ref('')
 const selectedSessionIds = ref([])
 const sessionCurrentPage = ref(1)
 const sessionPageSize = ref(10)
-const sessionPageSizes = [10, 30, 60]
+// STREAM_CHAR_DELAY controls typewriter speed 流式逐字显示间隔
+const STREAM_CHAR_DELAY = 18
+// SCROLL_BOTTOM_THRESHOLD keeps auto-scroll only when viewer stays near bottom 靠近底部时才自动跟随
+const SCROLL_BOTTOM_THRESHOLD = 80
+const CHAT_INPUT_MIN_HEIGHT = 76
+const CHAT_INPUT_MAX_HEIGHT = 260
 const inputMessage = ref('')
 const streaming = ref(false)
 const messageListRef = ref(null)
+const chatInputHeight = ref(CHAT_INPUT_MIN_HEIGHT)
+const shouldStickToBottom = ref(true)
+
+let inputResizeStartY = 0
+let inputResizeStartHeight = CHAT_INPUT_MIN_HEIGHT
 
 const activeConfigs = computed(() => configs.value.filter((config) => config.is_active))
 const canSend = computed(() => Boolean(currentSession.value && inputMessage.value.trim() && !streaming.value))
+const chatInputBarStyle = computed(() => ({
+  '--chat-input-height': `${chatInputHeight.value}px`,
+}))
 const pagedSessions = computed(() => {
   const start = (sessionCurrentPage.value - 1) * sessionPageSize.value
   return sessions.value.slice(start, start + sessionPageSize.value)
@@ -172,7 +195,15 @@ const isSessionSelectionIndeterminate = computed(
 
 watch(
   () => currentSession.value?.messages?.length,
-  () => scrollToBottom(),
+  () => scrollToBottomIfNeeded(),
+)
+
+watch(
+  () => currentSession.value?.id,
+  () => {
+    shouldStickToBottom.value = true
+    scrollToBottom()
+  },
 )
 
 watch([sessions, sessionPageSize], () => {
@@ -185,6 +216,10 @@ watch([sessions, sessionPageSize], () => {
 
 onMounted(async () => {
   await Promise.all([loadProviders(), loadConfigs(), loadSessions()])
+})
+
+onBeforeUnmount(() => {
+  stopInputResize()
 })
 
 async function loadProviders() {
@@ -279,11 +314,6 @@ function removeSessionsFromState(sessionIds) {
   }
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function sortSessionsByUpdatedDesc(data) {
   // Session order 会话排序，跟随后端 updated_at，兜底使用 created_at。
   return data.slice().sort((prev, next) => getSessionTime(next) - getSessionTime(prev))
@@ -315,18 +345,32 @@ async function handleSendMessage() {
     id: `local_assistant_${Date.now()}`,
     role: 'assistant',
     content: '',
-    timestamp: new Date().toISOString(),
+    timestamp: '',
   }
 
   currentSession.value.messages.push(userMessage, assistantMessage)
+  const activeSession = currentSession.value
+  const assistantMessageIndex = activeSession.messages.length - 1
+  shouldStickToBottom.value = true
   scrollToBottom()
 
-  const sessionId = currentSession.value.id
+  const sessionId = activeSession.id
   try {
-    await streamChatMessage(sessionId, messageText, (chunk) => {
+    await streamChatMessage(sessionId, messageText, async (chunk) => {
       if (chunk.type === 'message') {
-        assistantMessage.id = chunk.message_id || assistantMessage.id
-        assistantMessage.content += chunk.content || ''
+        const messageItem = activeSession.messages?.[assistantMessageIndex]
+        if (!messageItem) return
+
+        // Reactive message 通过响应式数组项更新，保证逐字追加能触发界面刷新。
+        messageItem.id = chunk.message_id || messageItem.id
+        await appendAssistantContent(messageItem, chunk.content)
+      }
+      if (chunk.type === 'done') {
+        const messageItem = activeSession.messages?.[assistantMessageIndex]
+        if (messageItem) {
+          messageItem.id = chunk.message_id || messageItem.id
+          messageItem.timestamp = chunk.timestamp || new Date().toISOString()
+        }
       }
       if (chunk.type === 'error') {
         throw new Error(chunk.error || '生成失败')
@@ -338,7 +382,7 @@ async function handleSendMessage() {
     await loadSessions(sessionId).catch(() => {})
   } finally {
     streaming.value = false
-    scrollToBottom()
+    scrollToBottomIfNeeded()
   }
 }
 
@@ -349,16 +393,40 @@ function handleInputEnter(event) {
   handleSendMessage()
 }
 
+function handleInputResizeStart(event) {
+  // Resize start 顶部拖拽条控制输入区高度，向上拖动变高。
+  inputResizeStartY = event.clientY
+  inputResizeStartHeight = chatInputHeight.value
+  window.addEventListener('pointermove', handleInputResizeMove)
+  window.addEventListener('pointerup', stopInputResize)
+  event.preventDefault()
+}
+
+function handleInputResizeMove(event) {
+  // Resize move 输入框位于底部，鼠标上移时高度增加。
+  const nextHeight = inputResizeStartHeight + inputResizeStartY - event.clientY
+  chatInputHeight.value = clampInputHeight(nextHeight)
+}
+
+function stopInputResize() {
+  window.removeEventListener('pointermove', handleInputResizeMove)
+  window.removeEventListener('pointerup', stopInputResize)
+}
+
+function clampInputHeight(value) {
+  return Math.min(Math.max(value, CHAT_INPUT_MIN_HEIGHT), CHAT_INPUT_MAX_HEIGHT)
+}
+
 function getSessionTitle(session) {
   return session.messages?.find((message) => message.role === 'user')?.content || '新会话'
 }
 
 function getConfigLabel(config) {
-  return `${getProviderName(config.provider)} / ${config.model}`
+  return [getProviderName(config.provider), config.name, config.model].filter(Boolean).join(' / ')
 }
 
 function getProviderName(providerId) {
-  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || '-'
+  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || ''
 }
 
 function formatTime(value) {
@@ -372,7 +440,38 @@ async function scrollToBottom() {
   await nextTick()
   if (messageListRef.value) {
     messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+    shouldStickToBottom.value = true
   }
+}
+
+async function scrollToBottomIfNeeded() {
+  if (!shouldStickToBottom.value) return
+  await scrollToBottom()
+}
+
+function handleMessageListScroll() {
+  shouldStickToBottom.value = isMessageListNearBottom()
+}
+
+function isMessageListNearBottom() {
+  const element = messageListRef.value
+  if (!element) return true
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD
+}
+
+async function appendAssistantContent(assistantMessage, content) {
+  // Typewriter output renders each SSE chunk one character at a time 逐字追加 SSE 内容
+  for (const char of Array.from(String(content || ''))) {
+    assistantMessage.content += char
+    await scrollToBottomIfNeeded()
+    await sleep(STREAM_CHAR_DELAY)
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
 }
 </script>
 
@@ -449,16 +548,17 @@ async function scrollToBottom() {
 
 .session-pagination :deep(.el-pagination) {
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 4px;
 }
 
-.session-pagination :deep(.el-pagination__sizes) {
-  margin: 0;
+.session-pagination.app-pagination--compact {
+  justify-content: space-between;
 }
 
-.session-pagination :deep(.el-select) {
-  width: 96px;
+.session-pagination :deep(.el-pagination button),
+.session-pagination :deep(.el-pager li) {
+  min-width: 28px;
 }
 
 .session-item {
@@ -586,16 +686,49 @@ async function scrollToBottom() {
 
 .chat-input-bar {
   align-items: flex-end;
+  position: relative;
+  padding-top: 22px;
   border-top: 1px solid #e4e7ed;
   border-bottom: 0;
+}
+
+.chat-input-resizer {
+  position: absolute;
+  top: 7px;
+  left: 16px;
+  right: 16px;
+  height: 8px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.chat-input-resizer::before {
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin: 2px auto 0;
+  background: #cbd5e1;
+  border-radius: 999px;
+  content: '';
+}
+
+.chat-input-resizer:hover::before {
+  background: #409eff;
 }
 
 .chat-input {
   flex: 1;
 }
 
+.chat-input :deep(.el-textarea__inner) {
+  height: var(--chat-input-height);
+  min-height: var(--chat-input-height);
+  resize: none;
+}
+
 .send-button {
-  height: 76px;
+  height: var(--chat-input-height);
+  min-height: 76px;
 }
 
 @keyframes pulse {

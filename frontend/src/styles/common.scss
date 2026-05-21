@@ -6,7 +6,7 @@
   text-align: center;
 }
 
-// Adaptive table 自适应表格，允许内容换行并避免列表出现横向滚动
+// Adaptive table 自适应表格，默认单行省略，完整内容由列 tooltip/title 展示
 .adaptive-table {
   width: 100%;
   min-width: 0;
@@ -27,24 +27,75 @@
 
 .adaptive-table .cell {
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
   padding-right: 6px;
   padding-left: 6px;
-  text-overflow: clip;
-  white-space: normal;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .adaptive-table .el-tooltip {
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.adaptive-table .cell * {
+.adaptive-table .cell > * {
   max-width: 100%;
-  overflow: visible !important;
-  text-overflow: clip !important;
-  white-space: normal !important;
-  word-break: break-word;
+  min-width: 0;
+  word-break: normal;
+}
+
+.adaptive-table .cell .el-tag,
+.adaptive-table .cell .el-tag *,
+.adaptive-table .cell .el-button,
+.adaptive-table .cell .el-button * {
+  max-width: none;
+  min-width: auto;
+}
+
+.adaptive-table .switch-column .cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.adaptive-table .switch-column .cell *,
+.adaptive-table .switch-column .el-switch,
+.adaptive-table .switch-column .el-switch * {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.adaptive-table .switch-column .el-switch {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  height: 20px;
+  line-height: 20px;
+}
+
+.adaptive-table .switch-column .el-switch__core {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  height: 20px;
+}
+
+.adaptive-table .switch-column .el-switch__core .el-switch__inner {
+  height: 16px;
+}
+
+.adaptive-table .switch-column .el-switch__core .el-switch__action {
+  width: 16px;
+  min-width: 16px;
+  max-width: 16px;
+  height: 16px;
 }
 
 .adaptive-table .el-button + .el-button {
@@ -52,7 +103,7 @@
 }
 
 .adaptive-table .el-button {
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .adaptive-table .nowrap-column .cell,
