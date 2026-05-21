@@ -118,6 +118,7 @@
           >
             删除选中
           </el-button>
+          <AppSelectionSummary :count="selectedConfigIds.length" unit="配置" />
         </div>
 
         <el-table
@@ -220,6 +221,8 @@ import { Plus, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { DEFAULT_PAGE_SIZES, getSafePage } from '@/utils/list'
 import {
   createLLMConfig,
   deleteLLMConfig,
@@ -237,7 +240,7 @@ const saving = ref(false)
 const testing = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
 const searchKeyword = ref('')
 const providerFilter = ref('')
 const defaultFilter = ref('')
@@ -489,13 +492,8 @@ function resetConfigForm() {
   Object.assign(configForm, createEmptyForm())
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function getProviderName(providerId) {
-  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || '-'
+  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || ''
 }
 
 function isStatusUpdating(configId) {

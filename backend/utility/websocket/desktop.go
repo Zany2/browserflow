@@ -2,7 +2,9 @@ package websockets
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -82,7 +84,6 @@ func (ws *WsHandlerFunc) handleDesktopChatSend(client *Client, in *model.WSReque
 						ID:        "msg_" + guid.S(),
 						SessionID: in.SessionID,
 						Role:      "assistant",
-						Timestamp: time.Now(),
 					}
 					sessionErr = llmClient.StreamChat(ctx, config, session.Messages, func(chunk string) error {
 						assistantMessage.Content += chunk
@@ -97,14 +98,17 @@ func (ws *WsHandlerFunc) handleDesktopChatSend(client *Client, in *model.WSReque
 						return nil
 					})
 					if sessionErr == nil {
+						// Assistant timestamp records completion time 助手消息时间记录回复完成时间
+						assistantMessage.Timestamp = time.Now()
 						session.Messages = append(session.Messages, assistantMessage)
 						sessionErr = db.SaveChatSession(session)
 					}
 					if sessionErr == nil {
 						SendConnectionMessage(client.ConnectionID(), &model.WSResponse{
-							Type:      model.WSMessageTypeChatDone,
-							SessionID: in.SessionID,
-							MessageID: assistantMessage.ID,
+							Type:       model.WSMessageTypeChatDone,
+							SessionID:  in.SessionID,
+							MessageID:  assistantMessage.ID,
+							ServerTime: assistantMessage.Timestamp.UnixMilli(),
 						})
 					}
 				}
@@ -251,11 +255,20 @@ func (ws *WsHandlerFunc) handleDesktopAgentResult(client *Client, in *model.WSRe
 	if browserID == "" {
 		browserID = findDesktopAgentByConnectionLocked(client.ConnectionID())
 	}
+	var resultData []byte
+	if len(in.Data) > 0 {
+		resultBytes, marshalErr := json.Marshal(in.Data)
+		if marshalErr != nil {
+			resultData = []byte(fmt.Sprintf(`{"error":%q}`, marshalErr.Error()))
+		} else {
+			resultData = resultBytes
+		}
+	}
 	result := model.AgentCommandResult{
 		BrowserID: browserID,
 		CommandID: in.CommandID,
 		Success:   in.Success,
-		Data:      in.Data,
+		Data:      resultData,
 		Error:     in.Error,
 	}
 	resultCh := state.PopPendingCommand(in.CommandID)

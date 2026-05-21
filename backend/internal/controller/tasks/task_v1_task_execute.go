@@ -11,7 +11,6 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
 	"github.com/gogf/gf/v2/errors/gerror"
-	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
 )
@@ -76,7 +75,7 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		ClientIP:  clientIP,
 		CommandID: "task-record-" + gconv.String(recordID),
 		Command:   "task.execute",
-		Payload: g.Map{
+		Payload: map[string]any{
 			"task_id":      taskID,
 			"task_name":    strings.TrimSpace(gconv.String(taskRecord[taskColumns.Name])),
 			"workflow_id":  strings.TrimSpace(gconv.String(taskRecord[taskColumns.AutomaId])),

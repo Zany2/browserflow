@@ -22,6 +22,7 @@ export function createAgentSocket({
   getAutomaInfo,
   getWorkflows,
   onCommand,
+  onCommandResult,
   onStatus,
   onError,
   onRegistered,
@@ -30,10 +31,14 @@ export function createAgentSocket({
   onNoReconnect,
   enableHeartbeat = false,
   enableWorkflowInventory = false,
+  enableAutomaStatusPolling = true,
+  reportAutomaStatusOnWindowLoad = false,
 }) {
   let socket = null
   let reconnectTimer = null
   let statusTimer = null
+  let windowLoadStatusTimer = 0
+  let windowLoadStatusHandler = null
   // heartbeatTimer heartbeat interval timer 心跳定时器
   let heartbeatTimer = null
   // workflowInventoryTimer inventory check timer 工作流清单检查定时器
@@ -54,6 +59,8 @@ export function createAgentSocket({
   let currentClientIp = ''
   // workflowResultCommandIds keeps async workflow command mapping 保存异步工作流命令映射
   let workflowResultCommandIds = new Map()
+  // workflowCommandPayloads keeps command context for final result logs 保存命令上下文用于最终结果展示
+  let workflowCommandPayloads = new Map()
 
   const getCurrentAutomaInstalled = () => Boolean(getAutomaInstalled?.() || lastKnownAutomaInstalled)
 
@@ -152,6 +159,32 @@ export function createAgentSocket({
     }
   }
 
+  // scheduleWindowLoadAutomaStatus reports one status after page load 页面完全加载后补充上报一次插件状态
+  const scheduleWindowLoadAutomaStatus = () => {
+    if (!reportAutomaStatusOnWindowLoad) return
+
+    clearWindowLoadAutomaStatus()
+    const report = () => {
+      if (stopped) return
+      sendAutomaStatus()
+    }
+    if (document.readyState === 'complete') {
+      windowLoadStatusTimer = window.setTimeout(report, 0)
+      return
+    }
+
+    windowLoadStatusHandler = report
+    window.addEventListener('load', windowLoadStatusHandler, { once: true })
+  }
+
+  // clearWindowLoadAutomaStatus clears one-shot load report 清理页面加载后的一次性上报
+  const clearWindowLoadAutomaStatus = () => {
+    if (windowLoadStatusTimer) window.clearTimeout(windowLoadStatusTimer)
+    if (windowLoadStatusHandler) window.removeEventListener('load', windowLoadStatusHandler)
+    windowLoadStatusTimer = 0
+    windowLoadStatusHandler = null
+  }
+
   // sendHeartbeat reports liveness only 上报在线心跳
   const sendHeartbeat = () => {
     if (!enableHeartbeat) return
@@ -183,13 +216,17 @@ export function createAgentSocket({
 
     if (!commandId || !executionId || waitResult) return
     workflowResultCommandIds.set(executionId, commandId)
+    workflowCommandPayloads.set(executionId, data)
   }
 
   // untrackWorkflowCommand removes failed async workflow mapping 清理失败的异步工作流映射
   const untrackWorkflowCommand = (payload) => {
     const data = payload?.payload || {}
     const executionId = String(data.execution_id || data.executionId || '').trim()
-    if (executionId) workflowResultCommandIds.delete(executionId)
+    if (executionId) {
+      workflowResultCommandIds.delete(executionId)
+      workflowCommandPayloads.delete(executionId)
+    }
   }
 
   // handleWorkflowResultEvent forwards async final result 回传异步工作流最终结果
@@ -202,7 +239,17 @@ export function createAgentSocket({
     if (!commandId) return
 
     workflowResultCommandIds.delete(executionId)
+    const commandPayload = workflowCommandPayloads.get(executionId) || {}
+    workflowCommandPayloads.delete(executionId)
     const success = detail.ok !== false && detail.status !== 'error'
+    onCommandResult?.({
+      command: 'automa.workflow.run',
+      payload: commandPayload,
+      result: detail,
+      success,
+      error: success ? '' : String(detail.message || detail.error || '').trim(),
+      async: true,
+    })
     sendResult({
       type: 'agent_result',
       command_id: commandId,
@@ -319,6 +366,14 @@ export function createAgentSocket({
         payload.command === WORKFLOW_INVENTORY_REFRESH_COMMAND
           ? await sendWorkflowInventory({ force: true })
           : await onCommand(payload.command, payload.payload || {}, payload)
+      onCommandResult?.({
+        command: payload.command,
+        payload: payload.payload || {},
+        result: data,
+        success: true,
+        error: '',
+        async: false,
+      })
       sendResult({
         type: 'agent_result',
         command_id: payload.command_id,
@@ -327,6 +382,14 @@ export function createAgentSocket({
       })
     } catch (error) {
       untrackWorkflowCommand(payload)
+      onCommandResult?.({
+        command: payload.command,
+        payload: payload.payload || {},
+        result: null,
+        success: false,
+        error: error.message,
+        async: false,
+      })
       sendResult({
         type: 'agent_result',
         command_id: payload.command_id,
@@ -347,6 +410,7 @@ export function createAgentSocket({
     if (statusTimer) window.clearInterval(statusTimer)
     if (heartbeatTimer) window.clearInterval(heartbeatTimer)
     if (workflowInventoryTimer) window.clearInterval(workflowInventoryTimer)
+    clearWindowLoadAutomaStatus()
     statusTimer = null
     heartbeatTimer = null
     workflowInventoryTimer = null
@@ -406,18 +470,24 @@ export function createAgentSocket({
 
     socket = new WebSocket(wsUrl || getWSURL())
 
-    socket.addEventListener('open', () => {
+    socket.addEventListener('open', async () => {
       reconnectCount = 0
       clearSocketTimers()
       resetWorkflowInventoryCache()
-      registerAgent()
-      statusTimer = window.setInterval(sendAutomaStatus, AUTOMA_STATUS_INTERVAL_MS)
+      try {
+        await registerAgent()
+      } catch (error) {
+        onError?.(error)
+      }
+      scheduleWindowLoadAutomaStatus()
+      if (enableAutomaStatusPolling) {
+        statusTimer = window.setInterval(sendAutomaStatus, AUTOMA_STATUS_INTERVAL_MS)
+      }
       if (enableHeartbeat) {
         heartbeatTimer = window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS)
       }
       if (enableWorkflowInventory) {
         workflowInventoryTimer = window.setInterval(sendWorkflowInventory, WORKFLOW_INVENTORY_INTERVAL_MS)
-        window.setTimeout(sendWorkflowInventory, 1000)
       }
     })
 
@@ -446,6 +516,7 @@ export function createAgentSocket({
     stopped = true
     window.removeEventListener(AUTOMA_WORKFLOW_RESULT_EVENT, handleWorkflowResultEvent)
     workflowResultCommandIds.clear()
+    workflowCommandPayloads.clear()
     if (reconnectTimer) window.clearTimeout(reconnectTimer)
     if (automaRefreshTimer) window.clearTimeout(automaRefreshTimer)
     clearSocketTimers()

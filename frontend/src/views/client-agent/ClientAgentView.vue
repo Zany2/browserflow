@@ -43,19 +43,19 @@
             下载插件
           </a>
           <small v-else>
-            {{ automaInstalled ? '可以接收工作流和任务指令' : '请先安装并启用 Automa 插件' }}
+            {{ automaStatusHint }}
           </small>
         </article>
 
         <article class="overview-card">
           <span class="overview-label">当前 IP</span>
-          <strong>{{ currentIp || '-' }}</strong>
+          <strong>{{ currentIp || '' }}</strong>
           <small>优先显示后端注册回传的客户端 IP</small>
         </article>
 
         <article class="overview-card">
           <span class="overview-label">客户端标识</span>
-          <strong>{{ browserId || '-' }}</strong>
+          <strong>{{ browserId || '' }}</strong>
           <small>{{ roleLabel }}</small>
         </article>
       </section>
@@ -63,23 +63,32 @@
       <section class="detail-grid">
         <article class="detail-card">
           <div class="detail-card__header">
-            <h2>最近命令</h2>
+            <h2>执行概览</h2>
+            <span>只汇总后端下发的任务</span>
           </div>
 
-          <el-descriptions border :column="1">
-            <el-descriptions-item label="命令">{{ lastCommand || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="结果">{{ lastResult || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="最后更新">{{ lastCommandTime || '-' }}</el-descriptions-item>
+          <el-descriptions class="task-overview-descriptions" border :column="1" label-width="88px">
+            <el-descriptions-item label="最后任务">
+              <span class="single-line-text" :title="latestTaskName">{{ latestTaskName || '' }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="最后状态">
+              <el-tag v-if="latestTaskStatus" :type="getTaskStatusTagType(latestTaskStatus)" effect="plain">
+                {{ getTaskStatusText(latestTaskStatus) }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="最后更新">
+              <span class="single-line-text" :title="latestTaskUpdatedAt">{{ latestTaskUpdatedAt || '' }}</span>
+            </el-descriptions-item>
           </el-descriptions>
         </article>
 
         <article class="detail-card detail-card--messages">
           <div class="detail-card__header">
-            <h2>最近消息</h2>
-            <span>最多保留 20 条</span>
+            <h2>最新任务消息</h2>
+            <span>仅保留最近 10 条任务下发和最终状态</span>
           </div>
 
-          <div v-if="messageLogs.length === 0" class="message-empty">等待后端消息...</div>
+          <div v-if="messageLogs.length === 0" class="message-empty">等待后端任务...</div>
           <div v-else class="message-list">
             <article v-for="item in messageLogs" :key="item.id" class="message-item">
               <div class="message-item__head">
@@ -96,103 +105,26 @@
       </section>
     </section>
 
-    <AppDialog
-      v-model="syncDialogVisible"
-      title="同步后端工作流到本地 Automa"
-      width="980px"
-    >
-      <div class="sync-dialog">
-        <div class="sync-toolbar">
-          <el-input
-            v-model="syncKeyword"
-            clearable
-            placeholder="搜索后端工作流名称、ID、来源 IP"
-            @clear="handleSyncSearch"
-            @keyup.enter="handleSyncSearch"
-          />
-          <el-button :loading="syncListLoading" @click="handleSyncSearch">刷新列表</el-button>
-          <el-button :loading="localWorkflowLoading" @click="loadLocalWorkflows">刷新本地</el-button>
-        </div>
-
-        <el-table
-          v-loading="syncListLoading"
-          class="adaptive-table"
-          :data="syncableWorkflows"
-          border
-          height="420"
-          row-key="id"
-          @selection-change="handleSyncSelectionChange"
-        >
-          <el-table-column type="selection" width="40" reserve-selection />
-          <el-table-column label="工作流名称" min-width="180">
-            <template #default="{ row }">
-              {{ row.name || '' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="工作流描述" min-width="180">
-            <template #default="{ row }">
-              {{ row.description || '' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="本地状态" width="96" align="center">
-            <template #default="{ row }">
-              <el-tag :type="getLocalWorkflowTagType(row)" effect="plain">
-                {{ getLocalWorkflowText(row) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="更新时间" width="160" class-name="nowrap-column">
-            <template #default="{ row }">
-              {{ formatDate(getServerWorkflowUpdatedAt(row)) }}
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div class="sync-footer">
-          <span class="sync-summary">已选择 {{ selectedSyncIds.length }} 个工作流</span>
-          <AppPagination
-            v-model:current-page="syncPageNum"
-            v-model:page-size="syncPageSize"
-            :total="syncTotal"
-            layout="total, sizes, prev, pager, next"
-          />
-        </div>
-      </div>
-
-      <template #footer>
-        <el-button @click="syncDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="syncing"
-          :disabled="selectedSyncIds.length === 0"
-          @click="handleSyncSelectedWorkflows"
-        >
-          同步到本地 Automa
-        </el-button>
-      </template>
-    </AppDialog>
+    <ClientAgentSyncDialog v-model="syncDialogVisible" />
   </main>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import AppDialog from '@/components/AppDialog.vue'
-import AppPagination from '@/components/AppPagination.vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
-import { getAutomaWorkflowDetail, listAutomaWorkflows } from '@/services/automa'
 import { createAgentSocket } from '@/services/agentWs'
 import { checkClient } from '@/services/client'
 import { localCache } from '@/utils/storage'
+import ClientAgentSyncDialog from './components/ClientAgentSyncDialog.vue'
 import {
   getAutomaWorkflows,
   getAutomaInfo,
-  importAutomaWorkflow,
   openAutomaWorkflow,
   runAutomaWorkflow,
 } from '@/services/automaBridge'
 
-const MAX_LOG_COUNT = 20
+const MAX_LOG_COUNT = 10
 const CLIENT_AGENT_ID_STORAGE_KEY = 'browserflow_client_agent_id'
 const pluginDownloadUrl = import.meta.env.VITE_AUTOMA_PLUGIN_DOWNLOAD_URL || ''
 
@@ -203,68 +135,48 @@ const role = String(route.query.role || 'client_agent')
 
 const status = ref('connecting')
 const automaInstalled = ref(false)
+const automaCheckedAt = ref('')
 const currentIp = ref(String(route.query.ip || ''))
-const lastCommand = ref('')
-const lastResult = ref('')
-const lastCommandTime = ref('')
+const latestTaskName = ref('')
+const latestTaskStatus = ref('')
+const latestTaskUpdatedAt = ref('')
 const blockedReason = ref('')
 const messageLogs = ref([])
 const syncDialogVisible = ref(false)
-const syncKeyword = ref('')
-const syncableWorkflows = ref([])
-const selectedSyncRows = ref([])
-const syncTotal = ref(0)
-const syncPageNum = ref(1)
-const syncPageSize = ref(10)
-const localWorkflowLoading = ref(false)
-const syncListLoading = ref(false)
-const syncing = ref(false)
-const localWorkflowMap = ref(new Map())
 const closeSocketHandler = ref(null)
-const pluginStateTimer = ref(0)
 
 const connectionHint = computed(() => {
   if (blockedReason.value) return blockedReason.value
   if (status.value === 'online') return '已与后端保持连接'
   if (status.value === 'connecting') return '正在建立连接'
   if (status.value === 'reconnecting') return '连接已断开，正在自动重连'
+  if (status.value === 'manual_offline') return '已手动断开连接，可点击恢复连接'
   return '连接已断开，可手动恢复'
 })
 
-const roleLabel = computed(() => {
-  return role === 'browser_agent' ? 'Browser Agent 兼容模式' : 'Client Agent'
+const automaStatusHint = computed(() => {
+  const baseText = automaInstalled.value ? '可以接收工作流和任务指令' : '请先安装并启用 Automa 插件'
+  return automaCheckedAt.value ? `${baseText}，最后检测：${automaCheckedAt.value}` : baseText
 })
 
-const selectedSyncIds = computed(() => {
-  return selectedSyncRows.value.map((item) => getServerWorkflowId(item)).filter(Boolean)
+const roleLabel = computed(() => {
+  return role === 'browser_agent' ? 'Browser Agent 兼容模式' : '目前仅做展示使用'
 })
 
 onMounted(() => {
   refreshAutomaState()
   connectSocket()
-  pluginStateTimer.value = window.setInterval(refreshAutomaState, 2000)
 })
 
 onBeforeUnmount(() => {
-  if (pluginStateTimer.value) {
-    window.clearInterval(pluginStateTimer.value)
-  }
   closeSocketHandler.value?.()
-})
-
-watch(syncPageNum, () => {
-  if (!syncDialogVisible.value) return
-  loadSyncableWorkflows()
-})
-
-watch(syncPageSize, () => {
-  if (!syncDialogVisible.value) return
-  loadFirstSyncPage()
 })
 
 async function refreshAutomaState() {
   const automaInfo = await getAutomaInfo()
   automaInstalled.value = automaInfo.installed
+  automaCheckedAt.value = new Date().toLocaleTimeString()
+  return automaInfo
 }
 
 function connectSocket() {
@@ -273,44 +185,26 @@ function connectSocket() {
     browserId,
     token,
     role,
+    enableHeartbeat: true,
+    enableWorkflowInventory: true,
+    enableAutomaStatusPolling: false,
+    reportAutomaStatusOnWindowLoad: true,
     beforeConnect: ensureClientAllowedBeforeConnect,
     getAutomaInstalled: () => automaInstalled.value,
-    getAutomaInfo,
+    getAutomaInfo: refreshAutomaState,
     getWorkflows: getAutomaWorkflows,
     onCommand: handleCommand,
+    onCommandResult: handleCommandResult,
     onStatus: (nextStatus) => {
       status.value = nextStatus
-      appendLog({
-        type: 'system',
-        title: '连接状态',
-        message: getConnectionText(nextStatus),
-      })
     },
     onRegistered: (payload) => {
       const ip = payload?.ip || payload?.client?.ip || payload?.client_ip || payload?.remote_ip || ''
       if (ip) currentIp.value = ip
-      appendLog({
-        type: 'system',
-        title: '注册成功',
-        message: JSON.stringify(payload, null, 2),
-      })
     },
-    onMessage: (payload) => {
-      if (payload?.type === 'agent_registered' || payload?.type === 'heartbeat_ack') return
-      appendLog({
-        type: 'socket',
-        title: payload?.type || 'socket.message',
-        message: JSON.stringify(payload || {}, null, 2),
-      })
-    },
+    onMessage: () => {},
     onNoReconnect: handleNoReconnect,
     onError: (error) => {
-      lastResult.value = error.message
-      appendLog({
-        type: 'error',
-        title: '连接异常',
-        message: error.message,
-      })
       appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
     },
   })
@@ -319,22 +213,12 @@ function connectSocket() {
 function disconnectSocket() {
   closeSocketHandler.value?.()
   closeSocketHandler.value = null
-  status.value = 'offline'
+  status.value = 'manual_offline'
   blockedReason.value = ''
-  appendLog({
-    type: 'system',
-    title: '连接操作',
-    message: '已手动断开连接',
-  })
 }
 
 function reconnectSocket() {
   blockedReason.value = ''
-  appendLog({
-    type: 'system',
-    title: '连接操作',
-    message: '正在重新连接后端',
-  })
   connectSocket()
 }
 
@@ -347,13 +231,7 @@ async function ensureClientAllowedBeforeConnect() {
     const reason = data?.reason || '当前客户端 IP 已被拉黑，将持续检测，解除拉黑后自动重连'
     const shouldNotify = blockedReason.value !== reason
     blockedReason.value = reason
-    lastResult.value = reason
     if (shouldNotify) {
-      appendLog({
-        type: 'error',
-        title: '连接被拒绝',
-        message: reason,
-      })
       appMessage({ type: APP_MESSAGE_TYPE.warning, message: reason })
     }
     return false
@@ -371,29 +249,24 @@ function handleNoReconnect(payload) {
     '当前客户端已被拉黑，将持续检测，解除拉黑后自动重连'
   const shouldNotify = blockedReason.value !== reason
   blockedReason.value = reason
-  lastResult.value = reason
   if (shouldNotify) {
-    appendLog({
-      type: 'error',
-      title: '拉黑暂停连接',
-      message: reason,
-    })
     appMessage({ type: APP_MESSAGE_TYPE.warning, message: reason })
   }
 }
 
 async function handleCommand(command, payload) {
-  lastCommand.value = command
-  lastCommandTime.value = new Date().toLocaleString()
-  appendLog({
-    type: 'command',
-    title: command,
-    message: JSON.stringify(payload || {}, null, 2),
-  })
+  if (isTaskCommand(command)) {
+    updateTaskOverview(payload, '已下发')
+    appendTaskLog({
+      type: 'command',
+      title: '收到后端任务',
+      command,
+      payload,
+    })
+  }
 
   if (command === 'automa.workflow.list') {
     const workflows = await getAutomaWorkflows()
-    lastResult.value = `已读取 ${workflows.length} 个工作流`
     return {
       ok: true,
       total: workflows.length,
@@ -404,7 +277,6 @@ async function handleCommand(command, payload) {
   if (command === 'automa.workflow.open') {
     const workflowId = payload.id || payload.workflowId || payload.workflow_id || ''
     openAutomaWorkflow(workflowId)
-    lastResult.value = `已打开工作流：${workflowId || '-'}`
     return { ok: true, workflow_id: workflowId }
   }
 
@@ -427,11 +299,7 @@ async function handleCommand(command, payload) {
       returnData: payload.return_data || payload.returnData || null,
     })
 
-    lastResult.value = waitResult
-      ? `????????${result.status || '-'}`
-      : taskId
-        ? `????????${taskName || taskId}`
-        : '??????????'
+    updateTaskOverview(payload, waitResult ? resolveTaskStatus(result, true) : '执行中')
 
     return {
       ...result,
@@ -447,6 +315,28 @@ async function handleCommand(command, payload) {
   throw new Error(`不支持的客户端命令: ${command}`)
 }
 
+function handleCommandResult({ command, payload, result, success, error, async: asyncResult }) {
+  if (!isTaskCommand(command)) return
+
+  const status = resolveTaskStatus(result, success)
+  const isIntermediateStatus = !asyncResult && success && isIntermediateTaskStatus(status)
+  updateTaskOverview(payload, isIntermediateStatus ? '执行中' : status)
+  if (isIntermediateStatus) return
+
+  const title = success ? (asyncResult ? '任务最终结果' : '任务执行结果') : '任务执行失败'
+  const message = success
+    ? formatTaskResultMessage(command, payload, result)
+    : `${formatTaskName(payload)}执行失败：${error || '未知错误'}`
+  appendTaskLog({
+    type: success ? 'command' : 'error',
+    title,
+    command,
+    payload,
+    result,
+    message,
+  })
+}
+
 async function openSyncDialog() {
   if (!automaInstalled.value) {
     appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先安装并启用 Automa 插件' })
@@ -454,89 +344,66 @@ async function openSyncDialog() {
   }
 
   syncDialogVisible.value = true
-  await Promise.all([loadSyncableWorkflows(), loadLocalWorkflows()])
 }
 
-async function loadSyncableWorkflows() {
-  syncListLoading.value = true
-
-  try {
-    const data = await listAutomaWorkflows({
-      keyword: syncKeyword.value.trim(),
-      page_num: syncPageNum.value,
-      page_size: syncPageSize.value,
-      syncable: 1,
-    })
-    const workflowList = normalizeList(data, 'workflows').filter((item) => !item.is_deleted)
-    syncableWorkflows.value = await enrichSyncableWorkflowHashes(workflowList)
-    syncTotal.value = Number(data?.total || 0)
-  } catch (error) {
-    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message || '读取后端工作流失败' })
-  } finally {
-    syncListLoading.value = false
-  }
+function appendTaskLog({ type, title, command, payload, result, message }) {
+  appendLog({
+    type,
+    title,
+    message: message || JSON.stringify({
+      command,
+      task: formatTaskName(payload),
+      payload: payload || {},
+      result: result || null,
+    }, null, 2),
+  })
 }
 
-async function loadLocalWorkflows() {
-  localWorkflowLoading.value = true
-
-  try {
-    const workflows = await getAutomaWorkflows()
-    localWorkflowMap.value = await buildLocalWorkflowMap(workflows)
-  } catch (error) {
-    appendLog({
-      type: 'error',
-      title: '读取本地工作流失败',
-      message: error.message,
-    })
-  } finally {
-    localWorkflowLoading.value = false
-  }
+function updateTaskOverview(payload = {}, statusText = '') {
+  latestTaskName.value = formatTaskName(payload)
+  latestTaskStatus.value = statusText
+  latestTaskUpdatedAt.value = new Date().toLocaleString()
 }
 
-function handleSyncSelectionChange(selection) {
-  selectedSyncRows.value = selection
+function isTaskCommand(command) {
+  return command === 'automa.workflow.run' || command === 'task.execute' || command === 'task.run'
 }
 
-function handleSyncSearch() {
-  loadFirstSyncPage()
+function resolveTaskStatus(result = {}, success = true) {
+  if (!success) return 'failed'
+  const status = String(result?.status || '').trim()
+  if (status) return status
+  return result?.ok === false ? 'failed' : 'success'
 }
 
-function loadFirstSyncPage() {
-  if (syncPageNum.value === 1) {
-    loadSyncableWorkflows()
-    return
-  }
-
-  syncPageNum.value = 1
+function isIntermediateTaskStatus(status = '') {
+  return ['queued', 'submitted', 'pending', 'running'].includes(String(status).toLowerCase())
 }
 
-async function handleSyncSelectedWorkflows() {
-  syncing.value = true
+function formatTaskName(payload = {}) {
+  return (
+    payload.task_name ||
+    payload.taskName ||
+    payload.workflow_name ||
+    payload.workflowName ||
+    payload.workflow_id ||
+    payload.workflowId ||
+    payload.id ||
+    payload.public_id ||
+    payload.publicId ||
+    '未命名任务'
+  )
+}
 
-  try {
-    let syncedCount = 0
-    for (const row of selectedSyncRows.value) {
-      const workflowId = getServerWorkflowId(row)
-      const data = await getAutomaWorkflowDetail(workflowId)
-      const workflow = data?.workflow || data
-      const result = await importAutomaWorkflow(extractWorkflowImportPayload(workflow))
-      syncedCount += 1
-      appendLog({
-        type: 'system',
-        title: '同步工作流',
-        message: `已同步 ${result?.name || workflow?.name || workflowId}`,
-      })
-    }
-
-    await loadLocalWorkflows()
-    appMessage({ type: APP_MESSAGE_TYPE.success, message: `已同步 ${syncedCount} 个工作流` })
-    syncDialogVisible.value = false
-  } catch (error) {
-    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message || '同步工作流失败' })
-  } finally {
-    syncing.value = false
-  }
+function formatTaskResultMessage(command, payload = {}, result = {}) {
+  const status = result?.status || (result?.ok === false ? 'failed' : 'success')
+  const taskName = formatTaskName(payload)
+  return JSON.stringify({
+    command,
+    task: taskName,
+    status,
+    result,
+  }, null, 2)
 }
 
 function appendLog({ type, title, message }) {
@@ -552,361 +419,37 @@ function appendLog({ type, title, message }) {
   ].slice(0, MAX_LOG_COUNT)
 }
 
-function normalizeList(data, fallbackKey) {
-  const list = data?.list || data?.[fallbackKey] || []
-  return Array.isArray(list) ? list : []
-}
-
-async function enrichSyncableWorkflowHashes(workflows) {
-  return Promise.all(workflows.map(async (workflow) => {
-    try {
-      const detail = await getAutomaWorkflowDetail(getServerWorkflowId(workflow))
-      const detailWorkflow = parseWorkflowPayload(detail?.raw_json || detail?.rawJson || detail?.normalized_json || detail?.normalizedJson)
-      return {
-        ...workflow,
-        content_hash: workflow.content_hash || detail?.content_hash || detail?.contentHash || '',
-        serverContentHash: detailWorkflow ? await createWorkflowContentHash(detailWorkflow) : '',
-        updated_at_automa:
-          workflow.updated_at_automa || detail?.updated_at_automa || detail?.updatedAtAutoma || 0,
-      }
-    } catch {
-      return workflow
-    }
-  }))
-}
-
-function extractWorkflowImportPayload(workflow) {
-  if (!workflow) {
-    throw new Error('工作流详情为空，无法同步')
-  }
-
-  const rawWorkflow =
-    workflow.raw_json ||
-    workflow.rawJson ||
-    workflow.normalized_json ||
-    workflow.normalizedJson ||
-    workflow.data
-
-  const parsedWorkflow = parseWorkflowPayload(rawWorkflow)
-  const payload = parsedWorkflow || {
-    id: workflow.automa_id || workflow.workflow_id || workflow.id,
-    name: workflow.name,
-    description: workflow.description,
-    drawflow: workflow.drawflow_json || workflow.drawflow || {},
-    settings: workflow.settings_json || workflow.settings || {},
-    table: workflow.table_json || workflow.table || [],
-    dataColumns: workflow.data_columns_json || workflow.dataColumns || [],
-    trigger: workflow.trigger_json || workflow.trigger || null,
-    globalData: workflow.global_data || '',
-  }
-
-  const automaId = workflow.automa_id || workflow.automaId || workflow.workflow_id || payload.id
-  if (automaId) {
-    payload.id = automaId
-  }
-
-  const createdAt = resolveAutomaTimestamp(
-    workflow.created_at_automa,
-    workflow.createdAtAutoma,
-    payload.createdAt,
-  )
-  const updatedAt = resolveAutomaTimestamp(
-    workflow.updated_at_automa,
-    workflow.updatedAtAutoma,
-    payload.updatedAt,
-  )
-  if (createdAt) {
-    payload.createdAt = createdAt
-  }
-  if (updatedAt) {
-    payload.updatedAt = updatedAt
-  }
-  if (!payload.table && payload.dataColumns) {
-    payload.table = payload.dataColumns
-  }
-
-  return payload
-}
-
-function parseWorkflowPayload(value) {
-  if (!value) return null
-  if (typeof value === 'object') return { ...value }
-  if (typeof value !== 'string') return null
-
-  try {
-    const parsed = JSON.parse(value)
-    return parsed && typeof parsed === 'object' ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function resolveAutomaTimestamp(...values) {
-  for (const value of values) {
-    if (!value) continue
-
-    const numberValue = Number(value)
-    if (Number.isFinite(numberValue) && numberValue > 0) return numberValue
-
-    const dateValue = new Date(value).getTime()
-    if (!Number.isNaN(dateValue)) return dateValue
-  }
-
-  return 0
-}
-
-function getServerWorkflowId(row) {
-  return row?.id || row?.server_id || row?.automa_id || row?.workflow_id || row?.workflowId || ''
-}
-
-function getWorkflowDisplayId(row) {
-  return row?.automa_id || row?.workflow_id || row?.workflowId || row?.id || ''
-}
-
-function getLocalWorkflowId(row) {
-  return row?.id || row?.automaId || row?.automa_id || row?.workflowId || ''
-}
-
-function getLocalWorkflowText(row) {
-  return getLocalWorkflowStatus(row).text
-}
-
-function getLocalWorkflowTagType(row) {
-  return getLocalWorkflowStatus(row).type
-}
-
-function getLocalWorkflowStatus(row) {
-  const localWorkflow = getMatchedLocalWorkflow(row)
-  if (!localWorkflow) {
-    return { text: '待同步', type: 'info' }
-  }
-
-  const serverHash = String(row?.serverContentHash || row?.content_hash || row?.contentHash || '').trim()
-  const localHash = String(localWorkflow.contentHash || '').trim()
-  if (serverHash && localHash && serverHash === localHash) {
-    return { text: '已同步', type: 'success' }
-  }
-  if (serverHash && localHash) {
-    return { text: '本地有差异', type: 'warning' }
-  }
-
-  return { text: '本地已存在', type: 'primary' }
-}
-
-function getMatchedLocalWorkflow(row) {
-  return localWorkflowMap.value.get(getWorkflowDisplayId(row)) || null
-}
-
-async function buildLocalWorkflowMap(workflows) {
-  const workflowMap = new Map()
-  await Promise.all(workflows.map(async (workflow) => {
-    const workflowId = getLocalWorkflowId(workflow)
-    if (workflowId) {
-      workflowMap.set(workflowId, {
-        ...workflow,
-        contentHash: await createWorkflowContentHash(workflow),
-      })
-    }
-  }))
-
-  return workflowMap
-}
-
-async function createWorkflowContentHash(workflow) {
-  const coreWorkflowData = {
-    id: normalizeHashText(workflow?.id),
-    name: normalizeHashText(workflow?.name),
-    icon: normalizeHashText(workflow?.icon),
-    table: workflow?.table ?? workflow?.dataColumns ?? [],
-    drawflow: normalizeHashDrawflow(parseHashJsonValue(workflow?.drawflow)),
-    settings: workflow?.settings ?? {},
-    globalData: workflow?.globalData ?? '',
-    description: normalizeHashText(workflow?.description),
-  }
-  return sha256Hex(stableStringify(coreWorkflowData))
-}
-
-function parseHashJsonValue(value) {
-  if (value === undefined) return null
-  if (typeof value !== 'string') return value
-  const text = value.trim()
-  if (!text) return value
-
-  try {
-    return JSON.parse(text)
-  } catch {
-    return value
-  }
-}
-
-function normalizeHashText(value) {
-  return String(value || '').trim()
-}
-
-function normalizeHashDrawflow(value) {
-  if (!value || typeof value !== 'object') return value
-
-  const drawflow = cloneHashValue(value)
-  if (Array.isArray(drawflow.edges)) {
-    drawflow.edges = drawflow.edges.map(normalizeHashEdge)
-  }
-
-  return drawflow
-}
-
-function normalizeHashEdge(edge) {
-  if (!edge || typeof edge !== 'object') return edge
-
-  const nextEdge = { ...edge }
-  delete nextEdge.sourceNode
-  delete nextEdge.targetNode
-  return nextEdge
-}
-
-function cloneHashValue(value) {
-  if (Array.isArray(value)) return value.map(cloneHashValue)
-  if (value && typeof value === 'object') {
-    return Object.keys(value).reduce((nextValue, key) => {
-      nextValue[key] = cloneHashValue(value[key])
-      return nextValue
-    }, {})
-  }
-
-  return value
-}
-
-function stableStringify(value) {
-  if (value === undefined) return 'null'
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(',')}]`
-  }
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${goJsonStringify(key)}:${stableStringify(value[key])}`)
-      .join(',')}}`
-  }
-  return typeof value === 'string' ? goJsonStringify(value) : JSON.stringify(value)
-}
-
-function goJsonStringify(value) {
-  return JSON.stringify(value)
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029')
-}
-
-async function sha256Hex(value) {
-  if (window.crypto?.subtle) {
-    try {
-      const bytes = new TextEncoder().encode(value)
-      const hashBuffer = await window.crypto.subtle.digest('SHA-256', bytes)
-      return Array.from(new Uint8Array(hashBuffer))
-        .map((item) => item.toString(16).padStart(2, '0'))
-        .join('')
-    } catch {
-      return sha256HexFallback(value)
-    }
-  }
-
-  return sha256HexFallback(value)
-}
-
-function sha256HexFallback(value) {
-  const bytes = new TextEncoder().encode(value)
-  const words = bytesToSha256Words(bytes)
-  const bitLength = bytes.length * 8
-  words[bitLength >> 5] |= 0x80 << (24 - (bitLength % 32))
-  words[(((bitLength + 64) >> 9) << 4) + 15] = bitLength
-
-  const hash = [
-    0x6a09e667,
-    0xbb67ae85,
-    0x3c6ef372,
-    0xa54ff53a,
-    0x510e527f,
-    0x9b05688c,
-    0x1f83d9ab,
-    0x5be0cd19,
-  ]
-  const constants = [
-    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-  ]
-
-  for (let i = 0; i < words.length; i += 16) {
-    const chunk = words.slice(i, i + 16)
-    const state = hash.slice()
-    for (let j = 0; j < 64; j += 1) {
-      if (j >= 16) {
-        const s0 = rotateRight(chunk[j - 15], 7) ^ rotateRight(chunk[j - 15], 18) ^ (chunk[j - 15] >>> 3)
-        const s1 = rotateRight(chunk[j - 2], 17) ^ rotateRight(chunk[j - 2], 19) ^ (chunk[j - 2] >>> 10)
-        chunk[j] = add32(chunk[j - 16], s0, chunk[j - 7], s1)
-      }
-      const s1 = rotateRight(state[4], 6) ^ rotateRight(state[4], 11) ^ rotateRight(state[4], 25)
-      const ch = (state[4] & state[5]) ^ (~state[4] & state[6])
-      const temp1 = add32(state[7], s1, ch, constants[j], chunk[j])
-      const s0 = rotateRight(state[0], 2) ^ rotateRight(state[0], 13) ^ rotateRight(state[0], 22)
-      const maj = (state[0] & state[1]) ^ (state[0] & state[2]) ^ (state[1] & state[2])
-      const temp2 = add32(s0, maj)
-
-      state[7] = state[6]
-      state[6] = state[5]
-      state[5] = state[4]
-      state[4] = add32(state[3], temp1)
-      state[3] = state[2]
-      state[2] = state[1]
-      state[1] = state[0]
-      state[0] = add32(temp1, temp2)
-    }
-
-    for (let j = 0; j < 8; j += 1) {
-      hash[j] = add32(hash[j], state[j])
-    }
-  }
-
-  return hash.map((item) => (item >>> 0).toString(16).padStart(8, '0')).join('')
-}
-
-function bytesToSha256Words(bytes) {
-  const words = []
-  bytes.forEach((byte, index) => {
-    words[index >> 2] = (words[index >> 2] || 0) | (byte << (24 - (index % 4) * 8))
-  })
-  return words
-}
-
-function rotateRight(value, shift) {
-  return (value >>> shift) | (value << (32 - shift))
-}
-
-function add32(...values) {
-  return values.reduce((sum, value) => (sum + (value | 0)) | 0, 0)
-}
-
-function getServerWorkflowUpdatedAt(row) {
-  return row?.updated_at_automa || row?.updatedAtAutoma || row?.updated_at || row?.updatedAt
-}
-
 function getConnectionText(value) {
   if (value === 'online') return '已连接'
   if (value === 'connecting') return '连接中'
   if (value === 'reconnecting') return '自动重连中'
+  if (value === 'manual_offline') return '手动断开'
   return '已断开'
 }
 
 function getConnectionTagType(value) {
   if (value === 'online') return 'success'
   if (value === 'connecting' || value === 'reconnecting') return 'warning'
+  if (value === 'manual_offline') return 'info'
   return 'info'
+}
+
+function getTaskStatusTagType(value) {
+  const statusText = String(value || '').toLowerCase()
+  if (['success', 'completed', 'complete', 'done'].includes(statusText)) return 'success'
+  if (['failed', 'failure', 'error', 'timeout'].includes(statusText)) return 'danger'
+  if (['已下发', '执行中', 'queued', 'submitted', 'pending', 'running'].includes(statusText)) return 'warning'
+  return 'info'
+}
+
+function getTaskStatusText(value) {
+  const statusText = String(value || '')
+  const lowerStatusText = statusText.toLowerCase()
+  if (['success', 'completed', 'complete', 'done'].includes(lowerStatusText)) return '执行成功'
+  if (['failed', 'failure', 'error'].includes(lowerStatusText)) return '执行失败'
+  if (lowerStatusText === 'timeout') return '执行超时'
+  if (['queued', 'submitted', 'pending', 'running'].includes(lowerStatusText)) return '执行中'
+  return statusText
 }
 
 function getLogTagType(type) {
@@ -921,28 +464,6 @@ function getLogTypeText(type) {
   if (type === 'command') return '命令'
   if (type === 'socket') return '消息'
   return '系统'
-}
-
-function formatDate(value) {
-  if (!value) return ''
-  const timestamp = Number(value)
-  const date = new Date(Number.isFinite(timestamp) ? normalizeTimestamp(timestamp) : value)
-  if (Number.isNaN(date.getTime())) return ''
-  const year = date.getFullYear()
-  const month = padDatePart(date.getMonth() + 1)
-  const day = padDatePart(date.getDate())
-  const hour = padDatePart(date.getHours())
-  const minute = padDatePart(date.getMinutes())
-  const second = padDatePart(date.getSeconds())
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-}
-
-function normalizeTimestamp(value) {
-  return value > 0 && value < 10000000000 ? value * 1000 : value
-}
-
-function padDatePart(value) {
-  return String(value).padStart(2, '0')
 }
 
 function resolveClientAgentId() {
@@ -1067,6 +588,27 @@ function resolveClientAgentId() {
   min-height: 0;
 }
 
+.task-overview-descriptions {
+  :deep(.el-descriptions__label) {
+    width: 88px;
+    min-width: 88px;
+    white-space: nowrap;
+  }
+
+  :deep(.el-descriptions__content) {
+    min-width: 0;
+    text-align: left;
+  }
+}
+
+.single-line-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .detail-card__header {
   display: flex;
   align-items: center;
@@ -1133,6 +675,7 @@ function resolveClientAgentId() {
 }
 
 .message-item pre {
+  max-height: 180px;
   margin: 0;
   overflow: auto;
   color: #334155;
@@ -1140,35 +683,6 @@ function resolveClientAgentId() {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.sync-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.sync-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 12px;
-}
-
-.sync-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.sync-footer :deep(.app-pagination) {
-  justify-content: flex-end;
-  margin-top: 0;
-}
-
-.sync-summary {
-  color: #64748b;
-  white-space: nowrap;
 }
 
 @media (max-width: 1080px) {
@@ -1195,15 +709,8 @@ function resolveClientAgentId() {
     align-items: stretch;
   }
 
-  .overview-grid,
-  .sync-toolbar,
-  .sync-footer {
+  .overview-grid {
     grid-template-columns: 1fr;
-  }
-
-  .sync-footer {
-    align-items: stretch;
-    flex-direction: column;
   }
 }
 </style>

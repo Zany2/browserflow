@@ -42,9 +42,12 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 		state.LLMClient = llm.NewClient()
 	}
 	db := state.DB
-	frontendURL := os.Getenv("FRONTEND_URL")
+	frontendURL := g.Cfg().MustGet(ctx, "frontend.url", "").String()
 	if frontendURL == "" {
-		frontendURL = g.Cfg().MustGet(ctx, "frontend.url", "http://localhost:5173").String()
+		frontendURL = os.Getenv("FRONTEND_URL")
+	}
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
 	}
 	state.DBMu.Unlock()
 

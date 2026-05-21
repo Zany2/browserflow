@@ -8,7 +8,6 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/consts"
 	"github.com/Zany2/browserflow/backend/internal/controller/agents"
 	"github.com/Zany2/browserflow/backend/internal/controller/app"
-	"github.com/Zany2/browserflow/backend/internal/controller/automa"
 	"github.com/Zany2/browserflow/backend/internal/controller/browser"
 	"github.com/Zany2/browserflow/backend/internal/controller/browserexecutor"
 	"github.com/Zany2/browserflow/backend/internal/controller/chat"
@@ -72,8 +71,8 @@ var (
 						group.Bind(taskrecords.NewV1())
 					})
 					group.Group("/automa", func(group *ghttp.RouterGroup) {
-						// Automa keeps the server workflow management surface. Automa 接口保留服务端工作流管理能力。
-						group.Bind(automa.NewV1())
+						// Automa reuses the shared workflow controller so server mode stays on PostgreSQL/Redis. Automa 复用工作流控制器，确保 Server 模式只使用 PostgreSQL/Redis。
+						group.Bind(workflows.NewV1())
 					})
 					group.Group("/clients", func(group *ghttp.RouterGroup) {
 						// Clients manages remote client inventory and administrative actions. 客户端接口负责远程客户端列表与管理操作。

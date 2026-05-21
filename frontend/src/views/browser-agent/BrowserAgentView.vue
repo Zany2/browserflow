@@ -7,16 +7,16 @@
       </el-tag>
       <p>此页面用于接收后端下发的命令，并通过页面桥接调用 Automa 扩展。</p>
       <el-descriptions border :column="1">
-        <el-descriptions-item label="Browser ID">{{ browserId || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="Browser ID">{{ browserId || '' }}</el-descriptions-item>
         <el-descriptions-item label="Automa">
           <el-tag :type="automaInstalled ? 'success' : 'info'">
             {{ automaInstalled ? `可用${automaVersion ? ` · ${automaVersion}` : ''}` : '检测中' }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="最后命令">{{ lastCommand || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="Command ID">{{ lastCommandId || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="Execution ID">{{ lastExecutionId || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="执行结果">{{ lastResult || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="最后命令">{{ lastCommand || '' }}</el-descriptions-item>
+        <el-descriptions-item label="Command ID">{{ lastCommandId || '' }}</el-descriptions-item>
+        <el-descriptions-item label="Execution ID">{{ lastExecutionId || '' }}</el-descriptions-item>
+        <el-descriptions-item label="执行结果">{{ lastResult || '' }}</el-descriptions-item>
       </el-descriptions>
     </section>
   </main>
@@ -107,7 +107,7 @@ async function handleCommand(command, payload, rawMessage) {
       timeout: payload.timeout || 300,
       returnData: payload.return_data || payload.returnData || null,
     })
-    lastResult.value = waitResult ? `执行完成：${result.status || '-'}` : '已提交执行'
+    lastResult.value = waitResult ? `执行完成：${result.status || ''}` : '已提交执行'
     return result
   }
 

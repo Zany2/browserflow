@@ -63,7 +63,6 @@ func (c *ControllerV1) ChatMessageSend(ctx context.Context, req *v1.ChatMessageS
 					ID:        "msg_" + guid.S(),
 					SessionID: sessionID,
 					Role:      "assistant",
-					Timestamp: time.Now(),
 				}
 				err = llmClient.StreamChat(ctx, config, session.Messages, func(chunk string) error {
 					assistantMessage.Content += chunk
@@ -73,11 +72,17 @@ func (c *ControllerV1) ChatMessageSend(ctx context.Context, req *v1.ChatMessageS
 					return nil
 				})
 				if err == nil {
+					// Assistant timestamp records completion time 助手消息时间记录回复完成时间
+					assistantMessage.Timestamp = time.Now()
 					session.Messages = append(session.Messages, assistantMessage)
 					err = db.SaveChatSession(session)
 				}
 				if err == nil {
-					data, _ := json.Marshal(model.StreamChunk{Type: "done", MessageID: assistantMessage.ID})
+					data, _ := json.Marshal(model.StreamChunk{
+						Type:      "done",
+						MessageID: assistantMessage.ID,
+						Timestamp: assistantMessage.Timestamp.Format(time.RFC3339Nano),
+					})
 					request.Response.Writef("data: %s\n\n", data)
 					request.Response.Flush()
 				}

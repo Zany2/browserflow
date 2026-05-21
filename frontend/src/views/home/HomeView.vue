@@ -12,7 +12,7 @@
       <div class="hero-status">
         <span class="status-label">当前模式</span>
         <strong>{{ runtimeModeText }}</strong>
-        <template v-if="isServerMode">
+        <template v-if="backendAvailable && isServerMode">
           <span class="status-note">将客户端地址发给执行电脑打开</span>
           <div class="client-link-row">
             <a class="client-link" :href="clientAgentUrl" target="_blank" rel="noreferrer">
@@ -21,21 +21,38 @@
             <el-button link type="primary" @click="copyClientAgentUrl">复制</el-button>
           </div>
         </template>
-        <span v-else class="status-note">公共能力与 Windows 本地能力优先可用</span>
+        <span v-else class="status-note" :class="{ 'status-note--error': !backendAvailable }">
+          {{ runtimeStatusNote }}
+        </span>
       </div>
     </section>
 
     <section class="quick-grid" aria-label="核心入口">
-      <RouterLink
-        v-for="item in quickActions"
-        :key="item.to"
-        class="quick-card"
-        :to="item.to"
-      >
-        <span class="quick-icon">{{ item.icon }}</span>
-        <strong>{{ item.title }}</strong>
-        <span>{{ item.desc }}</span>
-      </RouterLink>
+      <template v-if="backendAvailable">
+        <RouterLink
+          v-for="item in quickActions"
+          :key="item.to"
+          class="quick-card"
+          :to="item.to"
+        >
+          <span class="quick-icon">{{ item.icon }}</span>
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.desc }}</span>
+        </RouterLink>
+      </template>
+      <template v-else>
+        <button
+          v-for="item in quickActions"
+          :key="item.to"
+          class="quick-card quick-card--disabled"
+          type="button"
+          @click="showBackendUnavailable"
+        >
+          <span class="quick-icon">{{ item.icon }}</span>
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.desc }}</span>
+        </button>
+      </template>
     </section>
 
     <section class="intro-grid">
@@ -59,8 +76,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import { getRuntimeConfig } from '@/services/app'
+import { copyText } from '@/utils/browser'
 
 const runtimeMode = ref('')
+const backendAvailable = ref(true)
+const frontendUrl = ref('')
 
 // windowsQuickActions lists local workspace entries Windows 本地模式入口
 const windowsQuickActions = [
@@ -191,12 +211,16 @@ const flowSteps = computed(() =>
 
 // heroTitle switches headline by runtime mode 首页标题按运行模式切换
 const heroTitle = computed(() => {
+  if (!backendAvailable.value) return 'BrowserFlow 后端服务暂不可用。'
   if (isServerMode.value) return 'BrowserFlow 是一个面向多客户端自动化调度的服务端控制台。'
   return 'BrowserFlow 是一个面向浏览器自动化的本地控制台。'
 })
 
 // heroSummary switches project intro by runtime mode 首页简介按运行模式切换
 const heroSummary = computed(() => {
+  if (!backendAvailable.value) {
+    return '当前无法连接后端服务，首页仍可查看项目入口。请先启动后端服务，恢复后刷新页面或重新点击入口。'
+  }
   if (isServerMode.value) {
     return '服务器模式用于集中管理工作流、任务、客户端和执行记录，适合把多台执行电脑接入同一个调度中心。'
   }
@@ -205,6 +229,8 @@ const heroSummary = computed(() => {
 
 // clientAgentUrl builds a shareable client page address 生成可分享的客户端执行页地址
 const clientAgentUrl = computed(() => {
+  const configuredUrl = frontendUrl.value.trim().replace(/\/$/, '')
+  if (configuredUrl) return `${configuredUrl}/#/client-agent`
   if (typeof window === 'undefined') return '#/client-agent'
 
   return `${window.location.origin}${window.location.pathname}#/client-agent`
@@ -213,41 +239,37 @@ const clientAgentUrl = computed(() => {
 onMounted(async () => {
   try {
     const config = await getRuntimeConfig()
+    backendAvailable.value = true
     runtimeMode.value = String(config?.mode || '')
+    frontendUrl.value = String(config?.frontend_url || '')
   } catch {
+    backendAvailable.value = false
     runtimeMode.value = ''
+    frontendUrl.value = ''
   }
 })
 
 // runtimeModeText displays current runtime mode 当前运行模式文案
 const runtimeModeText = computed(() => {
+  if (!backendAvailable.value) return '后端不可用'
   if (runtimeMode.value === 'windows') return 'Windows 本地版'
   if (runtimeMode.value === 'server') return '服务器调度版'
   return '自动识别中'
 })
 
-async function copyClientAgentUrl() {
-  // Copy URL 优先使用 Clipboard API，兜底兼容普通 HTTP 访问
-  try {
-    if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
-    await navigator.clipboard.writeText(clientAgentUrl.value)
-  } catch {
-    copyTextFallback(clientAgentUrl.value)
-  }
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端地址已复制' })
+// runtimeStatusNote displays runtime health note 显示运行状态提示
+const runtimeStatusNote = computed(() => {
+  if (!backendAvailable.value) return '后端服务未启动或连接失败，除首页外的路由已暂时禁用。'
+  return '公共能力与 Windows 本地能力优先可用'
+})
+
+function showBackendUnavailable() {
+  appMessage({ type: APP_MESSAGE_TYPE.error, message: '后端服务不可用，请先启动后端' })
 }
 
-function copyTextFallback(text) {
-  // Fallback copy 使用临时输入框完成复制
-  const input = document.createElement('textarea')
-  input.value = text
-  input.setAttribute('readonly', 'readonly')
-  input.style.position = 'fixed'
-  input.style.opacity = '0'
-  document.body.appendChild(input)
-  input.select()
-  document.execCommand('copy')
-  document.body.removeChild(input)
+async function copyClientAgentUrl() {
+  await copyText(clientAgentUrl.value)
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端地址已复制' })
 }
 </script>
 
@@ -329,6 +351,11 @@ h1 {
   line-height: 1.6;
 }
 
+.status-note--error {
+  color: #c2410c;
+  font-weight: 700;
+}
+
 .client-link-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -373,10 +400,24 @@ h1 {
     box-shadow 0.18s ease;
 }
 
+.quick-card--disabled {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 .quick-card:hover {
   border-color: #93c5fd;
   box-shadow: 0 14px 32px rgba(37, 99, 235, 0.1);
   transform: translateY(-2px);
+}
+
+.quick-card--disabled:hover {
+  border-color: #e4e7ed;
+  box-shadow: none;
+  transform: none;
 }
 
 .quick-icon {

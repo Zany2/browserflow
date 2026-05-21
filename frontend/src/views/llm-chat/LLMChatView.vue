@@ -34,6 +34,7 @@
         >
           删除选中
         </el-button>
+        <AppSelectionSummary :count="selectedSessionIds.length" unit="会话" />
       </div>
 
       <div class="session-list">
@@ -74,7 +75,7 @@
     </aside>
 
     <main class="chat-panel">
-      <div ref="messageListRef" class="message-list">
+      <div ref="messageListRef" class="message-list" @scroll="handleMessageListScroll">
         <el-empty v-if="!currentSession" description="请选择或新建一个会话" />
         <template v-else>
           <div
@@ -137,6 +138,8 @@ import { Delete, Plus, Promotion } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { getSafePage } from '@/utils/list'
 import {
   createChatSession,
   deleteChatSession,
@@ -157,12 +160,15 @@ const sessionCurrentPage = ref(1)
 const sessionPageSize = ref(10)
 // STREAM_CHAR_DELAY controls typewriter speed 流式逐字显示间隔
 const STREAM_CHAR_DELAY = 18
+// SCROLL_BOTTOM_THRESHOLD keeps auto-scroll only when viewer stays near bottom 靠近底部时才自动跟随
+const SCROLL_BOTTOM_THRESHOLD = 80
 const CHAT_INPUT_MIN_HEIGHT = 76
 const CHAT_INPUT_MAX_HEIGHT = 260
 const inputMessage = ref('')
 const streaming = ref(false)
 const messageListRef = ref(null)
 const chatInputHeight = ref(CHAT_INPUT_MIN_HEIGHT)
+const shouldStickToBottom = ref(true)
 
 let inputResizeStartY = 0
 let inputResizeStartHeight = CHAT_INPUT_MIN_HEIGHT
@@ -189,7 +195,15 @@ const isSessionSelectionIndeterminate = computed(
 
 watch(
   () => currentSession.value?.messages?.length,
-  () => scrollToBottom(),
+  () => scrollToBottomIfNeeded(),
+)
+
+watch(
+  () => currentSession.value?.id,
+  () => {
+    shouldStickToBottom.value = true
+    scrollToBottom()
+  },
 )
 
 watch([sessions, sessionPageSize], () => {
@@ -300,11 +314,6 @@ function removeSessionsFromState(sessionIds) {
   }
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function sortSessionsByUpdatedDesc(data) {
   // Session order 会话排序，跟随后端 updated_at，兜底使用 created_at。
   return data.slice().sort((prev, next) => getSessionTime(next) - getSessionTime(prev))
@@ -336,12 +345,13 @@ async function handleSendMessage() {
     id: `local_assistant_${Date.now()}`,
     role: 'assistant',
     content: '',
-    timestamp: new Date().toISOString(),
+    timestamp: '',
   }
 
   currentSession.value.messages.push(userMessage, assistantMessage)
   const activeSession = currentSession.value
   const assistantMessageIndex = activeSession.messages.length - 1
+  shouldStickToBottom.value = true
   scrollToBottom()
 
   const sessionId = activeSession.id
@@ -355,6 +365,13 @@ async function handleSendMessage() {
         messageItem.id = chunk.message_id || messageItem.id
         await appendAssistantContent(messageItem, chunk.content)
       }
+      if (chunk.type === 'done') {
+        const messageItem = activeSession.messages?.[assistantMessageIndex]
+        if (messageItem) {
+          messageItem.id = chunk.message_id || messageItem.id
+          messageItem.timestamp = chunk.timestamp || new Date().toISOString()
+        }
+      }
       if (chunk.type === 'error') {
         throw new Error(chunk.error || '生成失败')
       }
@@ -365,7 +382,7 @@ async function handleSendMessage() {
     await loadSessions(sessionId).catch(() => {})
   } finally {
     streaming.value = false
-    scrollToBottom()
+    scrollToBottomIfNeeded()
   }
 }
 
@@ -405,11 +422,11 @@ function getSessionTitle(session) {
 }
 
 function getConfigLabel(config) {
-  return `${getProviderName(config.provider)} / ${config.name || '-'} / ${config.model || '-'}`
+  return [getProviderName(config.provider), config.name, config.model].filter(Boolean).join(' / ')
 }
 
 function getProviderName(providerId) {
-  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || '-'
+  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || ''
 }
 
 function formatTime(value) {
@@ -423,14 +440,30 @@ async function scrollToBottom() {
   await nextTick()
   if (messageListRef.value) {
     messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+    shouldStickToBottom.value = true
   }
+}
+
+async function scrollToBottomIfNeeded() {
+  if (!shouldStickToBottom.value) return
+  await scrollToBottom()
+}
+
+function handleMessageListScroll() {
+  shouldStickToBottom.value = isMessageListNearBottom()
+}
+
+function isMessageListNearBottom() {
+  const element = messageListRef.value
+  if (!element) return true
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD
 }
 
 async function appendAssistantContent(assistantMessage, content) {
   // Typewriter output renders each SSE chunk one character at a time 逐字追加 SSE 内容
   for (const char of Array.from(String(content || ''))) {
     assistantMessage.content += char
-    await scrollToBottom()
+    await scrollToBottomIfNeeded()
     await sleep(STREAM_CHAR_DELAY)
   }
 }

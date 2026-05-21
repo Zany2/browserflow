@@ -7,6 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/entity"
+	"github.com/Zany2/browserflow/backend/utility/workflowcache"
 )
 
 // ClientList returns registered clients 返回已注册客户端列表
@@ -43,6 +44,15 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 	clients := []entity.Clients{}
 	if err = gModel.OrderDesc(columns.UpdatedAt).Scan(&clients); err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(req.Status) == "online" {
+		onlineClients := make([]entity.Clients, 0, len(clients))
+		for _, client := range clients {
+			if workflowcache.IsClientOnline(ctx, client.ClientIp) {
+				onlineClients = append(onlineClients, client)
+			}
+		}
+		clients = onlineClients
 	}
 
 	return &v1.ClientListRes{

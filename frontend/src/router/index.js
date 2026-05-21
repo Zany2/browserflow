@@ -13,6 +13,7 @@ import NotFoundView from '@/views/not-found/NotFoundView.vue'
 import TaskRecordView from '@/views/task/TaskRecordView.vue'
 import TaskView from '@/views/task/TaskView.vue'
 import WorkflowListView from '@/views/workflow-list/WorkflowListView.vue'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import { getRuntimeConfig } from '@/services/app'
 
 import 'nprogress/nprogress.css'
@@ -103,6 +104,7 @@ let runtimeConfigPromise = null
 let runtimeConfig = {
   mode: '',
   disabled_routes: [],
+  backend_available: true,
 }
 
 // loadRuntimeConfig loads and caches runtime mode 加载并缓存运行模式
@@ -110,10 +112,21 @@ async function loadRuntimeConfig() {
   if (!runtimeConfigPromise) {
     runtimeConfigPromise = getRuntimeConfig()
       .then((config) => {
-        runtimeConfig = config || runtimeConfig
+        runtimeConfig = {
+          ...(config || runtimeConfig),
+          backend_available: true,
+        }
         return runtimeConfig
       })
-      .catch(() => runtimeConfig)
+      .catch(() => {
+        runtimeConfigPromise = null
+        runtimeConfig = {
+          mode: '',
+          disabled_routes: [],
+          backend_available: false,
+        }
+        return runtimeConfig
+      })
   }
   return runtimeConfigPromise
 }
@@ -122,6 +135,11 @@ async function loadRuntimeConfig() {
 router.beforeEach(async (to) => {
   NProgress.start()
   const config = await loadRuntimeConfig()
+  if (!config.backend_available && to.name !== 'home') {
+    appMessage({ type: APP_MESSAGE_TYPE.error, message: '后端服务不可用，请先启动后端' })
+    return { name: 'home', replace: true }
+  }
+
   const disabledRoutes = new Set(config.disabled_routes || [])
   if (disabledRoutes.has(to.path)) {
     return { name: 'home', replace: true }

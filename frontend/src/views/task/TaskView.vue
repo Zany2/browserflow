@@ -39,11 +39,11 @@
         row-key="id"
         empty-text="暂无任务配置"
       >
-        <el-table-column prop="name" label="任务名称" min-width="140" />
+        <el-table-column prop="name" label="任务名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="description" label="任务说明" min-width="180" show-overflow-tooltip />
         <el-table-column label="工作流名称" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.workflow_name || row.workflow_id || '-' }}
+            {{ row.workflow_name || row.workflow_id || '' }}
           </template>
         </el-table-column>
         <el-table-column label="执行客户端IP" min-width="140" show-overflow-tooltip>
@@ -51,7 +51,7 @@
             {{ getTaskClientIp(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="执行计划" min-width="140">
+        <el-table-column label="执行计划" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getScheduleText(row) }}
           </template>
@@ -126,7 +126,7 @@
               :value="getWorkflowId(workflow)"
             >
               <div class="workflow-option">
-                <span>{{ workflow.name || '未命名工作流' }}</span>
+                <span>{{ workflow.name || '' }}</span>
                 <small>{{ getWorkflowId(workflow) }}</small>
               </div>
             </el-option>
@@ -155,7 +155,7 @@
                   :value="getClientId(client)"
                 >
                   <div class="client-option">
-                    <span>{{ getClientIp(client) || '-' }}</span>
+                    <span>{{ getClientIp(client) || '' }}</span>
                     <small>{{ getClientSelectMeta(client) }}</small>
                   </div>
                 </el-option>
@@ -167,7 +167,7 @@
 
             <div class="client-selection-summary">
               <template v-if="selectedClient">
-                <el-tag effect="plain">{{ getClientIp(selectedClient) || '-' }}</el-tag>
+                <el-tag effect="plain">{{ getClientIp(selectedClient) || '' }}</el-tag>
                 <span class="client-selection-text">{{ getClientSelectMeta(selectedClient) }}</span>
               </template>
               <span v-else class="client-selection-empty">未选择执行客户端</span>
@@ -265,16 +265,19 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Plus, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
+import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { getAutomaWorkflowDetail, listAutomaWorkflows } from '@/services/automa'
 import { listClients } from '@/services/client'
 import { createTask, deleteTask, executeTask, listTasks, updateTask } from '@/services/task'
+import { formatDate as formatBaseDate } from '@/utils/format'
+import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList } from '@/utils/list'
 
 const tasks = ref([])
 const workflowOptions = ref([])
@@ -290,10 +293,12 @@ const executeParamTask = ref(null)
 const executeParamItems = ref([])
 const taskPage = ref(1)
 const taskPageSize = ref(10)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
 const paramEntries = ref([createEmptyParamEntry()])
-const filterSearchDelay = 200
-let filterSearchTimer = null
+const {
+  run: scheduleFilterSearch,
+  cancel: clearFilterSearchTimer,
+} = useDebouncedAction(searchTasksNow, 200)
 
 const taskForm = reactive(createEmptyTaskForm())
 const taskFilters = reactive({
@@ -339,10 +344,6 @@ onMounted(() => {
   loadClients()
 })
 
-onBeforeUnmount(() => {
-  clearFilterSearchTimer()
-})
-
 watch(() => [taskFilters.keyword, taskFilters.workflow_name], () => {
   scheduleFilterSearch()
 })
@@ -378,21 +379,9 @@ async function loadTasks() {
   }
 }
 
-// Filter debounce 手动输入筛选条件 200ms 防抖
-function scheduleFilterSearch() {
-  clearFilterSearchTimer()
-  filterSearchTimer = window.setTimeout(() => {
-    filterSearchTimer = null
-    taskPage.value = 1
-    loadTasks()
-  }, filterSearchDelay)
-}
-
-function clearFilterSearchTimer() {
-  if (!filterSearchTimer) return
-
-  window.clearTimeout(filterSearchTimer)
-  filterSearchTimer = null
+function searchTasksNow() {
+  taskPage.value = 1
+  loadTasks()
 }
 
 async function loadWorkflowOptions() {
@@ -675,11 +664,6 @@ function getCreatedTimeRange() {
   return [range[0] || '', range[1] || '']
 }
 
-function normalizeList(data, fallbackKey) {
-  const list = data?.list || data?.[fallbackKey] || []
-  return Array.isArray(list) ? list : []
-}
-
 function normalizeParamEntries(params) {
   const entries = Object.entries(params || {}).map(([key, value]) => ({
     key,
@@ -824,7 +808,7 @@ function getClientIp(row) {
 }
 
 function getClientName(row) {
-  return row?.client_name || row?.name || row?.hostname || getClientId(row) || '-'
+  return row?.client_name || row?.name || row?.hostname || getClientId(row) || ''
 }
 
 function getClientStatus(row) {
@@ -841,16 +825,16 @@ function getClientStatusText(row) {
 }
 
 function getClientSelectMeta(row) {
-  return [getClientId(row) || '-', getClientStatusText(row)].join(' / ')
+  return [getClientId(row), getClientStatusText(row)].filter(Boolean).join(' / ')
 }
 
 function getClientOptionLabel(row) {
-  return `${getClientIp(row) || '-'} / ${getClientSelectMeta(row)}`
+  return [getClientIp(row), getClientSelectMeta(row)].filter(Boolean).join(' / ')
 }
 
 function getTaskClientIp(row) {
   const client = findClientById(row?.client_id)
-  return row?.client_ip || (client ? getClientIp(client) : '') || '-'
+  return row?.client_ip || (client ? getClientIp(client) : '') || ''
 }
 
 function getTaskParamCount(row) {
@@ -871,27 +855,8 @@ function getTimeValue(row) {
   return value ? new Date(value).getTime() || 0 : 0
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function formatDate(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-
-  const year = date.getFullYear()
-  const month = padDatePart(date.getMonth() + 1)
-  const day = padDatePart(date.getDate())
-  const hour = padDatePart(date.getHours())
-  const minute = padDatePart(date.getMinutes())
-  const second = padDatePart(date.getSeconds())
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-}
-
-function padDatePart(value) {
-  return String(value).padStart(2, '0')
+  return formatBaseDate(value, { fallback: '' })
 }
 
 function createEmptyParamEntry() {

@@ -3,7 +3,7 @@
     <header class="page-header">
       <div class="header-actions">
         <el-button @click="createDialogVisible = true">新增</el-button>
-        <el-button @click="importDialogVisible = true">文件导入</el-button>
+        <el-button @click="importDialogVisible = true">导入</el-button>
         <el-button type="primary" @click="syncDialogVisible = true">客户端同步</el-button>
         <el-button :icon="RefreshRight" @click="loadWorkflows">刷新</el-button>
       </div>
@@ -13,7 +13,7 @@
       <div class="workflow-filters">
         <div class="filter-item filter-item--keyword">
           <span class="filter-label">关键词</span>
-          <el-input v-model="filters.keyword" clearable placeholder="工作流名称、工作流描述" />
+          <el-input v-model="filters.keyword" clearable placeholder="数据库自定义名称、Automa 工作流名称、描述" />
         </div>
 
         <div class="filter-item filter-item--source">
@@ -38,23 +38,22 @@
         <el-button type="danger" :disabled="selectedWorkflowIds.length === 0" @click="handleBatchDelete">
           删除选中
         </el-button>
+        <AppSelectionSummary :count="selectedWorkflowIds.length" unit="工作流" />
       </div>
 
-      <el-table v-loading="loading" class="workflow-table adaptive-table" :data="pagedWorkflows" border height="100%"
-        row-key="id" empty-text="暂无工作流" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="40" />
+      <el-table ref="workflowTableRef" v-loading="loading" class="workflow-table adaptive-table" :data="pagedWorkflows" border height="100%"
+        :row-key="getWorkflowId" empty-text="暂无工作流" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="40" reserve-selection />
 
-        <el-table-column label="工作流名称" min-width="180">
+        <el-table-column label="自定义名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="workflow-name">
-              <span>{{ row.name || '' }}</span>
-            </div>
+            <span class="field-value">{{ row.name || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流描述" min-width="160">
+        <el-table-column label="自定义描述" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.description || '' }}
+            <span class="field-value">{{ row.description || '' }}</span>
           </template>
         </el-table-column>
 
@@ -64,15 +63,17 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="客户端 IP" width="120">
+        <el-table-column label="客户端 IP" width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.source_ip || '' }}
           </template>
         </el-table-column>
 
-        <el-table-column label="是否可同步" width="92" align="center">
+        <el-table-column label="是否可同步" width="104" align="center" class-name="switch-column">
           <template #default="{ row }">
-            <el-switch :model-value="!row.is_protected" :before-change="() => handleToggleSyncable(row)" />
+            <div class="syncable-switch-cell">
+              <el-switch :model-value="!row.is_protected" :before-change="() => handleToggleSyncable(row)" />
+            </div>
           </template>
         </el-table-column>
 
@@ -141,12 +142,18 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { CopyDocument, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { useDebouncedAction } from '@/composables/useDebouncedAction'
+import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
+import { copyText } from '@/utils/browser'
+import { formatDate, formatEmpty } from '@/utils/format'
+import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList, normalizeText } from '@/utils/list'
 import {
   batchDeleteAutomaWorkflows,
   createAutomaWorkflow,
@@ -170,13 +177,11 @@ const detailLoading = ref(false)
 const detailSaving = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const pageSizes = [10, 30, 60]
-const filterSearchDelay = 200
-let filterSearchTimer = null
+const pageSizes = DEFAULT_PAGE_SIZES
 const detailVisible = ref(false)
 const detailWorkflow = ref(null)
 const detailForm = reactive(createDetailForm())
-const selectedWorkflowIds = ref([])
+const workflowTableRef = ref(null)
 const clientIpLoading = ref(false)
 const clientIpOptions = ref([])
 const createDialogVisible = ref(false)
@@ -193,12 +198,27 @@ const pagedWorkflows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return workflows.value.slice(start, start + pageSize.value)
 })
+const {
+  selectedKeys: selectedWorkflowIds,
+  handleSelectionChange,
+  restoreSelection: restoreWorkflowSelection,
+  retainSelectionByRows: retainWorkflowSelectionByRows,
+} = usePagedTableSelection({
+  rows: pagedWorkflows,
+  getRowKey: getWorkflowId,
+})
+const {
+  run: scheduleFilterSearch,
+  cancel: clearFilterSearchTimer,
+} = useDebouncedAction(searchFiltersNow, 200)
 
 const detailFields = computed(() => [
   { key: 'id', label: '服务端 ID', value: formatEmpty(detailForm.id) },
   { key: 'automa_id', label: 'Automa ID', value: formatEmpty(detailForm.automa_id) },
-  { key: 'name', label: '名称', editable: true },
-  { key: 'description', label: '工作流描述', type: 'textarea', editable: true },
+  { key: 'name', label: '数据库自定义名称', editable: true },
+  { key: 'description', label: '数据库自定义描述', type: 'textarea', editable: true },
+  { key: 'automa_name', label: 'Automa 工作流名称', value: formatEmpty(detailForm.automa_name) },
+  { key: 'automa_description', label: 'Automa 工作流描述', value: formatEmpty(detailForm.automa_description) },
   { key: 'is_protected', label: '是否可同步', type: 'syncable-switch', editable: true },
   { key: 'source', label: '来源', value: formatSource(detailForm.source) },
   { key: 'source_ip', label: '客户端 IP', value: formatEmpty(detailForm.source_ip) },
@@ -222,10 +242,6 @@ const detailFields = computed(() => [
 onMounted(() => {
   loadWorkflows()
   loadClientIpOptions()
-})
-
-onBeforeUnmount(() => {
-  clearFilterSearchTimer()
 })
 
 watch(() => filters.source, () => {
@@ -252,20 +268,22 @@ watch([workflows, pageSize], () => {
   })
 })
 
+watch(pagedWorkflows, () => {
+  restoreWorkflowSelection(workflowTableRef)
+})
+
 async function loadWorkflows() {
   loading.value = true
   try {
     const data = await listAutomaWorkflows({
       keyword: filters.keyword.trim(),
       source: filters.source,
-      source_ip: normalizeFilterText(filters.source_ip),
+      source_ip: normalizeText(filters.source_ip),
       page_num: 1,
       page_size: 60,
     })
     workflows.value = normalizeList(data, 'workflows')
-    selectedWorkflowIds.value = selectedWorkflowIds.value.filter((id) =>
-      workflows.value.some((workflow) => getWorkflowId(workflow) === id),
-    )
+    retainWorkflowSelectionByRows(workflows.value)
   } finally {
     loading.value = false
   }
@@ -293,24 +311,10 @@ function handleClientIpClear() {
   searchFiltersNow()
 }
 
-function scheduleFilterSearch() {
-  clearFilterSearchTimer()
-  filterSearchTimer = window.setTimeout(() => {
-    searchFiltersNow()
-  }, filterSearchDelay)
-}
-
 function searchFiltersNow() {
   clearFilterSearchTimer()
   currentPage.value = 1
   loadWorkflows()
-}
-
-function clearFilterSearchTimer() {
-  if (!filterSearchTimer) return
-
-  window.clearTimeout(filterSearchTimer)
-  filterSearchTimer = null
 }
 
 async function handleCreateWorkflows(payload) {
@@ -412,18 +416,10 @@ async function handleBatchDelete() {
   await loadWorkflows()
 }
 
-function handleSelectionChange(selection) {
-  selectedWorkflowIds.value = selection.map((item) => getWorkflowId(item)).filter(Boolean)
-}
-
 function resetFilters() {
   filters.keyword = ''
   filters.source = ''
   filters.source_ip = ''
-}
-
-function normalizeFilterText(value) {
-  return String(value || '').trim()
 }
 
 function createDetailForm() {
@@ -432,6 +428,8 @@ function createDetailForm() {
     automa_id: '',
     name: '',
     description: '',
+    automa_name: '',
+    automa_description: '',
     source: 1,
     source_ip: '',
     source_user_agent: '',
@@ -465,11 +463,6 @@ function setDetailForm(row = {}) {
   })
 }
 
-function normalizeList(data, fallbackKey) {
-  const list = data?.list || data?.[fallbackKey] || []
-  return Array.isArray(list) ? list : []
-}
-
 function getWorkflowId(row) {
   return row?.id || row?.automa_id || row?.workflow_id || row?.workflowId || ''
 }
@@ -489,11 +482,6 @@ function formatSource(source) {
   if (sourceValue === 1) return '新增/导入'
   if (sourceValue === 2) return '客户端同步'
   return ''
-}
-
-function formatEmpty(value, fallback = '') {
-  if (value === undefined || value === null || value === '') return fallback
-  return String(value)
 }
 
 function formatWorkflowMutationMessage(prefix, result, fallback) {
@@ -550,7 +538,7 @@ function syncWorkflowProtectedState(row, isProtected, revision) {
 }
 
 async function copyDetailValue(value) {
-  await navigator.clipboard.writeText(String(value || ''))
+  await copyText(value)
   showSuccessMessage('已复制')
 }
 
@@ -561,25 +549,7 @@ function showSuccessMessage(message) {
   })
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
-function formatDate(value) {
-  if (!value) return ''
-  const date = new Date(Number(value) || value)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (num) => String(num).padStart(2, '0')
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate()),
-  ].join('-') + ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-}
-
 function formatListDate(value) {
-  if (!value) return ''
   return formatDate(value)
 }
 </script>
@@ -659,15 +629,45 @@ function formatListDate(value) {
   min-height: 0;
 }
 
-.workflow-name {
-  display: grid;
+.field-value {
+  display: block;
   min-width: 0;
+  overflow: hidden;
+  color: #303133;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.syncable-switch-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+  line-height: 1;
+}
+
+.syncable-switch-cell :deep(.el-switch) {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 40px;
+  height: 20px;
+  line-height: 20px;
+  vertical-align: middle;
+}
+
+.syncable-switch-cell :deep(.el-switch__core) {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 40px;
+  height: 20px;
+}
+
+.syncable-switch-cell :deep(.el-switch__action) {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
 }
 
 .detail-form {
@@ -680,7 +680,7 @@ function formatListDate(value) {
 
 .detail-field {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 148px minmax(0, 1fr);
   align-items: start;
   gap: 6px;
   min-width: 0;

@@ -6,6 +6,10 @@ import (
 	"os"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
+	"github.com/Zany2/browserflow/backend/internal/consts"
+	"github.com/Zany2/browserflow/backend/internal/dao"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
@@ -14,6 +18,23 @@ import (
 
 // WorkflowProtected updates local workflow protected status 修改本地工作流保护状态
 func (c *ControllerV1) WorkflowProtected(ctx context.Context, req *v1.WorkflowProtectedReq) (res *v1.WorkflowProtectedRes, err error) {
+	if consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer {
+		item := entity.AutomaWorkflows{}
+		if err = dao.AutomaWorkflows.Ctx(ctx).WherePri(req.ID).Scan(&item); err != nil {
+			return nil, err
+		}
+		if item.Id <= 0 {
+			return nil, fmt.Errorf("automa workflow not found")
+		}
+		if req.Revision > 0 && item.Revision != req.Revision {
+			return nil, fmt.Errorf("鐗堟湰宸插彉鍖栵紝璇峰埛鏂板悗閲嶈瘯")
+		}
+		if _, err = dao.AutomaWorkflows.Ctx(ctx).WherePri(req.ID).Data(do.AutomaWorkflows{IsProtected: req.IsProtected, Revision: item.Revision + 1}).Update(); err != nil {
+			return nil, err
+		}
+		return &v1.WorkflowProtectedRes{}, nil
+	}
+
 	state.DBMu.Lock()
 	if state.DB == nil {
 		dbPath := os.Getenv("DB_PATH")

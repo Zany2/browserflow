@@ -3,6 +3,7 @@ package websockets
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -206,7 +207,7 @@ func (ws *WsHandlerFunc) handleHeartbeat(client *Client, in *model.WSRequest) {
 		ClientIP:   client.ClientIP(),
 		ClientTime: in.ClientTime,
 		ServerTime: now.UnixMilli(),
-		Data: g.Map{
+		Data: map[string]any{
 			"last_heartbeat_time": client.LastHeartbeatTime(),
 			"heartbeat_interval":  client.manager.heartbeatInterval.Milliseconds(),
 			"heartbeat_timeout":   client.manager.heartbeatTimeout.Milliseconds(),
@@ -271,7 +272,16 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 	if browserID == "" {
 		browserID = resolveClientID(client, in)
 	}
-	result := model.AgentCommandResult{BrowserID: browserID, CommandID: in.CommandID, Success: in.Success, Data: in.Data, Error: in.Error}
+	var resultData []byte
+	if len(in.Data) > 0 {
+		resultBytes, marshalErr := json.Marshal(in.Data)
+		if marshalErr != nil {
+			resultData = []byte(fmt.Sprintf(`{"error":%q}`, marshalErr.Error()))
+		} else {
+			resultData = resultBytes
+		}
+	}
+	result := model.AgentCommandResult{BrowserID: browserID, CommandID: in.CommandID, Success: in.Success, Data: resultData, Error: in.Error}
 
 	// Refresh last seen time after command result 命令结果上报后刷新最近活跃时间
 	if err := updateClientLastSeen(client, in); err != nil {
@@ -295,8 +305,8 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 		recordID := gconv.Int64(strings.TrimPrefix(in.CommandID, "task-record-"))
 		if recordID > 0 {
 			resultJSON := "{}"
-			if len(in.Data) > 0 {
-				resultJSON = string(in.Data)
+			if len(resultData) > 0 {
+				resultJSON = string(resultData)
 			}
 			status := "success"
 			if !in.Success {
@@ -355,7 +365,7 @@ func (ws *WsHandlerFunc) handleWorkflowInventory(client *Client, in *model.WSReq
 		Type:     model.WSMessageTypeWorkflowInventoryAck,
 		ClientIP: client.ClientIP(),
 		ClientID: resolveClientID(client, in),
-		Data: g.Map{
+		Data: map[string]any{
 			"workflow_count": len(workflows),
 		},
 	})

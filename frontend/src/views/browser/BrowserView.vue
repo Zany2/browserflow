@@ -49,6 +49,7 @@
           >
             删除选中
           </el-button>
+          <AppSelectionSummary :count="selectedInstanceIds.length" unit="配置" />
         </div>
 
         <el-table
@@ -70,10 +71,10 @@
               />
             </template>
           </el-table-column>
-          <el-table-column prop="name" label="名称" min-width="120">
+          <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip>
             <template #default="{ row }">
               <div class="instance-name">
-                <span class="instance-name__text" :title="row.name">{{ row.name }}</span>
+                <span class="instance-name__text">{{ row.name }}</span>
                 <el-tag v-if="row.is_current" size="small" type="primary">当前</el-tag>
                 <el-tag v-if="row.is_active" size="small" type="success">运行</el-tag>
               </div>
@@ -222,15 +223,15 @@
               {{ status.running ? '运行中' : '未启动' }}
             </el-descriptions-item>
             <el-descriptions-item label="当前配置">
-              {{ status.instance?.name || '-' }}
+              {{ status.instance?.name || '' }}
             </el-descriptions-item>
             <el-descriptions-item label="运行时长">
               {{ uptimeText }}
             </el-descriptions-item>
             <el-descriptions-item label="调试地址">
               <div class="runtime-copy">
-                <span class="runtime-value" :title="status.control_url || '-'">
-                  {{ status.control_url || '-' }}
+                <span class="runtime-value" :title="status.control_url || ''">
+                  {{ status.control_url || '' }}
                 </span>
                 <el-button link type="primary" :disabled="!status.control_url" @click="copyRuntimeValue(status.control_url)">
                   复制
@@ -239,8 +240,8 @@
             </el-descriptions-item>
             <el-descriptions-item label="Agent 页面">
               <div class="runtime-copy">
-                <span class="runtime-value" :title="status.agent_url || '-'">
-                  {{ status.agent_url || '-' }}
+                <span class="runtime-value" :title="status.agent_url || ''">
+                  {{ status.agent_url || '' }}
                 </span>
                 <el-button link type="primary" :disabled="!status.agent_url" @click="copyRuntimeValue(status.agent_url)">
                   复制
@@ -263,6 +264,9 @@ import { Check, Download, Plus, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { copyText, downloadBlob } from '@/utils/browser'
+import { getSafePage } from '@/utils/list'
 import {
   createBrowserInstance,
   deleteBrowserInstance,
@@ -525,18 +529,6 @@ async function handleExportExecutorSkill() {
   }
 }
 
-function downloadBlob(blob, filename) {
-  // Download file 创建临时链接触发浏览器下载
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-}
-
 async function handleStop(row) {
   if (!row.id) return
   const data = await stopBrowserInstance(row.id)
@@ -555,7 +547,7 @@ async function handleSwitch(row) {
 async function copyRuntimeValue(value) {
   if (!value) return
 
-  await navigator.clipboard.writeText(value)
+  await copyText(value)
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '已复制' })
 }
 
@@ -625,11 +617,6 @@ function sortByCreatedDesc(data) {
 
 function getTimeValue(value) {
   return value ? new Date(value).getTime() || 0 : 0
-}
-
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
 }
 
 function getRuntimeSeconds() {

@@ -94,7 +94,7 @@ func NotifyBanned(ctx context.Context, clientIP string, clientID string, reason 
 		ClientIP: clientIP,
 		Message:  "客户端已被拉黑，将持续检测，解除拉黑后自动重连",
 		Error:    strings.TrimSpace(reason),
-		Data: g.Map{
+		Data: map[string]any{
 			"no_reconnect": true,
 			"reason":       strings.TrimSpace(reason),
 		},
