@@ -13,10 +13,11 @@ type WorkflowListReq struct {
 	g.Meta `path:"/" method:"get" tags:"工作流" summary:"获取工作流列表"`
 	rr.CommonPageReq
 	rr.CommonTimeReq
-	Keyword  string `json:"keyword" in:"query" dc:"关键字"`
-	Source   int    `json:"source" in:"query" d:"0" v:"in:0,1,2#来源只能是0、1、2" dc:"工作流来源"`
-	SourceIP string `json:"source_ip" in:"query" dc:"客户端来源地址"`
-	Syncable int    `json:"syncable" in:"query" d:"0" v:"in:0,1,2#同步筛选只能是0、1、2" dc:"同步筛选"`
+	Keyword       string `json:"keyword" in:"query" dc:"关键字"`
+	CustomKeyword string `json:"custom_keyword" in:"query" dc:"后端自定义名称、描述关键字"`
+	Source        int    `json:"source" in:"query" d:"0" v:"in:0,1,2#来源只能是0、1、2" dc:"工作流来源"`
+	SourceIP      string `json:"source_ip" in:"query" dc:"客户端来源地址"`
+	Syncable      int    `json:"syncable" in:"query" d:"0" v:"in:0,1,2#同步筛选只能是0、1、2" dc:"同步筛选"`
 }
 
 // WorkflowListResModel 工作流列表项

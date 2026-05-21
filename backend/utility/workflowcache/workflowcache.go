@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zany2/browserflow/backend/utility/workflowhash"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/gconv"
 )
@@ -270,16 +271,7 @@ func buildItem(clientIP string, workflow g.Map, reportedAt int64) (WorkflowItem,
 	rawJSON := string(normalizedJSONBytes)
 
 	// Normalize hash inputs to avoid unstable content hash 规范化哈希输入，避免内容哈希抖动
-	hashDrawflowValue := workflow["drawflow"]
-	if drawflowText, ok := hashDrawflowValue.(string); ok {
-		drawflowText = strings.TrimSpace(drawflowText)
-		if drawflowText != "" {
-			var parsedDrawflow any
-			if json.Unmarshal([]byte(drawflowText), &parsedDrawflow) == nil {
-				hashDrawflowValue = parsedDrawflow
-			}
-		}
-	}
+	hashDrawflowValue := workflowhash.NormalizeDrawflowForHash(workflow["drawflow"])
 	hashTableValue := workflow["table"]
 	if hashTableValue == nil {
 		hashTableValue = workflow["dataColumns"]

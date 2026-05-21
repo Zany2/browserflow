@@ -77,15 +77,9 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="节点数" width="70" align="center">
+        <el-table-column label="节点数/连线数" width="110" align="center">
           <template #default="{ row }">
-            {{ row.node_count ?? '' }}
-          </template>
-        </el-table-column>
-
-        <el-table-column label="连线数" width="70" align="center">
-          <template #default="{ row }">
-            {{ row.edge_count ?? '' }}
+            {{ formatWorkflowGraphSize(row) }}
           </template>
         </el-table-column>
 
@@ -469,6 +463,12 @@ function getWorkflowId(row) {
 
 function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
+}
+
+function formatWorkflowGraphSize(row) {
+  const nodeCount = row?.node_count ?? ''
+  const edgeCount = row?.edge_count ?? ''
+  return `${nodeCount} / ${edgeCount}`
 }
 
 function normalizeSourceValue(source, fallback = 1) {

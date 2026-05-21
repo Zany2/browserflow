@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="96" height="96" alt="BrowserFlow" src="docs/images/layout-logo.png">
+  <img src="docs/images/layout-logo.png" alt="BrowserFlow" width="100" height="100">
 </p>
 
 <h1 align="center">BrowserFlow</h1>
