@@ -20,6 +20,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
+	"github.com/Zany2/browserflow/backend/utility/workflowhash"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
@@ -96,16 +97,7 @@ func (c *ControllerV1) WorkflowImportFiles(ctx context.Context, req *v1.Workflow
 		if err != nil {
 			return nil, err
 		}
-		hashDrawflowValue := payload["drawflow"]
-		if drawflowText, ok := hashDrawflowValue.(string); ok {
-			drawflowText = strings.TrimSpace(drawflowText)
-			if drawflowText != "" {
-				var parsedDrawflow any
-				if json.Unmarshal([]byte(drawflowText), &parsedDrawflow) == nil {
-					hashDrawflowValue = parsedDrawflow
-				}
-			}
-		}
+		hashDrawflowValue := workflowhash.NormalizeDrawflowForHash(payload["drawflow"])
 		hashTableValue := payload["table"]
 		if hashTableValue == nil {
 			hashTableValue = payload["dataColumns"]

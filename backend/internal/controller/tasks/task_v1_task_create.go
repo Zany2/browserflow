@@ -5,19 +5,25 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
+	"github.com/Zany2/browserflow/backend/internal/consts"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/gogf/gf/v2/util/grand"
 )
 
 // TaskCreate creates task 创建任务
 func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (res *v1.TaskCreateRes, err error) {
 	name := strings.TrimSpace(req.Name)
+	description := strings.TrimSpace(req.Description)
 	workflowID := strings.TrimSpace(req.WorkflowID)
 	if name == "" {
-		return nil, gerror.New("任务名称不能为空")
+		name = "任务-" + grand.S(8)
+	}
+	if description == "" {
+		description = "任务说明-" + grand.S(8)
 	}
 	if workflowID == "" {
 		return nil, gerror.New("工作流不能为空")
@@ -27,7 +33,7 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 	if err != nil {
 		return nil, err
 	}
-	if clientIP == "" {
+	if consts.ResolveRuntimeMode(ctx) != consts.RuntimeModeServer && clientIP == "" {
 		return nil, gerror.New("执行客户端不能为空")
 	}
 
@@ -43,7 +49,7 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 
 	taskID, err := dao.Tasks.Ctx(ctx).Data(do.Tasks{
 		Name:           name,
-		Description:    strings.TrimSpace(req.Description),
+		Description:    description,
 		AutomaId:       workflowID,
 		ClientIp:       clientIP,
 		CronExpression: strings.TrimSpace(req.CronExpression),

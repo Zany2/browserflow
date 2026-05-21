@@ -20,32 +20,103 @@ import (
 
 // WorkflowList returns local-file workflow records 返回本地文件中的工作流列表
 func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq) (res *v1.WorkflowListRes, err error) {
+	keyword := strings.ToLower(strings.TrimSpace(req.Keyword))
+	sourceIP := strings.TrimSpace(req.SourceIP)
+	pageNum := req.PageNum
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 30
+	}
+	start := (pageNum - 1) * pageSize
+
 	var records []*model.AutomaWorkflowRecord
 	if consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer {
+		serverKeyword := keyword
+		customKeyword := strings.ToLower(strings.TrimSpace(req.CustomKeyword))
+		if customKeyword == "" && req.Syncable == 1 {
+			customKeyword = serverKeyword
+			serverKeyword = ""
+		}
 		columns := dao.AutomaWorkflows.Columns()
+		dbModel := dao.AutomaWorkflows.Ctx(ctx)
+		if req.Source > 0 {
+			dbModel = dbModel.Where(columns.Source, req.Source)
+		}
+		if sourceIP != "" {
+			dbModel = dbModel.Where(columns.SourceIp, sourceIP)
+		}
+		if req.Syncable == 1 {
+			dbModel = dbModel.Where(columns.IsProtected, false)
+		}
+		if req.Syncable == 2 {
+			dbModel = dbModel.Where(columns.IsProtected, true)
+		}
+		if customKeyword != "" {
+			likeKeyword := "%" + customKeyword + "%"
+			dbModel = dbModel.Where("(LOWER("+columns.Name+") LIKE ? OR LOWER("+columns.Description+") LIKE ?)", likeKeyword, likeKeyword)
+		}
+		if serverKeyword != "" {
+			likeKeyword := "%" + serverKeyword + "%"
+			dbModel = dbModel.Where(
+				"(LOWER("+columns.AutomaId+") LIKE ? OR "+
+					"LOWER("+columns.Name+") LIKE ? OR "+
+					"LOWER("+columns.Description+") LIKE ? OR "+
+					"LOWER("+columns.AutomaName+") LIKE ? OR "+
+					"LOWER("+columns.AutomaDescription+") LIKE ? OR "+
+					"LOWER("+columns.SourceIp+") LIKE ?)",
+				likeKeyword,
+				likeKeyword,
+				likeKeyword,
+				likeKeyword,
+				likeKeyword,
+				likeKeyword,
+			)
+		}
+
+		total, countErr := dbModel.Count()
+		if countErr != nil {
+			return nil, countErr
+		}
+
 		items := []entity.AutomaWorkflows{}
-		if err = dao.AutomaWorkflows.Ctx(ctx).OrderDesc(columns.UpdatedAt).Scan(&items); err != nil {
+		if err = dbModel.OrderDesc(columns.UpdatedAt).Limit(start, pageSize).Scan(&items); err != nil {
 			return nil, err
 		}
-		records = make([]*model.AutomaWorkflowRecord, 0, len(items))
+
+		list := make([]v1.WorkflowListResModel, 0, len(items))
 		for index := range items {
 			item := items[index]
-			record := &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
-			if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {
-				record.FirstSyncedAt = item.FirstSyncedAt.Time
+			sourceText := ""
+			if item.Source == 1 {
+				sourceText = "页面导入"
 			}
-			if item.LastSyncedAt != nil && !item.LastSyncedAt.IsZero() {
-				record.LastSyncedAt = item.LastSyncedAt.Time
+			if item.Source == 2 {
+				sourceText = "客户端同步"
 			}
+			automaName := strings.TrimSpace(item.AutomaName)
+			if automaName == "" {
+				automaName = item.Name
+			}
+			automaDescription := strings.TrimSpace(item.AutomaDescription)
+			if automaDescription == "" {
+				automaDescription = item.Description
+			}
+			listItem := v1.WorkflowListResModel{Id: item.Id, AutomaId: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: automaName, AutomaDescription: automaDescription, Source: sourceText, SourceIp: item.SourceIp, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, ContentHash: item.ContentHash, Revision: item.Revision}
 			if item.CreatedAt != nil && !item.CreatedAt.IsZero() {
-				record.CreatedAt = item.CreatedAt.Time
+				listItem.CreatedAt = item.CreatedAt
 			}
 			if item.UpdatedAt != nil && !item.UpdatedAt.IsZero() {
-				record.UpdatedAt = item.UpdatedAt.Time
+				listItem.UpdatedAt = item.UpdatedAt
 			}
-			records = append(records, record)
+			list = append(list, listItem)
 		}
-	} else {
+		return &v1.WorkflowListRes{List: list, Total: total}, nil
+	}
+
+	{
 		state.DBMu.Lock()
 		if state.DB == nil {
 			dbPath := os.Getenv("DB_PATH")
@@ -69,11 +140,6 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 			return nil, err
 		}
 	}
-	if err != nil {
-		return nil, err
-	}
-	keyword := strings.ToLower(strings.TrimSpace(req.Keyword))
-	sourceIP := strings.TrimSpace(req.SourceIP)
 	filtered := make([]*model.AutomaWorkflowRecord, 0, len(records))
 	for _, record := range records {
 		if req.Source > 0 && record.Source != req.Source {
@@ -99,15 +165,6 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 	sort.SliceStable(filtered, func(i, j int) bool {
 		return filtered[i].UpdatedAt.After(filtered[j].UpdatedAt)
 	})
-	pageNum := req.PageNum
-	if pageNum <= 0 {
-		pageNum = 1
-	}
-	pageSize := req.PageSize
-	if pageSize <= 0 {
-		pageSize = 30
-	}
-	start := (pageNum - 1) * pageSize
 	end := start + pageSize
 	if start > len(filtered) {
 		start = len(filtered)

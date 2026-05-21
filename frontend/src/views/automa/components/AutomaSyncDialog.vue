@@ -2,7 +2,7 @@
   <AppDialog
     v-model="visible"
     title="客户端同步"
-    width="min(1520px, calc(100vw - 32px))"
+    width="min(1760px, calc(100vw - 16px))"
     confirm-text="同步选中"
     :confirm-disabled="selectedIds.length === 0"
     :loading="syncing"
@@ -89,25 +89,25 @@
       >
         <el-table-column type="selection" width="40" reserve-selection :selectable="isSelectable" />
 
-        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="110" show-overflow-tooltip>
+        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="96" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.source_ip || '' }}
           </template>
         </el-table-column>
 
-        <el-table-column label="自定义名称" min-width="125" show-overflow-tooltip>
+        <el-table-column label="自定义名称" min-width="108" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.server_name || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="自定义描述" min-width="150" show-overflow-tooltip>
+        <el-table-column label="自定义描述" min-width="118" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.server_description || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流名称" min-width="190">
+        <el-table-column label="工作流名称" min-width="168">
           <template #default="{ row }">
             <span class="compare-line" :title="formatCompareText(row.automa_name || row.name, row.server_automa_name)">
               <span class="compare-item">
@@ -122,7 +122,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流描述" min-width="210">
+        <el-table-column label="工作流描述" min-width="176">
           <template #default="{ row }">
             <span
               class="compare-line"
@@ -140,7 +140,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="同步状态" width="96" header-align="center">
+        <el-table-column label="同步状态" width="86" header-align="center">
           <template #default="{ row }">
             <div class="center-cell">
               <el-tag :type="getSyncTagType(row)" effect="plain">
@@ -150,7 +150,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流状态" width="116" header-align="center">
+        <el-table-column label="工作流状态" width="96" header-align="center">
           <template #default="{ row }">
             <div class="center-cell">
               <el-tag class="workflow-status-tag" :type="getWorkflowTagType(row)" effect="plain">
@@ -160,7 +160,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="客户端更新时间" width="178" class-name="nowrap-column">
+        <el-table-column label="客户端更新时间" width="196" class-name="nowrap-column">
           <template #default="{ row }">
             <span class="time-value" :title="formatOptionalDate(row.updated_at_automa || row.updatedAt || row.updated_at)">
               {{ formatOptionalDate(row.updated_at_automa || row.updatedAt || row.updated_at) }}
@@ -168,7 +168,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="同步时间" width="178" class-name="nowrap-column">
+        <el-table-column label="同步时间" width="196" class-name="nowrap-column">
           <template #default="{ row }">
             <span class="time-value" :title="formatOptionalDate(row.last_synced_at)">
               {{ formatOptionalDate(row.last_synced_at) }}
@@ -176,7 +176,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="数据库更新时间" width="178" class-name="nowrap-column">
+        <el-table-column label="数据库更新时间" width="196" class-name="nowrap-column">
           <template #default="{ row }">
             <span class="time-value" :title="formatOptionalDate(row.server_updated_at)">
               {{ formatOptionalDate(row.server_updated_at) }}
@@ -374,11 +374,23 @@ function handleClientSelectVisible(opened) {
 async function loadOnlineWorkflowOptions() {
   workflowOptionLoading.value = true
   try {
-    const data = await listAutomaSyncCandidatesByWorkflow('', {
-      page_num: 1,
-      page_size: 1000,
-      refresh: 1,
-    })
+    let pageNum = 1
+    let total = 0
+    const allWorkflowCandidates = []
+
+    do {
+      const data = await listAutomaSyncCandidatesByWorkflow('', {
+        page_num: pageNum,
+        page_size: 60,
+        refresh: pageNum === 1 ? 1 : 0,
+      })
+      const pageList = normalizeList(data, 'workflows')
+      total = Number(data?.total || pageList.length)
+      allWorkflowCandidates.push(...pageList)
+      if (pageList.length === 0) break
+      pageNum += 1
+    } while (allWorkflowCandidates.length < total)
+
     const workflowMap = new Map()
     const dbWorkflowMap = new Map(
       normalizeList(props.workflows)
@@ -386,7 +398,7 @@ async function loadOnlineWorkflowOptions() {
         .filter(([workflowId]) => Boolean(workflowId)),
     )
 
-    normalizeList(data, 'workflows').forEach((item) => {
+    allWorkflowCandidates.forEach((item) => {
       const workflowId = item.automa_id || getWorkflowId(item)
       if (!workflowId || workflowMap.has(workflowId)) return
 
@@ -619,8 +631,6 @@ function formatCompareText(clientValue, serverValue) {
 
 .candidate-table :deep(.nowrap-column .cell) {
   padding-inline: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -718,9 +728,6 @@ function formatCompareText(clientValue, serverValue) {
 .time-value {
   display: block;
   width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

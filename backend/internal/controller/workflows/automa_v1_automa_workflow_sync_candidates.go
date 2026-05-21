@@ -19,6 +19,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/Zany2/browserflow/backend/utility/workflowagent"
 	"github.com/Zany2/browserflow/backend/utility/workflowcache"
+	"github.com/Zany2/browserflow/backend/utility/workflowhash"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -221,16 +222,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 
 	candidates := make([]v1.WorkflowSyncCandidatesResModel, 0, len(items))
 	for _, item := range items {
-		hashDrawflowValue := item["drawflow"]
-		if drawflowText, ok := hashDrawflowValue.(string); ok {
-			drawflowText = strings.TrimSpace(drawflowText)
-			if drawflowText != "" {
-				var parsedDrawflow any
-				if json.Unmarshal([]byte(drawflowText), &parsedDrawflow) == nil {
-					hashDrawflowValue = parsedDrawflow
-				}
-			}
-		}
+		hashDrawflowValue := workflowhash.NormalizeDrawflowForHash(item["drawflow"])
 		hashTableValue := item["table"]
 		if hashTableValue == nil {
 			hashTableValue = item["dataColumns"]
@@ -337,10 +329,16 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 	return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}, nil
 }
 
-// resolveWorkflowSyncState compares by Automa id matched record, then updatedAt and core hash. 按 ID 匹配后用更新时间和核心哈希计算同步状态
+// resolveWorkflowSyncState compares content hash first, then updatedAt. 优先用内容哈希判断一致，再用更新时间判断新旧。
 func resolveWorkflowSyncState(serverRecord *model.AutomaWorkflowRecord, clientUpdatedAt int64, clientContentHash string) (synced bool, hasUpdate bool, status string) {
 	if serverRecord == nil {
 		return false, true, "not_synced"
+	}
+
+	serverContentHash := strings.TrimSpace(serverRecord.ContentHash)
+	clientContentHash = strings.TrimSpace(clientContentHash)
+	if serverContentHash != "" && clientContentHash != "" && serverContentHash == clientContentHash {
+		return true, false, "synced"
 	}
 
 	serverUpdatedAt := serverRecord.UpdatedAtAutoma
@@ -353,10 +351,5 @@ func resolveWorkflowSyncState(serverRecord *model.AutomaWorkflowRecord, clientUp
 		}
 	}
 
-	serverContentHash := strings.TrimSpace(serverRecord.ContentHash)
-	clientContentHash = strings.TrimSpace(clientContentHash)
-	if serverContentHash != "" && clientContentHash != "" && serverContentHash == clientContentHash {
-		return true, false, "synced"
-	}
 	return false, true, "has_update"
 }

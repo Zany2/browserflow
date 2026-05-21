@@ -1,15 +1,15 @@
 <template>
   <AppDialog
     v-model="dialogVisible"
-    title="同步后端工作流到本地 Automa"
-    width="980px"
+    title="同步后端工作流到本地"
+    width="1360px"
   >
     <div class="sync-dialog">
       <div class="sync-toolbar">
         <el-input
           v-model="syncKeyword"
           clearable
-          placeholder="搜索后端工作流名称、ID、来源 IP"
+          placeholder="搜索后端自定义名称、描述"
           @clear="searchSyncWorkflowsNow"
           @keyup.enter="searchSyncWorkflowsNow"
         />
@@ -28,26 +28,48 @@
         @selection-change="handleSyncSelectionChange"
       >
         <el-table-column type="selection" width="40" reserve-selection />
-        <el-table-column label="工作流名称" min-width="180" show-overflow-tooltip>
+        <el-table-column label="自定义名称" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.name || '' }}
           </template>
         </el-table-column>
-        <el-table-column label="工作流描述" min-width="180" show-overflow-tooltip>
+        <el-table-column label="自定义描述" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.description || '' }}
           </template>
         </el-table-column>
-        <el-table-column label="本地状态" width="96" align="center">
+        <el-table-column label="工作流名称" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="getLocalWorkflowTagType(row)" effect="plain">
-              {{ getLocalWorkflowText(row) }}
-            </el-tag>
+            {{ getAutomaWorkflowName(row) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="工作流描述" min-width="190" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ getAutomaWorkflowDescription(row) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="节点/连线" width="90" align="center">
+          <template #default="{ row }">
+            {{ formatWorkflowGraphSize(row) }}
           </template>
         </el-table-column>
         <el-table-column label="更新时间" width="160" class-name="nowrap-column">
           <template #default="{ row }">
             {{ formatDate(getServerWorkflowUpdatedAt(row)) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="同步状态" width="96" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getSyncTagType(row)" effect="plain">
+              {{ getSyncText(row) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="工作流状态" width="96" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getWorkflowTagType(row)" effect="plain">
+              {{ getWorkflowText(row) }}
+            </el-tag>
           </template>
         </el-table-column>
       </el-table>
@@ -161,8 +183,10 @@ async function loadSyncableWorkflows() {
   syncListLoading.value = true
 
   try {
+    const keyword = syncKeyword.value.trim()
     const data = await listAutomaWorkflows({
-      keyword: syncKeyword.value.trim(),
+      keyword,
+      custom_keyword: keyword,
       page_num: syncPageNum.value,
       page_size: syncPageSize.value,
       syncable: 1,
@@ -250,6 +274,15 @@ async function enrichSyncableWorkflowHashes(workflows) {
       return {
         ...workflow,
         content_hash: workflow.content_hash || detail?.content_hash || detail?.contentHash || '',
+        automa_name:
+          workflow.automa_name || workflow.automaName || detail?.automa_name || detail?.automaName || detailWorkflow?.name || '',
+        automa_description:
+          workflow.automa_description ||
+          workflow.automaDescription ||
+          detail?.automa_description ||
+          detail?.automaDescription ||
+          detailWorkflow?.description ||
+          '',
         serverContentHash: detailWorkflow ? await createWorkflowContentHash(detailWorkflow) : '',
         updated_at_automa:
           workflow.updated_at_automa || detail?.updated_at_automa || detail?.updatedAtAutoma || 0,
@@ -352,34 +385,93 @@ function getLocalWorkflowId(row) {
   return row?.id || row?.automaId || row?.automa_id || row?.workflowId || ''
 }
 
-function getLocalWorkflowText(row) {
-  return getLocalWorkflowStatus(row).text
+function getSyncText(row) {
+  const status = resolveLocalWorkflowStatus(row)
+  if (status.key === 'local_newer') return '不可同步'
+  if (status.key === 'synced') return '已同步'
+  if (status.canSync) return '可同步'
+  return '未同步'
 }
 
-function getLocalWorkflowTagType(row) {
-  return getLocalWorkflowStatus(row).type
+function getSyncTagType(row) {
+  const status = resolveLocalWorkflowStatus(row)
+  if (status.key === 'local_newer') return 'danger'
+  if (status.key === 'synced') return 'success'
+  if (status.canSync) return 'warning'
+  return 'info'
 }
 
-function getLocalWorkflowStatus(row) {
+function getWorkflowText(row) {
+  const status = resolveLocalWorkflowStatus(row)
+  if (status.key === 'not_synced') return '本地无记录'
+  if (status.key === 'local_newer') return '本地较新'
+  if (status.key === 'server_newer') return '数据库较新'
+  if (status.key === 'synced') return '内容一致'
+  if (status.key === 'has_update') return '内容有差异'
+  return '待同步'
+}
+
+function getWorkflowTagType(row) {
+  const status = resolveLocalWorkflowStatus(row)
+  if (status.key === 'synced') return 'success'
+  if (status.key === 'local_newer') return 'danger'
+  if (status.canSync) return 'warning'
+  return 'info'
+}
+
+function resolveLocalWorkflowStatus(row) {
   const localWorkflow = getMatchedLocalWorkflow(row)
   if (!localWorkflow) {
-    return { text: '待同步', type: 'info' }
+    return { key: 'not_synced', canSync: true }
   }
 
   const serverHash = String(row?.serverContentHash || row?.content_hash || row?.contentHash || '').trim()
   const localHash = String(localWorkflow.contentHash || '').trim()
   if (serverHash && localHash && serverHash === localHash) {
-    return { text: '已同步', type: 'success' }
-  }
-  if (serverHash && localHash) {
-    return { text: '本地有差异', type: 'warning' }
+    return { key: 'synced', canSync: false }
   }
 
-  return { text: '本地已存在', type: 'primary' }
+  const serverUpdatedAt = resolveAutomaTimestamp(
+    row?.updated_at_automa,
+    row?.updatedAtAutoma,
+    row?.updatedAt,
+    row?.updated_at,
+  )
+  const localUpdatedAt = resolveAutomaTimestamp(
+    localWorkflow.updatedAt,
+    localWorkflow.updated_at,
+    localWorkflow.updatedAtAutoma,
+    localWorkflow.updated_at_automa,
+  )
+  if (serverUpdatedAt && localUpdatedAt && localUpdatedAt > serverUpdatedAt) {
+    return { key: 'local_newer', canSync: false }
+  }
+  if (serverUpdatedAt && localUpdatedAt && localUpdatedAt < serverUpdatedAt) {
+    return { key: 'server_newer', canSync: true }
+  }
+  if (serverHash && localHash) {
+    return { key: 'has_update', canSync: true }
+  }
+
+  return { key: 'exists', canSync: true }
 }
 
 function getMatchedLocalWorkflow(row) {
   return localWorkflowMap.value.get(getWorkflowDisplayId(row)) || null
+}
+
+function formatWorkflowGraphSize(row) {
+  const nodeCount = row?.node_count ?? row?.nodeCount ?? 0
+  const edgeCount = row?.edge_count ?? row?.edgeCount ?? 0
+  return `${nodeCount} / ${edgeCount}`
+}
+
+function getAutomaWorkflowName(row) {
+  return row?.automa_name || row?.automaName || row?.workflow_name || row?.workflowName || ''
+}
+
+function getAutomaWorkflowDescription(row) {
+  return row?.automa_description || row?.automaDescription || row?.workflow_description || row?.workflowDescription || ''
 }
 
 async function buildLocalWorkflowMap(workflows) {

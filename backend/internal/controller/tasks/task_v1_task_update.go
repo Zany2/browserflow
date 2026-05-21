@@ -5,19 +5,25 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
+	"github.com/Zany2/browserflow/backend/internal/consts"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/gogf/gf/v2/util/grand"
 )
 
 // TaskUpdate updates task 更新任务
 func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (res *v1.TaskUpdateRes, err error) {
 	name := strings.TrimSpace(req.Name)
+	description := strings.TrimSpace(req.Description)
 	workflowID := strings.TrimSpace(req.WorkflowID)
 	if name == "" {
-		return nil, gerror.New("任务名称不能为空")
+		name = "任务-" + grand.S(8)
+	}
+	if description == "" {
+		description = "任务说明-" + grand.S(8)
 	}
 	if workflowID == "" {
 		return nil, gerror.New("工作流不能为空")
@@ -38,7 +44,7 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 	if err != nil {
 		return nil, err
 	}
-	if clientIP == "" {
+	if consts.ResolveRuntimeMode(ctx) != consts.RuntimeModeServer && clientIP == "" {
 		return nil, gerror.New("执行客户端不能为空")
 	}
 
@@ -56,7 +62,7 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		WherePri(taskID).
 		Data(do.Tasks{
 			Name:           name,
-			Description:    strings.TrimSpace(req.Description),
+			Description:    description,
 			AutomaId:       workflowID,
 			ClientIp:       clientIP,
 			CronExpression: strings.TrimSpace(req.CronExpression),
