@@ -1,209 +1,298 @@
 <template>
-  <!-- Hero panel 首页主视觉，先说明价值，再给出当前模式 -->
   <section class="home-page">
     <section class="hero-panel">
       <div class="hero-copy">
-        <span class="eyebrow">双模式浏览器自动化平台</span>
-        <h1>把 Automa 工作流，接成可调度的自动化能力</h1>
+        <p class="eyebrow">Browser automation workspace</p>
+        <h1>{{ heroTitle }}</h1>
         <p class="summary">
-          BrowserFlow 把浏览器执行端、工作流同步、任务下发和结果追踪放进同一条链路里：
-          在 Windows 上专注本机调试与执行，部署到服务器后则承担多客户端调度和集中管理。
+          {{ heroSummary }}
         </p>
       </div>
-      <div class="mode-strip" aria-label="运行模式">
-        <span class="mode-pill mode-pill--current">{{ currentModeLabel }}</span>
-        <span class="mode-pill mode-pill--desktop">Windows 本地</span>
-        <span class="mode-pill mode-pill--server">Server 调度</span>
+
+      <div class="hero-status">
+        <span class="status-label">当前模式</span>
+        <strong>{{ runtimeModeText }}</strong>
+        <template v-if="backendAvailable && isServerMode">
+          <span class="status-note">将客户端地址发给执行电脑打开</span>
+          <div class="client-link-row">
+            <a class="client-link" :href="clientAgentUrl" target="_blank" rel="noreferrer">
+              {{ clientAgentUrl }}
+            </a>
+            <el-button link type="primary" @click="copyClientAgentUrl">复制</el-button>
+          </div>
+        </template>
+        <span v-else class="status-note" :class="{ 'status-note--error': !backendAvailable }">
+          {{ runtimeStatusNote }}
+        </span>
       </div>
     </section>
 
-    <!-- Quick start 当前模式下的高频入口，减少用户判断成本 -->
-    <section class="quick-start-panel">
-      <div class="section-heading">
-        <div class="section-heading__copy">
-          <span>从这里开始</span>
-          <p>{{ currentModeDescription }}</p>
-        </div>
-        <a
-          v-if="showAgentEntryLink"
-          class="client-agent-link"
-          :href="agentEntryUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {{ agentEntryText }}
-        </a>
-      </div>
-      <div class="quick-start-grid">
+    <section class="quick-grid" aria-label="核心入口">
+      <template v-if="backendAvailable">
         <RouterLink
-          v-for="item in currentModeActions"
+          v-for="item in quickActions"
           :key="item.to"
-          class="quick-start-card"
+          class="quick-card"
           :to="item.to"
         >
+          <span class="quick-icon">{{ item.icon }}</span>
           <strong>{{ item.title }}</strong>
-          <span>{{ item.description }}</span>
+          <span>{{ item.desc }}</span>
         </RouterLink>
-      </div>
+      </template>
+      <template v-else>
+        <button
+          v-for="item in quickActions"
+          :key="item.to"
+          class="quick-card quick-card--disabled"
+          type="button"
+          @click="showBackendUnavailable"
+        >
+          <span class="quick-icon">{{ item.icon }}</span>
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.desc }}</span>
+        </button>
+      </template>
     </section>
 
-    <!-- Runtime modes 双模式说明，压缩成面向决策的描述 -->
-    <section class="mode-grid">
-      <article class="mode-card mode-card--desktop">
-        <h2>Windows 本地使用</h2>
-        <p>
-          适合单机调试和本地自动化。启动受控浏览器后，可以直接管理工作流、验证模型、测试对话，
-          并从当前浏览器里的 Automa 读取或执行流程。
-        </p>
-        <div class="route-list">
-          <span>浏览器</span>
-          <span>大模型</span>
-          <span>对话</span>
-          <span>工作流</span>
-        </div>
-      </article>
-
-      <article class="mode-card mode-card--server">
-        <h2>服务器任务调度</h2>
-        <p>
-          适合长期在线和多客户端协作。服务端负责同步工作流、绑定客户端、创建任务计划，
-          并持续记录每次下发、执行状态和结果。
-        </p>
-        <div class="route-list">
-          <span>工作流管理</span>
-          <span>任务配置</span>
-          <span>执行记录</span>
-          <span>客户端</span>
-        </div>
+    <section class="intro-grid">
+      <article v-for="card in introCards" :key="card.title" class="intro-card">
+        <span class="intro-tag" :class="card.tagClass">{{ card.tag }}</span>
+        <h2>{{ card.title }}</h2>
+        <p>{{ card.desc }}</p>
       </article>
     </section>
 
-    <!-- Feature cards 核心能力，围绕一条自动化闭环展开 -->
-    <section class="feature-grid">
-      <article class="feature-item feature-item--blue">
-        <h2>连接执行端</h2>
-        <p>让本地浏览器或远程客户端稳定接入，先把“能执行”这件事接牢。</p>
-      </article>
-      <article class="feature-item feature-item--green">
-        <h2>管理工作流</h2>
-        <p>读取、同步、导入和保护 Automa 工作流，让流程从浏览器里真正走进系统。</p>
-      </article>
-      <article class="feature-item feature-item--orange">
-        <h2>编排任务</h2>
-        <p>把工作流、参数、客户端和 Cron 组合成任务，而不是每次都靠人工点一下。</p>
-      </article>
-      <article class="feature-item feature-item--purple">
-        <h2>追踪结果</h2>
-        <p>保留下发、回执、错误和结果，让自动化从“跑过”变成“可追溯”。</p>
-      </article>
+    <section class="flow-panel" aria-label="使用流程">
+      <span v-for="(step, index) in flowSteps" :key="step" class="flow-step">
+        {{ step }}
+        <strong v-if="index < flowSteps.length - 1">→</strong>
+      </span>
     </section>
-
-    <!-- Workflow chain 主流程，用最短路径说明产品心智 -->
-    <section class="flow-panel">
-      <span>连接执行端</span>
-      <strong>→</strong>
-      <span>同步工作流</span>
-      <strong>→</strong>
-      <span>编排任务</span>
-      <strong>→</strong>
-      <span>自动执行</span>
-      <strong>→</strong>
-      <span>追踪结果</span>
-    </section>
-
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import { getRuntimeConfig } from '@/services/app'
+import { copyText } from '@/utils/browser'
 
-const router = useRouter()
 const runtimeMode = ref('')
+const backendAvailable = ref(true)
+const frontendUrl = ref('')
 
-// Mode copy 当前运行模式对应的首页说明文案
-const modeCopy = {
-  windows: {
-    label: '当前：Windows 本地模式',
-    description: '先启动浏览器，再读取工作流、验证模型，适合本机调试和单机执行。',
-    actions: [
-      { to: '/browser', title: '浏览器', description: '启动并查看受控浏览器状态' },
-      { to: '/workflows', title: '工作流', description: '读取、打开或执行 Automa 流程' },
-      { to: '/llm', title: '大模型', description: '配置供应商、模型与默认参数' },
-      { to: '/chat', title: '对话', description: '快速验证模型是否可用' },
-    ],
+// windowsQuickActions lists local workspace entries Windows 本地模式入口
+const windowsQuickActions = [
+  {
+    icon: '01',
+    title: '浏览器',
+    desc: '维护浏览器实例和运行状态，作为自动化执行现场',
+    to: '/browser',
   },
-  server: {
-    label: '当前：Server 调度模式',
-    description: '先接入客户端，再同步工作流和创建任务，适合远程调度与集中管理。',
-    actions: [
-      { to: '/clients', title: '客户端', description: '查看在线执行端与连接状态' },
-      { to: '/automa', title: '工作流管理', description: '同步、导入并维护服务端流程' },
-      { to: '/tasks', title: '任务配置', description: '绑定流程、客户端与调度规则' },
-      { to: '/task-records', title: '执行记录', description: '追踪下发、回执与执行结果' },
-    ],
+  {
+    icon: '02',
+    title: '工作流',
+    desc: '读取、筛选、执行和导出浏览器里的 Automa 工作流',
+    to: '/workflows',
   },
-}
+  {
+    icon: '03',
+    title: '大模型',
+    desc: '集中维护模型厂商、模型名称和 API Key',
+    to: '/llm',
+  },
+  {
+    icon: '04',
+    title: '对话',
+    desc: '用流式对话快速验证模型配置和回答效果',
+    to: '/chat',
+  },
+]
+
+// serverQuickActions lists scheduler workspace entries Server 调度模式入口
+const serverQuickActions = [
+  {
+    icon: '01',
+    title: '工作流管理',
+    desc: '导入、同步和维护服务端可调度的工作流',
+    to: '/automa',
+  },
+  {
+    icon: '02',
+    title: '任务配置',
+    desc: '把工作流编排成可手动或定时下发的任务',
+    to: '/tasks',
+  },
+  {
+    icon: '03',
+    title: '执行记录',
+    desc: '查看任务下发、运行状态和客户端回传结果',
+    to: '/task-records',
+  },
+  {
+    icon: '04',
+    title: '客户端',
+    desc: '管理在线执行电脑、插件状态和连接状态',
+    to: '/clients',
+  },
+]
+
+// windowsIntroCards describes local scenarios and strengths Windows 模式使用场景与优点
+const windowsIntroCards = [
+  {
+    tag: '使用场景',
+    tagClass: 'intro-tag--scene',
+    title: '网页重复操作自动化',
+    desc: '适合登录后页面操作、表单填写、数据读取、流程验证等需要稳定复用的浏览器任务。',
+  },
+  {
+    tag: '使用场景',
+    tagClass: 'intro-tag--scene',
+    title: 'Automa 工作流调试',
+    desc: '从当前浏览器读取工作流，查看参数、打开流程、带参数执行，让调试留在同一个控制台里。',
+  },
+  {
+    tag: '项目优点',
+    tagClass: 'intro-tag--advantage',
+    title: '执行链路更清晰',
+    desc: '浏览器、执行端、工作流和模型配置集中管理，减少在多个页面和工具之间来回切换。',
+  },
+  {
+    tag: '项目优点',
+    tagClass: 'intro-tag--advantage',
+    title: '本地优先，轻量可控',
+    desc: '优先服务本机 Windows 自动化场景，配置简单、反馈直接，也便于把稳定流程继续沉淀成 Skill。',
+  },
+]
+
+// serverIntroCards describes scheduler scenarios and strengths Server 模式使用场景与优点
+const serverIntroCards = [
+  {
+    tag: '使用场景',
+    tagClass: 'intro-tag--scene',
+    title: '集中调度多台客户端',
+    desc: '适合把多台执行电脑接入同一个控制台，由服务端统一维护客户端、任务和执行状态。',
+  },
+  {
+    tag: '使用场景',
+    tagClass: 'intro-tag--scene',
+    title: '工作流下发与同步',
+    desc: '服务端保存可同步工作流，客户端打开执行页后接收任务并在本地 Automa 中执行。',
+  },
+  {
+    tag: '项目优点',
+    tagClass: 'intro-tag--advantage',
+    title: '调度和执行解耦',
+    desc: '服务端负责配置、派发和记录，客户端负责实际浏览器执行，更适合长期运行的自动化任务。',
+  },
+  {
+    tag: '项目优点',
+    tagClass: 'intro-tag--advantage',
+    title: '执行过程可追踪',
+    desc: '客户端在线状态、任务记录和结果回传集中展示，方便排查任务失败和确认执行进度。',
+  },
+]
+
+const isServerMode = computed(() => runtimeMode.value === 'server')
+
+// quickActions switches entries by runtime mode 首页入口按运行模式切换
+const quickActions = computed(() => (isServerMode.value ? serverQuickActions : windowsQuickActions))
+
+// introCards switches scenario cards by runtime mode 首页说明卡片按运行模式切换
+const introCards = computed(() => (isServerMode.value ? serverIntroCards : windowsIntroCards))
+
+// flowSteps switches automation lifecycle by runtime mode 首页流程步骤按运行模式切换
+const flowSteps = computed(() =>
+  isServerMode.value
+    ? ['同步工作流', '生成客户端地址', '客户端连接', '下发任务', '查看记录']
+    : ['配置浏览器', '连接执行端', '读取工作流', '填写参数', '执行验证'],
+)
+
+// heroTitle switches headline by runtime mode 首页标题按运行模式切换
+const heroTitle = computed(() => {
+  if (!backendAvailable.value) return 'BrowserFlow 后端服务暂不可用。'
+  if (isServerMode.value) return 'BrowserFlow 是一个面向多客户端自动化调度的服务端控制台。'
+  return 'BrowserFlow 是一个面向浏览器自动化的本地控制台。'
+})
+
+// heroSummary switches project intro by runtime mode 首页简介按运行模式切换
+const heroSummary = computed(() => {
+  if (!backendAvailable.value) {
+    return '当前无法连接后端服务，首页仍可查看项目入口。请先启动后端服务，恢复后刷新页面或重新点击入口。'
+  }
+  if (isServerMode.value) {
+    return '服务器模式用于集中管理工作流、任务、客户端和执行记录，适合把多台执行电脑接入同一个调度中心。'
+  }
+  return 'Windows 模式把浏览器实例、Automa 工作流、执行端连接、大模型配置和对话验证放在一起，适合把重复网页操作沉淀为可调试、可复用的本地流程。'
+})
+
+// clientAgentUrl builds a shareable client page address 生成可分享的客户端执行页地址
+const clientAgentUrl = computed(() => {
+  const configuredUrl = frontendUrl.value.trim().replace(/\/$/, '')
+  if (configuredUrl) return `${configuredUrl}/#/client-agent`
+  if (typeof window === 'undefined') return '#/client-agent'
+
+  return `${window.location.origin}${window.location.pathname}#/client-agent`
+})
 
 onMounted(async () => {
   try {
     const config = await getRuntimeConfig()
+    backendAvailable.value = true
     runtimeMode.value = String(config?.mode || '')
+    frontendUrl.value = String(config?.frontend_url || '')
   } catch {
+    backendAvailable.value = false
     runtimeMode.value = ''
+    frontendUrl.value = ''
   }
 })
 
-// currentModeMeta 当前模式元信息，失败时回退到通用说明
-const currentModeMeta = computed(() => {
-  return (
-    modeCopy[runtimeMode.value] || {
-      label: '当前：运行模式读取中',
-      description: '先确认后端运行模式，再进入对应的浏览器控制或任务调度页面。',
-      actions: [
-        { to: '/browser', title: '浏览器', description: '进入本地执行环境' },
-        { to: '/automa', title: '工作流管理', description: '进入服务端流程管理' },
-      ],
-    }
-  )
+// runtimeModeText displays current runtime mode 当前运行模式文案
+const runtimeModeText = computed(() => {
+  if (!backendAvailable.value) return '后端不可用'
+  if (runtimeMode.value === 'windows') return 'Windows 本地版'
+  if (runtimeMode.value === 'server') return '服务器调度版'
+  return '自动识别中'
 })
 
-// currentModeLabel 当前运行模式标题
-const currentModeLabel = computed(() => currentModeMeta.value.label)
-
-// currentModeDescription 当前运行模式说明
-const currentModeDescription = computed(() => currentModeMeta.value.description)
-
-// currentModeActions 当前运行模式推荐入口
-const currentModeActions = computed(() => currentModeMeta.value.actions)
-
-// showAgentEntryLink 服务端模式才显示客户端执行页入口
-const showAgentEntryLink = computed(() => runtimeMode.value === 'server')
-
-// agentEntryUrl current agent page url 当前模式对应的入口地址
-const agentEntryUrl = computed(() => {
-  return new URL(router.resolve({ name: 'client-agent' }).href, window.location.href).href
+// runtimeStatusNote displays runtime health note 显示运行状态提示
+const runtimeStatusNote = computed(() => {
+  if (!backendAvailable.value) return '后端服务未启动或连接失败，除首页外的路由已暂时禁用。'
+  return '公共能力与 Windows 本地能力优先可用'
 })
 
-// agentEntryText current agent page label 当前模式对应的入口文案
-const agentEntryText = computed(() => {
-  return '客户端执行页测试入口'
-})
+function showBackendUnavailable() {
+  appMessage({ type: APP_MESSAGE_TYPE.error, message: '后端服务不可用，请先启动后端' })
+}
+
+async function copyClientAgentUrl() {
+  await copyText(clientAgentUrl.value)
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端地址已复制' })
+}
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .home-page {
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 14px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .hero-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 24px;
-  padding: 22px 0 8px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(64, 158, 255, 0.18), transparent 34%),
+    linear-gradient(135deg, #f8fbff 0%, #ffffff 62%);
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
 }
 
 .hero-copy {
@@ -211,218 +300,188 @@ const agentEntryText = computed(() => {
 }
 
 .eyebrow {
-  display: inline-flex;
-  margin-bottom: 8px;
-  color: #1d4ed8;
+  margin: 0 0 10px;
+  color: #2563eb;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 h1 {
-  margin: 0 0 12px;
-  color: #303133;
-  font-size: 34px;
-  line-height: 1.25;
+  max-width: 760px;
+  margin: 0;
+  color: #111827;
+  font-size: 32px;
+  line-height: 1.22;
 }
 
 .summary {
-  max-width: 900px;
-  margin: 0;
+  max-width: 820px;
+  margin: 12px 0 0;
   color: #606266;
+  font-size: 16px;
   line-height: 1.7;
 }
 
-.mode-strip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.mode-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 12px;
-  font-size: 13px;
-  font-weight: 700;
-  border: 1px solid transparent;
-  border-radius: 6px;
-}
-
-.mode-pill--desktop {
-  color: #1d4ed8;
-  background: #eff6ff;
-  border-color: #bfdbfe;
-}
-
-.mode-pill--current {
-  color: #047857;
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-}
-
-.mode-pill--server {
-  color: #b45309;
-  background: #fffbeb;
-  border-color: #fde68a;
-}
-
-.quick-start-panel {
+.hero-status {
+  align-self: stretch;
   display: grid;
-  gap: 12px;
-  padding: 16px;
-  background: #ffffff;
+  align-content: center;
+  gap: 10px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.78);
   border: 1px solid #e4e7ed;
-  border-radius: 8px;
+  border-radius: 14px;
+  box-shadow: 0 18px 45px rgba(37, 99, 235, 0.08);
 }
 
-.section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.section-heading__copy {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.section-heading__copy span {
-  color: #303133;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.section-heading__copy p {
-  margin: 0;
+.status-label {
   color: #909399;
+  font-size: 13px;
 }
 
-.quick-start-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+.hero-status strong {
+  color: #111827;
+  font-size: 22px;
 }
 
-.quick-start-card {
-  display: grid;
-  gap: 4px;
-  min-height: 74px;
-  padding: 12px 14px;
-  background: #f8fbff;
-  border: 1px solid #dce8f5;
-  border-radius: 8px;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
-}
-
-.quick-start-card strong {
-  color: #303133;
-  font-size: 16px;
-}
-
-.quick-start-card span {
-  color: #606266;
-  line-height: 1.5;
-}
-
-.quick-start-card:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 10px 24px rgb(37 99 235 / 10%);
-  transform: translateY(-1px);
-}
-
-.mode-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.mode-card {
-  padding: 18px;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-  border-top: 5px solid transparent;
-  border-radius: 8px;
-}
-
-.mode-card--desktop {
-  border-top-color: #2563eb;
-}
-
-.mode-card--server {
-  border-top-color: #f59e0b;
-}
-
-.mode-card h2,
-.feature-item h2 {
-  margin: 0 0 8px;
-  color: #303133;
-  font-size: 18px;
-}
-
-.mode-card p,
-.feature-item p {
-  margin: 0;
+.status-note {
   color: #606266;
   line-height: 1.6;
 }
 
-.route-list {
-  display: flex;
-  flex-wrap: wrap;
+.status-note--error {
+  color: #c2410c;
+  font-weight: 700;
+}
+
+.client-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 8px;
-  margin-top: 12px;
+  min-width: 0;
 }
 
-.route-list span {
-  padding: 5px 9px;
-  color: #303133;
+.client-link {
+  min-width: 0;
+  overflow: hidden;
+  color: #2563eb;
   font-size: 13px;
-  background: #f5f7fa;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.feature-grid {
+.quick-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
-.feature-item {
-  padding: 14px 16px;
+.quick-card,
+.intro-card,
+.flow-panel {
   background: #ffffff;
   border: 1px solid #e4e7ed;
-  border-left: 5px solid transparent;
-  border-radius: 8px;
+  border-radius: 14px;
 }
 
-.feature-item--blue {
-  border-left-color: #3b82f6;
-  background: #f8fbff;
+.quick-card {
+  display: grid;
+  gap: 8px;
+  min-height: 118px;
+  padding: 16px;
+  color: #303133;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
-.feature-item--green {
-  border-left-color: #10b981;
-  background: #f7fffb;
+.quick-card--disabled {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: not-allowed;
+  opacity: 0.68;
 }
 
-.feature-item--orange {
-  border-left-color: #f97316;
-  background: #fffaf5;
+.quick-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 14px 32px rgba(37, 99, 235, 0.1);
+  transform: translateY(-2px);
 }
 
-.feature-item--purple {
-  border-left-color: #8b5cf6;
-  background: #fbfaff;
+.quick-card--disabled:hover {
+  border-color: #e4e7ed;
+  box-shadow: none;
+  transform: none;
+}
+
+.quick-icon {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.quick-card strong {
+  color: #111827;
+  font-size: 18px;
+}
+
+.quick-card span:last-child {
+  color: #606266;
+  line-height: 1.55;
+}
+
+.intro-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  min-height: 0;
+}
+
+.intro-card {
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.intro-tag {
+  display: inline-flex;
+  margin-bottom: 12px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 999px;
+}
+
+.intro-tag--scene {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.intro-tag--advantage {
+  color: #b45309;
+  background: #fffbeb;
+}
+
+.intro-card h2 {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 18px;
+}
+
+.intro-card p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: #606266;
+  line-height: 1.7;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .flow-panel {
@@ -430,51 +489,53 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 12px 16px;
-  color: #606266;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
+  padding: 16px 18px;
 }
 
-.flow-panel span {
+.flow-step {
   color: #303133;
   font-weight: 700;
 }
 
-.flow-panel strong {
-  color: #909399;
+.flow-step strong {
+  margin-left: 10px;
+  color: #c0c4cc;
 }
 
-.client-agent-link {
-  flex-shrink: 0;
-  color: #909399;
-  font-size: 13px;
-}
-
-.client-agent-link:hover {
-  color: #1677ff;
-}
-
-@media (max-width: 768px) {
-  .hero-panel,
-  .mode-grid,
-  .feature-grid,
-  .quick-start-grid {
+@media (max-width: 900px) {
+  .hero-panel {
     grid-template-columns: 1fr;
   }
 
-  .mode-strip {
-    justify-content: flex-start;
+  .intro-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .section-heading {
-    align-items: flex-start;
-    flex-direction: column;
+  .quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .home-page {
+    height: auto;
+    overflow: visible;
   }
 
-  .client-agent-link {
-    align-self: flex-start;
+  .hero-panel {
+    padding: 22px;
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+
+  .quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intro-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

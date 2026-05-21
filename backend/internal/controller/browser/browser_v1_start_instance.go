@@ -13,6 +13,7 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/browser/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/utility/browserruntime"
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
@@ -41,9 +42,12 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 		state.LLMClient = llm.NewClient()
 	}
 	db := state.DB
-	frontendURL := os.Getenv("FRONTEND_URL")
+	frontendURL := g.Cfg().MustGet(ctx, "frontend.url", "").String()
 	if frontendURL == "" {
-		frontendURL = g.Cfg().MustGet(ctx, "frontend.url", "http://localhost:5173").String()
+		frontendURL = os.Getenv("FRONTEND_URL")
+	}
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
 	}
 	state.DBMu.Unlock()
 
@@ -72,9 +76,6 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 
 	var runtime *state.BrowserRuntime
 	agentURL := fmt.Sprintf("%s/#/browser-agent?browser_id=%s", strings.TrimRight(frontendURL, "/"), url.QueryEscape(instance.ID))
-	state.BrowserMu.Lock()
-	state.BrowserCurrentInstanceID = instance.ID
-	state.BrowserMu.Unlock()
 	if instance.Type == "remote" {
 		controlURL := strings.TrimSpace(instance.ControlURL)
 		if controlURL == "" {
@@ -293,6 +294,6 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 		}
 	}
 	state.BrowserMu.Unlock()
-	watchBrowserRuntime(instance.ID, runtime)
+	browserruntime.Watch(instance.ID, runtime)
 	return &v1.BrowserInstanceStartRes{Status: &status}, nil
 }

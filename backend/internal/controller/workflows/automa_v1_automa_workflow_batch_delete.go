@@ -6,14 +6,37 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
+	"github.com/Zany2/browserflow/backend/internal/consts"
+	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // WorkflowBatchDelete deletes local workflow records 批量删除本地工作流
 func (c *ControllerV1) WorkflowBatchDelete(ctx context.Context, req *v1.WorkflowBatchDeleteReq) (res *v1.WorkflowBatchDeleteRes, err error) {
+	if consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer {
+		columns := dao.AutomaWorkflows.Columns()
+		for _, workflowID := range req.IDs {
+			workflowID = strings.TrimSpace(workflowID)
+			if workflowID == "" {
+				continue
+			}
+			model := dao.AutomaWorkflows.Ctx(ctx)
+			if primaryID := gconv.Int64(workflowID); primaryID > 0 {
+				model = model.WherePri(primaryID)
+			} else {
+				model = model.Where(columns.AutomaId, workflowID)
+			}
+			if _, err = model.Delete(); err != nil {
+				return nil, err
+			}
+		}
+		return &v1.WorkflowBatchDeleteRes{}, nil
+	}
+
 	state.DBMu.Lock()
 	if state.DB == nil {
 		dbPath := os.Getenv("DB_PATH")

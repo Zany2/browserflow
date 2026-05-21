@@ -17,13 +17,17 @@
           </el-button>
         </div>
 
-        <el-form label-width="88px">
-          <el-form-item label="名称">
-            <el-input v-model="workflow.name" clearable placeholder="未填写时从 JSON 中解析" />
+        <el-form label-width="132px">
+          <el-form-item label="自定义工作流名称">
+            <el-input v-model="workflow.name" clearable placeholder="可选；留空时使用 JSON 中的工作流名称" />
           </el-form-item>
 
-          <el-form-item label="工作流描述">
-            <el-input v-model="workflow.description" clearable type="textarea" :rows="2" placeholder="未填写时从 JSON 中解析" />
+          <el-form-item label="自定义工作流描述">
+            <el-input v-model="workflow.description" clearable type="textarea" :rows="2" placeholder="可选；留空时使用 JSON 中的工作流描述" />
+          </el-form-item>
+
+          <el-form-item label="Automa 工作流字段">
+            <el-input model-value="从上传的 Automa JSON 中解析保存，新增时不在这里编辑" disabled />
           </el-form-item>
 
           <el-form-item label="是否可同步">

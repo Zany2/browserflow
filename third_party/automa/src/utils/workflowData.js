@@ -117,7 +117,10 @@ export function importWorkflow(attrs = {}) {
                 {
                   ...currentWorkflow,
                   id: workflowId,
-                  createdAt: Date.now(),
+                  // BrowserFlow local change start: keep imported child workflow time 保留导入子工作流时间
+                  createdAt: currentWorkflow.createdAt || Date.now(),
+                  updatedAt: currentWorkflow.updatedAt || Date.now(),
+                  // BrowserFlow local change end
                 },
                 { duplicateId: true }
               );
@@ -134,10 +137,13 @@ export function importWorkflow(attrs = {}) {
           }
 
           workflowStore
+            // BrowserFlow local change start: keep imported workflow identity 保留手动导入工作流标识
             .insert({
               ...workflow,
-              createdAt: Date.now(),
-            })
+              createdAt: workflow.createdAt || Date.now(),
+              updatedAt: workflow.updatedAt || Date.now(),
+            }, { duplicateId: true })
+            // BrowserFlow local change end
             .then((result) => {
               Object.values(result).forEach((item) => {
                 const triggerBlock = findTriggerBlock(item.drawflow);

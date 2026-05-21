@@ -126,7 +126,16 @@ export async function streamChatMessage(sessionId, message, onChunk) {
       if (!line.startsWith('data:')) continue
       const payload = line.replace(/^data:\s*/, '')
       if (!payload) continue
-      onChunk(JSON.parse(payload))
+      // Await chunk handling so the UI can render SSE output character by character. 等待前端逐字渲染完成再处理下一段 SSE。
+      await onChunk(JSON.parse(payload))
+    }
+  }
+
+  if (buffer.trim()) {
+    const line = buffer.trim()
+    if (line.startsWith('data:')) {
+      const payload = line.replace(/^data:\s*/, '')
+      if (payload) await onChunk(JSON.parse(payload))
     }
   }
 }

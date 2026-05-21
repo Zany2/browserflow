@@ -22,23 +22,26 @@
         </div>
 
         <el-button @click="resetFilters">重置</el-button>
-        <el-button type="warning" :disabled="selectedClientIds.length === 0" @click="handleBatchOffline">
+        <el-button type="warning" :disabled="selectedClientIds.length === 0 || batchOfflineLoading"
+          :loading="batchOfflineLoading" @click="handleBatchOffline">
           下线重连
         </el-button>
-        <el-button type="danger" :disabled="selectedClientIds.length === 0" @click="handleBatchBan">
+        <el-button type="danger" :disabled="selectedClientIds.length === 0 || batchBanLoading"
+          :loading="batchBanLoading" @click="handleBatchBan">
           拉黑
         </el-button>
+        <AppSelectionSummary :count="selectedClientIds.length" unit="客户端" />
       </div>
 
-      <el-table v-loading="loading" class="client-table adaptive-table" :data="pagedClients" border height="100%"
-        row-key="id" empty-text="暂无客户端" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="40" />
-        <el-table-column label="客户端 IP" width="118">
+      <el-table ref="clientTableRef" v-loading="loading" class="client-table adaptive-table" :data="pagedClients" border height="100%"
+        :row-key="getClientId" empty-text="暂无客户端" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="40" reserve-selection />
+        <el-table-column label="客户端 IP" width="118" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ getClientIp(row) || '-' }}
+            {{ getClientIp(row) || '' }}
           </template>
         </el-table-column>
-        <el-table-column label="客户端名称" min-width="120">
+        <el-table-column label="客户端名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getClientName(row) }}
           </template>
@@ -57,17 +60,17 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Automa 版本" width="104">
+        <el-table-column label="Automa 版本" width="104" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getAutomaVersion(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="浏览器名称" width="100">
+        <el-table-column label="浏览器名称" width="100" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getBrowserName(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="浏览器版本" width="96">
+        <el-table-column label="浏览器版本" width="96" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getBrowserVersion(row) }}
           </template>
@@ -87,13 +90,16 @@
         <el-table-column label="操作" width="168" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button v-if="!isBanned(row)" link type="warning" @click="handleOffline(row)">
+            <el-button v-if="!isBanned(row)" link type="warning" :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)" @click="handleOffline(row)">
               下线重连
             </el-button>
-            <el-button v-if="!isBanned(row)" link type="danger" @click="handleBan(row)">
+            <el-button v-if="!isBanned(row)" link type="danger" :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)" @click="handleBan(row)">
               拉黑
             </el-button>
-            <el-button v-else link type="success" @click="handleUnban(row)">解除拉黑</el-button>
+            <el-button v-else link type="success" :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)" @click="handleUnban(row)">解除拉黑</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -124,11 +130,17 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { CopyDocument, RefreshRight } from '@element-plus/icons-vue'
 import AppDialog from '@/components/AppDialog.vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { useDebouncedAction } from '@/composables/useDebouncedAction'
+import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
+import { copyText } from '@/utils/browser'
+import { formatDate as formatBaseDate, formatEmpty as formatBaseEmpty } from '@/utils/format'
+import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList } from '@/utils/list'
 import {
   batchBanClients,
   batchOfflineClients,
@@ -144,22 +156,37 @@ const clients = ref([])
 const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
 const statusFilter = ref('')
 const keywordFilter = ref('')
-const filterSearchDelay = 200
-let filterSearchTimer = null
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailSaving = ref(false)
 const detailClient = ref(null)
 const detailForm = reactive(createDetailForm())
-const selectedClientIds = ref([])
+const clientTableRef = ref(null)
+const batchOfflineLoading = ref(false)
+const batchBanLoading = ref(false)
+const clientActionLoadingIds = ref(new Set())
 
 const pagedClients = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return clients.value.slice(start, start + pageSize.value)
 })
+const {
+  selectedKeys: selectedClientIds,
+  handleSelectionChange,
+  restoreSelection: restoreClientSelection,
+  retainSelectionByRows: retainClientSelectionByRows,
+  resetSelection: resetClientSelection,
+} = usePagedTableSelection({
+  rows: pagedClients,
+  getRowKey: getClientId,
+})
+const {
+  run: scheduleFilterSearch,
+  cancel: clearFilterSearchTimer,
+} = useDebouncedAction(searchClientsNow, 200)
 
 const detailFields = computed(() => {
   return [
@@ -191,10 +218,6 @@ onMounted(() => {
   loadClients()
 })
 
-onBeforeUnmount(() => {
-  clearFilterSearchTimer()
-})
-
 watch(statusFilter, () => {
   clearFilterSearchTimer()
   currentPage.value = 1
@@ -213,6 +236,10 @@ watch([clients, pageSize], () => {
   })
 })
 
+watch(pagedClients, () => {
+  restoreClientSelection(clientTableRef)
+})
+
 async function loadClients() {
   loading.value = true
   try {
@@ -221,9 +248,7 @@ async function loadClients() {
       keyword: keywordFilter.value.trim(),
     })
     clients.value = normalizeList(data, 'clients')
-    selectedClientIds.value = selectedClientIds.value.filter((id) =>
-      clients.value.some((client) => getClientId(client) === id),
-    )
+    retainClientSelectionByRows(clients.value)
   } finally {
     loading.value = false
   }
@@ -234,20 +259,9 @@ function resetFilters() {
   statusFilter.value = ''
 }
 
-function scheduleFilterSearch() {
-  clearFilterSearchTimer()
-  filterSearchTimer = window.setTimeout(() => {
-    filterSearchTimer = null
-    currentPage.value = 1
-    loadClients()
-  }, filterSearchDelay)
-}
-
-function clearFilterSearchTimer() {
-  if (!filterSearchTimer) return
-
-  window.clearTimeout(filterSearchTimer)
-  filterSearchTimer = null
+function searchClientsNow() {
+  currentPage.value = 1
+  loadClients()
 }
 
 async function openDetail(row) {
@@ -294,56 +308,103 @@ async function handleSaveDetail() {
 }
 
 async function handleOffline(row) {
-  await offlineClient(getClientId(row))
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '已通知客户端下线重连' })
-  await loadClients()
+  const clientId = getClientId(row)
+  if (!clientId || isClientActionLoading(row)) return
+
+  setClientActionLoading(clientId, true)
+  try {
+    await offlineClient(clientId)
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '已通知客户端下线重连' })
+    await loadClients()
+  } finally {
+    setClientActionLoading(clientId, false)
+  }
 }
 
 async function handleBatchOffline() {
   const ids = selectedClientIds.value.slice()
-  if (ids.length === 0) return
+  if (ids.length === 0 || batchOfflineLoading.value) return
 
-  const result = await batchOfflineClients(ids)
-  appMessage({
-    type: APP_MESSAGE_TYPE.success,
-    message: `已通知 ${getBatchSuccessCount(result, ids)} 个客户端下线重连`,
-  })
-  await loadClients()
+  batchOfflineLoading.value = true
+  try {
+    const result = await batchOfflineClients(ids)
+    appMessage({
+      type: APP_MESSAGE_TYPE.success,
+      message: `已通知 ${getBatchSuccessCount(result, ids)} 个客户端下线重连`,
+    })
+    await loadClients()
+    resetClientSelection(clientTableRef)
+  } finally {
+    batchOfflineLoading.value = false
+  }
 }
 
 async function handleBan(row) {
-  await banClient(getClientId(row))
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端已拉黑' })
-  await loadClients()
+  const clientId = getClientId(row)
+  if (!clientId || isClientActionLoading(row)) return
+
+  setClientActionLoading(clientId, true)
+  try {
+    await banClient(clientId)
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端已拉黑' })
+    await loadClients()
+  } finally {
+    setClientActionLoading(clientId, false)
+  }
 }
 
 async function handleBatchBan() {
   const ids = selectedClientIds.value.slice()
-  if (ids.length === 0) return
+  if (ids.length === 0 || batchBanLoading.value) return
 
-  const result = await batchBanClients(ids)
-  appMessage({
-    type: APP_MESSAGE_TYPE.success,
-    message: `已拉黑 ${getBatchSuccessCount(result, ids)} 个客户端`,
-  })
-  await loadClients()
+  batchBanLoading.value = true
+  try {
+    const result = await batchBanClients(ids)
+    appMessage({
+      type: APP_MESSAGE_TYPE.success,
+      message: `已拉黑 ${getBatchSuccessCount(result, ids)} 个客户端`,
+    })
+    await loadClients()
+    resetClientSelection(clientTableRef)
+  } finally {
+    batchBanLoading.value = false
+  }
 }
 
 async function handleUnban(row) {
   const clientId = getClientId(row)
-  if (!clientId) return
+  if (!clientId || isClientActionLoading(row)) return
 
-  await unbanClient(clientId)
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端已解除拉黑' })
-  await loadClients()
-}
-
-function handleSelectionChange(selection) {
-  selectedClientIds.value = selection.map((item) => getClientId(item)).filter(Boolean)
+  setClientActionLoading(clientId, true)
+  try {
+    await unbanClient(clientId)
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端已解除拉黑' })
+    await loadClients()
+  } finally {
+    setClientActionLoading(clientId, false)
+  }
 }
 
 function getBatchSuccessCount(result, fallbackIds) {
   return Number(result?.success || 0) || fallbackIds.length
+}
+
+function isClientActionLoading(row) {
+  const clientId = getClientId(row)
+  return Boolean(clientId && clientActionLoadingIds.value.has(String(clientId)))
+}
+
+function setClientActionLoading(clientId, loading) {
+  const key = String(clientId || '')
+  if (!key) return
+
+  const nextIds = new Set(clientActionLoadingIds.value)
+  if (loading) {
+    nextIds.add(key)
+  } else {
+    nextIds.delete(key)
+  }
+  clientActionLoadingIds.value = nextIds
 }
 
 function createDetailForm() {
@@ -413,11 +474,6 @@ function setDetailForm(row = {}) {
   })
 }
 
-function normalizeList(data, fallbackKey) {
-  const list = data?.list || data?.[fallbackKey] || []
-  return Array.isArray(list) ? list : []
-}
-
 function getClientId(row) {
   return row?.id || row?.client_id || row?.clientId || ''
 }
@@ -428,7 +484,7 @@ function getClientIp(row) {
 }
 
 function getClientName(row) {
-  return row?.client_name || row?.clientName || row?.name || row?.hostname || getClientId(row) || '-'
+  return row?.client_name || row?.clientName || row?.name || row?.hostname || getClientId(row) || ''
 }
 
 function isBanned(row) {
@@ -479,12 +535,12 @@ function getAutomaVersion(row) {
 
 function getBrowserName(row) {
   // Browser name falls back to legacy browser field 浏览器名称兼容旧 browser 字段
-  return row?.browser_name || row?.browserName || row?.browser || '-'
+  return row?.browser_name || row?.browserName || row?.browser || ''
 }
 
 function getBrowserVersion(row) {
   // Browser version supports collected metadata 浏览器版本读取采集元数据
-  return row?.browser_version || row?.browserVersion || '-'
+  return row?.browser_version || row?.browserVersion || ''
 }
 
 function getLastActiveTime(row) {
@@ -500,31 +556,16 @@ function getLastActiveTime(row) {
   )
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function formatEmpty(value, fallback = '') {
-  if (value === undefined || value === null || value === '' || value === '-') return fallback
-  return String(value)
+  return formatBaseEmpty(value, fallback, { treatDashAsEmpty: true })
 }
 
 function formatDate(value) {
-  if (!value) return '-'
-  const dateValue = typeof value === 'number' && value < 10000000000 ? value * 1000 : value
-  const date = new Date(dateValue)
-  if (Number.isNaN(date.getTime())) return '-'
-  const pad = (num) => String(num).padStart(2, '0')
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate()),
-  ].join('-') + ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  return formatBaseDate(value, { fallback: '' })
 }
 
 async function copyDetailValue(value) {
-  await navigator.clipboard.writeText(String(value || ''))
+  await copyText(value)
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '已复制' })
 }
 </script>

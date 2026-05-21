@@ -13,30 +13,33 @@ type WorkflowListReq struct {
 	g.Meta `path:"/" method:"get" tags:"工作流" summary:"获取工作流列表"`
 	rr.CommonPageReq
 	rr.CommonTimeReq
-	Keyword  string `json:"keyword" in:"query" dc:"关键字"`
-	Source   int    `json:"source" in:"query" d:"0" v:"in:0,1,2#来源只能是0、1、2" dc:"工作流来源"`
-	SourceIP string `json:"source_ip" in:"query" dc:"客户端来源地址"`
-	Syncable int    `json:"syncable" in:"query" d:"0" v:"in:0,1,2#同步筛选只能是0、1、2" dc:"同步筛选"`
+	Keyword       string `json:"keyword" in:"query" dc:"关键字"`
+	CustomKeyword string `json:"custom_keyword" in:"query" dc:"自定义工作流名称、描述关键字"`
+	Source        int    `json:"source" in:"query" d:"0" v:"in:0,1,2#来源只能是0、1、2" dc:"工作流来源"`
+	SourceIP      string `json:"source_ip" in:"query" dc:"客户端来源地址"`
+	Syncable      int    `json:"syncable" in:"query" d:"0" v:"in:0,1,2#同步筛选只能是0、1、2" dc:"同步筛选"`
 }
 
 // WorkflowListResModel 工作流列表项
 type WorkflowListResModel struct {
-	Id              int64       `json:"id" dc:"服务端主键"`
-	AutomaId        string      `json:"automa_id" dc:"Automa 原始工作流标识"`
-	Name            string      `json:"name" dc:"工作流名称"`
-	Description     string      `json:"description" dc:"工作流描述"`
-	Source          string      `json:"source" dc:"工作流来源"`
-	SourceIp        string      `json:"source_ip" dc:"来源客户端地址"`
-	CreatedAtAutoma int64       `json:"created_at_automa" dc:"Automa 原始创建时间"`
-	UpdatedAtAutoma int64       `json:"updated_at_automa" dc:"Automa 原始更新时间"`
-	IsDisabled      bool        `json:"is_disabled" dc:"是否禁用"`
-	IsProtected     bool        `json:"is_protected" dc:"是否受保护"`
-	NodeCount       int         `json:"node_count" dc:"节点数量"`
-	EdgeCount       int         `json:"edge_count" dc:"连线数量"`
-	ContentHash     string      `json:"content_hash" dc:"内容哈希"`
-	Revision        int         `json:"revision" dc:"版本号"`
-	CreatedAt       *gtime.Time `json:"created_at" dc:"服务端创建时间"`
-	UpdatedAt       *gtime.Time `json:"updated_at" dc:"服务端更新时间"`
+	Id                int64       `json:"id" dc:"服务端主键"`
+	AutomaId          string      `json:"automa_id" dc:"Automa 原始工作流标识"`
+	Name              string      `json:"name" dc:"工作流名称"`
+	Description       string      `json:"description" dc:"工作流描述"`
+	AutomaName        string      `json:"automa_name" dc:"Automa 工作流原始名称"`
+	AutomaDescription string      `json:"automa_description" dc:"Automa 工作流原始描述"`
+	Source            string      `json:"source" dc:"工作流来源"`
+	SourceIp          string      `json:"source_ip" dc:"来源客户端地址"`
+	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 原始创建时间"`
+	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 原始更新时间"`
+	IsDisabled        bool        `json:"is_disabled" dc:"是否禁用"`
+	IsProtected       bool        `json:"is_protected" dc:"是否受保护"`
+	NodeCount         int         `json:"node_count" dc:"节点数量"`
+	EdgeCount         int         `json:"edge_count" dc:"连线数量"`
+	ContentHash       string      `json:"content_hash" dc:"内容哈希"`
+	Revision          int         `json:"revision" dc:"版本号"`
+	CreatedAt         *gtime.Time `json:"created_at" dc:"服务端创建时间"`
+	UpdatedAt         *gtime.Time `json:"updated_at" dc:"服务端更新时间"`
 }
 
 // WorkflowListRes 工作流列表响应
@@ -53,29 +56,31 @@ type WorkflowDetailReq struct {
 
 // WorkflowDetailRes 工作流详情响应
 type WorkflowDetailRes struct {
-	Id              int64       `json:"id" dc:"服务端主键"`
-	AutomaId        string      `json:"automa_id" dc:"Automa 原始工作流标识"`
-	Name            string      `json:"name" dc:"工作流名称"`
-	Description     string      `json:"description" dc:"工作流描述"`
-	Source          string      `json:"source" dc:"工作流来源"`
-	SourceIp        string      `json:"source_ip" dc:"来源客户端地址"`
-	SourceUserAgent string      `json:"source_user_agent" dc:"来源用户代理"`
-	AutomaVersion   string      `json:"automa_version" dc:"Automa 版本"`
-	ExtVersion      string      `json:"ext_version" dc:"扩展版本"`
-	CreatedAtAutoma int64       `json:"created_at_automa" dc:"Automa 原始创建时间"`
-	UpdatedAtAutoma int64       `json:"updated_at_automa" dc:"Automa 原始更新时间"`
-	IsDisabled      bool        `json:"is_disabled" dc:"是否禁用"`
-	IsProtected     bool        `json:"is_protected" dc:"是否受保护"`
-	NodeCount       int         `json:"node_count" dc:"节点数量"`
-	EdgeCount       int         `json:"edge_count" dc:"连线数量"`
-	RawJson         string      `json:"raw_json" dc:"原始 JSON"`
-	NormalizedJson  string      `json:"normalized_json" dc:"规范化 JSON"`
-	ContentHash     string      `json:"content_hash" dc:"内容哈希"`
-	Revision        int         `json:"revision" dc:"版本号"`
-	FirstSyncedAt   *gtime.Time `json:"first_synced_at" dc:"首次同步时间"`
-	LastSyncedAt    *gtime.Time `json:"last_synced_at" dc:"最近同步时间"`
-	CreatedAt       *gtime.Time `json:"created_at" dc:"服务端创建时间"`
-	UpdatedAt       *gtime.Time `json:"updated_at" dc:"服务端更新时间"`
+	Id                int64       `json:"id" dc:"服务端主键"`
+	AutomaId          string      `json:"automa_id" dc:"Automa 原始工作流标识"`
+	Name              string      `json:"name" dc:"工作流名称"`
+	Description       string      `json:"description" dc:"工作流描述"`
+	AutomaName        string      `json:"automa_name" dc:"Automa 工作流原始名称"`
+	AutomaDescription string      `json:"automa_description" dc:"Automa 工作流原始描述"`
+	Source            string      `json:"source" dc:"工作流来源"`
+	SourceIp          string      `json:"source_ip" dc:"来源客户端地址"`
+	SourceUserAgent   string      `json:"source_user_agent" dc:"来源用户代理"`
+	AutomaVersion     string      `json:"automa_version" dc:"Automa 版本"`
+	ExtVersion        string      `json:"ext_version" dc:"扩展版本"`
+	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 原始创建时间"`
+	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 原始更新时间"`
+	IsDisabled        bool        `json:"is_disabled" dc:"是否禁用"`
+	IsProtected       bool        `json:"is_protected" dc:"是否受保护"`
+	NodeCount         int         `json:"node_count" dc:"节点数量"`
+	EdgeCount         int         `json:"edge_count" dc:"连线数量"`
+	RawJson           string      `json:"raw_json" dc:"原始 JSON"`
+	NormalizedJson    string      `json:"normalized_json" dc:"规范化 JSON"`
+	ContentHash       string      `json:"content_hash" dc:"内容哈希"`
+	Revision          int         `json:"revision" dc:"版本号"`
+	FirstSyncedAt     *gtime.Time `json:"first_synced_at" dc:"首次同步时间"`
+	LastSyncedAt      *gtime.Time `json:"last_synced_at" dc:"最近同步时间"`
+	CreatedAt         *gtime.Time `json:"created_at" dc:"服务端创建时间"`
+	UpdatedAt         *gtime.Time `json:"updated_at" dc:"服务端更新时间"`
 }
 
 // WorkflowCreateMeta 创建工作流元数据
@@ -159,36 +164,41 @@ type WorkflowSyncCandidatesReq struct {
 	SourceIP string `json:"source_ip" in:"query" dc:"客户端来源地址"`
 	AutomaID string `json:"automa_id" in:"query" dc:"Automa 工作流 ID"`
 	Keyword  string `json:"keyword,omitempty" in:"query" dc:"关键字"`
+	Refresh  bool   `json:"refresh" in:"query" d:"false" dc:"是否先刷新客户端工作流清单"`
 }
 
 // WorkflowSyncCandidatesResModel 同步候选列表项
 type WorkflowSyncCandidatesResModel struct {
-	Id              string      `json:"id" dc:"客户端工作流标识"`
-	AutomaId        string      `json:"automa_id" dc:"Automa 工作流 ID"`
-	WorkflowId      string      `json:"workflow_id" dc:"工作流 ID"`
-	Name            string      `json:"name" dc:"工作流名称"`
-	Description     string      `json:"description" dc:"工作流描述"`
-	Source          string      `json:"source" dc:"工作流来源"`
-	SourceIp        string      `json:"source_ip" dc:"来源地址"`
-	AutomaVersion   string      `json:"automa_version" dc:"Automa 版本"`
-	ExtVersion      string      `json:"ext_version" dc:"扩展版本"`
-	CreatedAtAutoma int64       `json:"created_at_automa" dc:"Automa 创建时间"`
-	UpdatedAtAutoma int64       `json:"updated_at_automa" dc:"Automa 更新时间"`
-	IsDisabled      bool        `json:"is_disabled" dc:"是否禁用"`
-	IsProtected     bool        `json:"is_protected" dc:"是否受保护"`
-	NodeCount       int         `json:"node_count" dc:"节点数量"`
-	EdgeCount       int         `json:"edge_count" dc:"连线数量"`
-	ContentHash     string      `json:"content_hash" dc:"内容哈希"`
-	Synced          bool        `json:"synced" dc:"是否已同步"`
-	HasUpdate       bool        `json:"has_update" dc:"是否有更新"`
-	SyncStatus      string      `json:"sync_status" dc:"同步状态"`
-	ServerId        int64       `json:"server_id" dc:"服务端主键"`
-	ServerName      string      `json:"server_name" dc:"服务端名称"`
-	ServerDesc      string      `json:"server_description" dc:"服务端描述"`
-	ServerRevision  int         `json:"server_revision" dc:"服务端版本"`
-	LastSyncedAt    *gtime.Time `json:"last_synced_at" dc:"最近同步时间"`
-	ServerUpdatedAt *gtime.Time `json:"server_updated_at" dc:"服务端更新时间"`
-	Online          bool        `json:"online" dc:"是否在线"`
+	Id                string      `json:"id" dc:"客户端工作流标识"`
+	AutomaId          string      `json:"automa_id" dc:"Automa 工作流 ID"`
+	WorkflowId        string      `json:"workflow_id" dc:"工作流 ID"`
+	Name              string      `json:"name" dc:"工作流名称"`
+	Description       string      `json:"description" dc:"工作流描述"`
+	AutomaName        string      `json:"automa_name" dc:"Automa 工作流原始名称"`
+	AutomaDescription string      `json:"automa_description" dc:"Automa 工作流原始描述"`
+	Source            string      `json:"source" dc:"工作流来源"`
+	SourceIp          string      `json:"source_ip" dc:"来源地址"`
+	AutomaVersion     string      `json:"automa_version" dc:"Automa 版本"`
+	ExtVersion        string      `json:"ext_version" dc:"扩展版本"`
+	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 创建时间"`
+	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 更新时间"`
+	IsDisabled        bool        `json:"is_disabled" dc:"是否禁用"`
+	IsProtected       bool        `json:"is_protected" dc:"是否受保护"`
+	NodeCount         int         `json:"node_count" dc:"节点数量"`
+	EdgeCount         int         `json:"edge_count" dc:"连线数量"`
+	ContentHash       string      `json:"content_hash" dc:"内容哈希"`
+	Synced            bool        `json:"synced" dc:"是否已同步"`
+	HasUpdate         bool        `json:"has_update" dc:"是否有更新"`
+	SyncStatus        string      `json:"sync_status" dc:"同步状态"`
+	ServerId          int64       `json:"server_id" dc:"服务端主键"`
+	ServerName        string      `json:"server_name" dc:"服务端名称"`
+	ServerDesc        string      `json:"server_description" dc:"服务端描述"`
+	ServerAutomaName  string      `json:"server_automa_name" dc:"服务端 Automa 原始名称"`
+	ServerAutomaDesc  string      `json:"server_automa_description" dc:"服务端 Automa 原始描述"`
+	ServerRevision    int         `json:"server_revision" dc:"服务端版本"`
+	LastSyncedAt      *gtime.Time `json:"last_synced_at" dc:"最近同步时间"`
+	ServerUpdatedAt   *gtime.Time `json:"server_updated_at" dc:"服务端更新时间"`
+	Online            bool        `json:"online" dc:"是否在线"`
 }
 
 // WorkflowSyncCandidatesRes 同步候选响应

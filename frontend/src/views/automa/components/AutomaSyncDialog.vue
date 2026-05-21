@@ -2,7 +2,7 @@
   <AppDialog
     v-model="visible"
     title="客户端同步"
-    width="1280px"
+    width="min(1760px, calc(100vw - 16px))"
     confirm-text="同步选中"
     :confirm-disabled="selectedIds.length === 0"
     :loading="syncing"
@@ -41,19 +41,27 @@
             class="query-input"
             clearable
             filterable
+            :loading="workflowOptionLoading"
             placeholder="选择工作流"
+            @visible-change="handleWorkflowSelectVisible"
             @change="handleWorkflowChange"
             @clear="handleWorkflowClear"
           >
             <el-option
-              v-for="workflow in workflows"
+              v-for="workflow in workflowSelectOptions"
               :key="getWorkflowId(workflow)"
-              :label="workflow.name || getWorkflowId(workflow)"
+              :label="workflow.name || workflow.automa_name || getWorkflowId(workflow)"
               :value="workflow.automa_id || getWorkflowId(workflow)"
             >
               <div class="workflow-option">
-                <span>{{ workflow.name || '' }}</span>
-                <small>{{ workflow.automa_id || getWorkflowId(workflow) }}</small>
+                <span>
+                  <em>自定义工作流名称</em>
+                  {{ workflow.name || '' }}
+                </span>
+                <small>
+                  <em>Automa 工作流名称</em>
+                  {{ workflow.automa_name || workflow.automa_id || getWorkflowId(workflow) }}
+                </small>
               </div>
             </el-option>
           </el-select>
@@ -75,73 +83,111 @@
         border
         height="420"
         row-key="row_key"
+        header-align="left"
         empty-text="请选择查询条件后自动加载"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="40" :selectable="isSelectable" />
+        <el-table-column type="selection" width="40" reserve-selection :selectable="isSelectable" />
 
-        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="120">
+        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="96" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.source_ip || '' }}
           </template>
         </el-table-column>
 
-        <el-table-column label="客户端工作流" min-width="200">
+        <el-table-column label="自定义工作流名称" min-width="108" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="workflow-name">
-              <span>{{ row.name || '' }}</span>
-              <small>{{ row.description || '' }}</small>
+            <span class="field-value">{{ row.server_name || '' }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="自定义工作流描述" min-width="118" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="field-value">{{ row.server_description || '' }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="工作流名称" min-width="168">
+          <template #default="{ row }">
+            <span class="compare-line" :title="formatCompareText(row.automa_name || row.name, row.server_automa_name)">
+              <span class="compare-item">
+                <em>客户端</em>
+                <span>{{ row.automa_name || row.name || '' }}</span>
+              </span>
+              <span class="compare-item">
+                <em>数据库</em>
+                <span>{{ row.server_automa_name || '' }}</span>
+              </span>
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="工作流描述" min-width="176">
+          <template #default="{ row }">
+            <span
+              class="compare-line"
+              :title="formatCompareText(row.automa_description || row.description, row.server_automa_description)"
+            >
+              <span class="compare-item">
+                <em>客户端</em>
+                <span>{{ row.automa_description || row.description || '' }}</span>
+              </span>
+              <span class="compare-item">
+                <em>数据库</em>
+                <span>{{ row.server_automa_description || '' }}</span>
+              </span>
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="同步状态" width="86" header-align="center">
+          <template #default="{ row }">
+            <div class="center-cell">
+              <el-tag :type="getSyncTagType(row)" effect="plain">
+                {{ getSyncText(row) }}
+              </el-tag>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column label="数据库工作流" min-width="200">
+        <el-table-column label="工作流状态" width="96" header-align="center">
           <template #default="{ row }">
-            <div class="workflow-name">
-              <span>{{ row.server_name || '' }}</span>
-              <small>{{ row.server_description || '' }}</small>
+            <div class="center-cell">
+              <el-tag class="workflow-status-tag" :type="getWorkflowTagType(row)" effect="plain">
+                {{ getWorkflowText(row) }}
+              </el-tag>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column label="同步状态" width="90" align="center">
+        <el-table-column label="客户端更新时间" width="196" class-name="nowrap-column">
           <template #default="{ row }">
-            <el-tag :type="getSyncTagType(row)" effect="plain">
-              {{ getSyncText(row) }}
-            </el-tag>
+            <span class="time-value" :title="formatOptionalDate(row.updated_at_automa || row.updatedAt || row.updated_at)">
+              {{ formatOptionalDate(row.updated_at_automa || row.updatedAt || row.updated_at) }}
+            </span>
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流状态" width="112" align="center">
+        <el-table-column label="同步时间" width="196" class-name="nowrap-column">
           <template #default="{ row }">
-            <el-tag class="workflow-status-tag" :type="getWorkflowTagType(row)" effect="plain">
-              {{ getWorkflowText(row) }}
-            </el-tag>
+            <span class="time-value" :title="formatOptionalDate(row.last_synced_at)">
+              {{ formatOptionalDate(row.last_synced_at) }}
+            </span>
           </template>
         </el-table-column>
 
-        <el-table-column label="客户端更新时间" width="168" class-name="nowrap-column">
+        <el-table-column label="数据库更新时间" width="196" class-name="nowrap-column">
           <template #default="{ row }">
-            {{ formatOptionalDate(row.updated_at_automa || row.updatedAt || row.updated_at) }}
-          </template>
-        </el-table-column>
-
-        <el-table-column label="同步时间" width="168" class-name="nowrap-column">
-          <template #default="{ row }">
-            {{ formatOptionalDate(row.last_synced_at) }}
-          </template>
-        </el-table-column>
-
-        <el-table-column label="服务端更新时间" width="168" class-name="nowrap-column">
-          <template #default="{ row }">
-            {{ formatOptionalDate(row.server_updated_at) }}
+            <span class="time-value" :title="formatOptionalDate(row.server_updated_at)">
+              {{ formatOptionalDate(row.server_updated_at) }}
+            </span>
           </template>
         </el-table-column>
       </el-table>
 
       <div class="sync-footer">
         <div class="sync-summary">
-          <span>已选择 {{ selectedIds.length }} 个</span>
+          <AppSelectionSummary :count="selectedIds.length" />
           <span>可同步 {{ selectableCount }} 个</span>
         </div>
 
@@ -159,18 +205,23 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { useDebouncedAction } from '@/composables/useDebouncedAction'
+import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { listClients } from '@/services/client'
 import {
   listAutomaSyncCandidates,
   listAutomaSyncCandidatesByWorkflow,
   syncAutomaWorkflowsByIp,
 } from '@/services/automa'
+import { formatDate } from '@/utils/format'
+import { DEFAULT_PAGE_SIZES, normalizeList, normalizeText } from '@/utils/list'
 
-defineProps({
+const props = defineProps({
   workflows: {
     type: Array,
     default: () => [],
@@ -190,21 +241,36 @@ const selectedIp = ref('')
 const selectedAutomaId = ref('')
 const keyword = ref('')
 const candidates = ref([])
-const selectedRows = ref([])
-const selectedIds = ref([])
 const candidateLoading = ref(false)
 const clientLoading = ref(false)
+const workflowOptionLoading = ref(false)
 const onlineClientIps = ref([])
+const onlineWorkflowOptions = ref([])
 const syncing = ref(false)
+const refreshCandidates = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
 const candidateTotal = ref(0)
-const keywordSearchDelay = 200
 let candidateRequestSeq = 0
-let keywordSearchTimer = 0
+const {
+  selectedRows,
+  selectedKeys: selectedIds,
+  handleSelectionChange,
+  restoreSelection,
+  resetSelection,
+} = usePagedTableSelection({
+  rows: candidates,
+  getRowKey: getSelectionKey,
+  isSelectable,
+})
+const {
+  run: runKeywordSearch,
+  cancel: clearKeywordSearchTimer,
+} = useDebouncedAction(loadFirstCandidatePage, 200)
 
 const selectableCount = computed(() => candidates.value.filter(isSelectable).length)
+const workflowSelectOptions = computed(() => onlineWorkflowOptions.value)
 const canLoad = computed(() => {
   return activeMode.value === 'client' ? Boolean(normalizeText(selectedIp.value)) : Boolean(selectedAutomaId.value)
 })
@@ -223,11 +289,14 @@ watch(visible, (nextVisible) => {
   selectedIp.value = ''
   selectedAutomaId.value = ''
   keyword.value = ''
+  refreshCandidates.value = false
+  onlineWorkflowOptions.value = []
   resetCandidatePage()
   resetCandidates()
 })
 
 watch(keyword, () => {
+  resetSelection(tableRef)
   scheduleKeywordSearch()
 })
 
@@ -241,10 +310,6 @@ watch(pageSize, () => {
   loadFirstCandidatePage()
 })
 
-onBeforeUnmount(() => {
-  clearKeywordSearchTimer()
-})
-
 async function loadCandidates() {
   if (!canLoad.value) {
     showWarningMessage(activeMode.value === 'client' ? '请先选择在线客户端 IP' : '请先选择工作流')
@@ -252,12 +317,15 @@ async function loadCandidates() {
   }
 
   const requestSeq = ++candidateRequestSeq
+  const shouldRefresh = refreshCandidates.value
+  refreshCandidates.value = false
   candidateLoading.value = true
   try {
     const params = {
       keyword: keyword.value.trim(),
       page_num: currentPage.value,
       page_size: pageSize.value,
+      refresh: shouldRefresh ? 1 : 0,
     }
     const selectedClientIp = normalizeText(selectedIp.value)
     const data =
@@ -272,10 +340,7 @@ async function loadCandidates() {
       ...item,
       row_key: `${normalizeText(item.source_ip || selectedClientIp)}_${getWorkflowId(item)}`,
     }))
-    selectedRows.value = []
-    selectedIds.value = []
-    await nextTick()
-    tableRef.value?.clearSelection()
+    await restoreSelection(tableRef)
   } finally {
     if (requestSeq === candidateRequestSeq) {
       candidateLoading.value = false
@@ -293,6 +358,10 @@ async function loadOnlineClientIps() {
       .map(getClientIp)
       .filter(Boolean)
       .filter((clientIp, index, list) => list.indexOf(clientIp) === index)
+    if (selectedIp.value && !onlineClientIps.value.includes(selectedIp.value)) {
+      selectedIp.value = ''
+      resetCandidates()
+    }
   } finally {
     clientLoading.value = false
   }
@@ -302,8 +371,64 @@ function handleClientSelectVisible(opened) {
   if (opened) loadOnlineClientIps()
 }
 
+async function loadOnlineWorkflowOptions() {
+  workflowOptionLoading.value = true
+  try {
+    let pageNum = 1
+    let total = 0
+    const allWorkflowCandidates = []
+
+    do {
+      const data = await listAutomaSyncCandidatesByWorkflow('', {
+        page_num: pageNum,
+        page_size: 60,
+        refresh: pageNum === 1 ? 1 : 0,
+      })
+      const pageList = normalizeList(data, 'workflows')
+      total = Number(data?.total || pageList.length)
+      allWorkflowCandidates.push(...pageList)
+      if (pageList.length === 0) break
+      pageNum += 1
+    } while (allWorkflowCandidates.length < total)
+
+    const workflowMap = new Map()
+    const dbWorkflowMap = new Map(
+      normalizeList(props.workflows)
+        .map((workflow) => [workflow.automa_id || getWorkflowId(workflow), workflow])
+        .filter(([workflowId]) => Boolean(workflowId)),
+    )
+
+    allWorkflowCandidates.forEach((item) => {
+      const workflowId = item.automa_id || getWorkflowId(item)
+      if (!workflowId || workflowMap.has(workflowId)) return
+
+      const dbWorkflow = dbWorkflowMap.get(workflowId) || {}
+      workflowMap.set(workflowId, {
+        ...item,
+        ...dbWorkflow,
+        automa_id: workflowId,
+        name: dbWorkflow.name || item.server_name || item.name || '',
+        automa_name: dbWorkflow.automa_name || item.automa_name || item.name || '',
+      })
+    })
+
+    onlineWorkflowOptions.value = Array.from(workflowMap.values())
+    if (selectedAutomaId.value && !workflowMap.has(selectedAutomaId.value)) {
+      selectedAutomaId.value = ''
+      resetCandidates()
+    }
+  } finally {
+    workflowOptionLoading.value = false
+  }
+}
+
+function handleWorkflowSelectVisible(opened) {
+  if (opened) loadOnlineWorkflowOptions()
+}
+
 function handleClientIpChange(value) {
   selectedIp.value = normalizeText(value)
+  refreshCandidates.value = true
   resetCandidates()
   if (selectedIp.value) loadFirstCandidatePage()
 }
@@ -311,12 +436,14 @@ function handleClientIpChange(value) {
 function handleClientIpClear() {
   clearKeywordSearchTimer()
   selectedIp.value = ''
+  refreshCandidates.value = false
   resetCandidatePage()
   resetCandidates()
 }
 
 function handleWorkflowChange(value) {
   selectedAutomaId.value = value || ''
+  refreshCandidates.value = true
   resetCandidates()
   if (selectedAutomaId.value) loadFirstCandidatePage()
 }
@@ -324,6 +451,7 @@ function handleWorkflowChange(value) {
 function handleWorkflowClear() {
   clearKeywordSearchTimer()
   selectedAutomaId.value = ''
+  refreshCandidates.value = false
   resetCandidatePage()
   resetCandidates()
 }
@@ -334,9 +462,11 @@ function handleModeChange() {
     loadOnlineClientIps()
   } else {
     selectedIp.value = ''
+    loadOnlineWorkflowOptions()
   }
   clearKeywordSearchTimer()
   keyword.value = ''
+  refreshCandidates.value = false
   resetCandidatePage()
   resetCandidates()
 }
@@ -345,17 +475,7 @@ function scheduleKeywordSearch() {
   clearKeywordSearchTimer()
   if (!visible.value || !canLoad.value) return
 
-  keywordSearchTimer = window.setTimeout(() => {
-    keywordSearchTimer = 0
-    loadFirstCandidatePage()
-  }, keywordSearchDelay)
-}
-
-function clearKeywordSearchTimer() {
-  if (!keywordSearchTimer) return
-
-  window.clearTimeout(keywordSearchTimer)
-  keywordSearchTimer = 0
+  runKeywordSearch()
 }
 
 async function handleSync() {
@@ -376,11 +496,6 @@ async function handleSync() {
   } finally {
     syncing.value = false
   }
-}
-
-function handleSelectionChange(selection) {
-  selectedRows.value = selection
-  selectedIds.value = selection.map((item) => `${normalizeText(item.source_ip || selectedIp.value)}_${getWorkflowId(item)}`)
 }
 
 function groupSelectedRowsByIp() {
@@ -416,9 +531,7 @@ function resetCandidates() {
   candidateLoading.value = false
   candidates.value = []
   candidateTotal.value = 0
-  selectedRows.value = []
-  selectedIds.value = []
-  tableRef.value?.clearSelection()
+  resetSelection(tableRef)
 }
 
 function resetCandidatePage() {
@@ -435,16 +548,19 @@ function loadFirstCandidatePage() {
 }
 
 function isSelectable(row) {
+  if (row.sync_status === 'server_newer') return false
   return Boolean(row.has_update ?? row.hasUpdate ?? !row.synced)
 }
 
 function getSyncText(row) {
+  if (row.sync_status === 'server_newer') return '不可同步'
   if (row.has_update || row.hasUpdate) return '可同步'
   if (row.synced) return '已同步'
   return '未同步'
 }
 
 function getSyncTagType(row) {
+  if (row.sync_status === 'server_newer') return 'danger'
   if (row.has_update || row.hasUpdate) return 'warning'
   if (row.synced) return 'success'
   return 'info'
@@ -466,34 +582,16 @@ function getWorkflowTagType(row) {
   return 'info'
 }
 
-function normalizeList(data, fallbackKey) {
-  const list = data?.list || data?.[fallbackKey] || data?.candidates || []
-  return Array.isArray(list) ? list : []
-}
-
-function normalizeText(value) {
-  return String(value || '').trim()
-}
-
 function getWorkflowId(row) {
   return row?.id || row?.automa_id || row?.workflow_id || row?.workflowId || ''
 }
 
-function getClientIp(row) {
-  return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
+function getSelectionKey(row) {
+  return row?.row_key || `${normalizeText(row?.source_ip || selectedIp.value)}_${getWorkflowId(row)}`
 }
 
-function formatDate(value) {
-  if (!value) return ''
-  const date = new Date(Number(value) || value)
-  if (Number.isNaN(date.getTime())) return ''
-  const year = date.getFullYear()
-  const month = padDatePart(date.getMonth() + 1)
-  const day = padDatePart(date.getDate())
-  const hour = padDatePart(date.getHours())
-  const minute = padDatePart(date.getMinutes())
-  const second = padDatePart(date.getSeconds())
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
+function getClientIp(row) {
+  return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
 }
 
 function formatOptionalDate(value) {
@@ -501,8 +599,8 @@ function formatOptionalDate(value) {
   return formatDate(value)
 }
 
-function padDatePart(value) {
-  return String(value).padStart(2, '0')
+function formatCompareText(clientValue, serverValue) {
+  return `客户端：${clientValue || ''} 数据库：${serverValue || ''}`.trim()
 }
 </script>
 
@@ -536,12 +634,6 @@ function padDatePart(value) {
   white-space: nowrap;
 }
 
-.workflow-status-tag {
-  min-width: 84px;
-  justify-content: center;
-  white-space: nowrap;
-}
-
 .workflow-option {
   display: grid;
   gap: 2px;
@@ -549,9 +641,18 @@ function padDatePart(value) {
 
   span,
   small {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  em {
+    flex: 0 0 auto;
+    color: #909399;
+    font-style: normal;
   }
 
   small {
@@ -559,21 +660,95 @@ function padDatePart(value) {
   }
 }
 
-.workflow-name {
+.field-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #303133;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-lines {
   display: grid;
-  gap: 2px;
+  gap: 3px;
+  min-width: 0;
+}
+
+.field-line {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
   min-width: 0;
 
-  span,
-  small {
+  em {
+    color: #909399;
+    font-style: normal;
+  }
+
+  span {
+    min-width: 0;
     overflow: hidden;
+    color: #303133;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
 
-  small {
+.compare-line {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compare-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  line-height: 18px;
+  white-space: nowrap;
+
+  em {
     color: #909399;
+    font-style: normal;
   }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    color: #303133;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.time-value {
+  display: block;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.center-cell {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.center-cell :deep(.el-tag) {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-status-tag {
+  min-width: 0;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .sync-footer {

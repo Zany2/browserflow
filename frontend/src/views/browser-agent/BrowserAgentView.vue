@@ -7,9 +7,16 @@
       </el-tag>
       <p>此页面用于接收后端下发的命令，并通过页面桥接调用 Automa 扩展。</p>
       <el-descriptions border :column="1">
-        <el-descriptions-item label="Browser ID">{{ browserId || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="最后命令">{{ lastCommand || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="执行结果">{{ lastResult || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="Browser ID">{{ browserId || '' }}</el-descriptions-item>
+        <el-descriptions-item label="Automa">
+          <el-tag :type="automaInstalled ? 'success' : 'info'">
+            {{ automaInstalled ? `可用${automaVersion ? ` · ${automaVersion}` : ''}` : '检测中' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="最后命令">{{ lastCommand || '' }}</el-descriptions-item>
+        <el-descriptions-item label="Command ID">{{ lastCommandId || '' }}</el-descriptions-item>
+        <el-descriptions-item label="Execution ID">{{ lastExecutionId || '' }}</el-descriptions-item>
+        <el-descriptions-item label="执行结果">{{ lastResult || '' }}</el-descriptions-item>
       </el-descriptions>
     </section>
   </main>
@@ -30,7 +37,11 @@ import { createAgentSocket } from '@/services/agentWs'
 const route = useRoute()
 const browserId = ref(resolveBrowserId())
 const status = ref('connecting')
+const automaInstalled = ref(false)
+const automaVersion = ref('')
 const lastCommand = ref('')
+const lastCommandId = ref('')
+const lastExecutionId = ref('')
 const lastResult = ref('')
 const closeSocket = ref(null)
 
@@ -45,7 +56,9 @@ onMounted(() => {
     },
     onRegistered: (payload) => {
       browserId.value = payload?.browser_id || ''
+      updateAutomaInfo(payload)
     },
+    onMessage: handleSocketMessage,
     onError: (error) => {
       lastResult.value = error.message
       appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
@@ -57,8 +70,20 @@ onBeforeUnmount(() => {
   closeSocket.value?.()
 })
 
-async function handleCommand(command, payload) {
+function handleSocketMessage(payload) {
+  if (payload?.type === 'agent_registered' || payload?.type === 'agent_status') {
+    updateAutomaInfo(payload)
+  }
+  if (payload?.type === 'agent_command') {
+    lastCommandId.value = payload.command_id || ''
+    lastExecutionId.value = payload.payload?.execution_id || payload.payload?.executionId || ''
+  }
+}
+
+async function handleCommand(command, payload, rawMessage) {
   lastCommand.value = command
+  lastCommandId.value = rawMessage?.command_id || lastCommandId.value
+  lastExecutionId.value = payload.execution_id || payload.executionId || lastExecutionId.value
 
   if (command === 'automa.workflow.list') {
     const workflows = await getAutomaWorkflows()
@@ -82,7 +107,7 @@ async function handleCommand(command, payload) {
       timeout: payload.timeout || 300,
       returnData: payload.return_data || payload.returnData || null,
     })
-    lastResult.value = waitResult ? `执行结果：${result.status || '-'}` : '工作流已下发'
+    lastResult.value = waitResult ? `执行完成：${result.status || ''}` : '已提交执行'
     return result
   }
 
@@ -99,6 +124,12 @@ async function handleCommand(command, payload) {
 function resolveBrowserId() {
   // Browser id is bound when backend opens this agent page 浏览器 ID 由后端打开执行端页面时写入
   return String(route.query.browser_id || route.query.browserId || '').trim()
+}
+
+function updateAutomaInfo(payload) {
+  const agent = Array.isArray(payload?.agents) ? payload.agents[0] : payload
+  automaInstalled.value = Boolean(agent?.automa_installed ?? agent?.automaInstalled ?? automaInstalled.value)
+  automaVersion.value = String(agent?.automa_version || agent?.automaVersion || automaVersion.value || '').trim()
 }
 </script>
 

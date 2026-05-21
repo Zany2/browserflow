@@ -52,6 +52,7 @@ type StreamChunk struct {
 	Content   string `json:"content,omitempty"`
 	Error     string `json:"error,omitempty"`
 	MessageID string `json:"message_id,omitempty"`
+	Timestamp string `json:"timestamp,omitempty"`
 }
 
 // BrowserInstance browser instance config 浏览器实例配置
@@ -94,29 +95,31 @@ type AutomaWorkflowSnapshot struct {
 
 // AutomaWorkflowRecord saved workflow record 本地工作流记录
 type AutomaWorkflowRecord struct {
-	ID              int64     `json:"id"`
-	AutomaID        string    `json:"automa_id"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	Source          int       `json:"source"`
-	SourceIP        string    `json:"source_ip"`
-	SourceUserAgent string    `json:"source_user_agent"`
-	AutomaVersion   string    `json:"automa_version"`
-	ExtVersion      string    `json:"ext_version"`
-	CreatedAtAutoma int64     `json:"created_at_automa"`
-	UpdatedAtAutoma int64     `json:"updated_at_automa"`
-	IsDisabled      bool      `json:"is_disabled"`
-	IsProtected     bool      `json:"is_protected"`
-	NodeCount       int       `json:"node_count"`
-	EdgeCount       int       `json:"edge_count"`
-	RawJSON         string    `json:"raw_json"`
-	NormalizedJSON  string    `json:"normalized_json"`
-	ContentHash     string    `json:"content_hash"`
-	Revision        int       `json:"revision"`
-	FirstSyncedAt   time.Time `json:"first_synced_at"`
-	LastSyncedAt    time.Time `json:"last_synced_at"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID                int64     `json:"id"`
+	AutomaID          string    `json:"automa_id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	AutomaName        string    `json:"automa_name"`
+	AutomaDescription string    `json:"automa_description"`
+	Source            int       `json:"source"`
+	SourceIP          string    `json:"source_ip"`
+	SourceUserAgent   string    `json:"source_user_agent"`
+	AutomaVersion     string    `json:"automa_version"`
+	ExtVersion        string    `json:"ext_version"`
+	CreatedAtAutoma   int64     `json:"created_at_automa"`
+	UpdatedAtAutoma   int64     `json:"updated_at_automa"`
+	IsDisabled        bool      `json:"is_disabled"`
+	IsProtected       bool      `json:"is_protected"`
+	NodeCount         int       `json:"node_count"`
+	EdgeCount         int       `json:"edge_count"`
+	RawJSON           string    `json:"raw_json"`
+	NormalizedJSON    string    `json:"normalized_json"`
+	ContentHash       string    `json:"content_hash"`
+	Revision          int       `json:"revision"`
+	FirstSyncedAt     time.Time `json:"first_synced_at"`
+	LastSyncedAt      time.Time `json:"last_synced_at"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // AgentStatus browser agent status 浏览器执行端状态

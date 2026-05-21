@@ -44,19 +44,6 @@
         </el-select>
       </div>
 
-      <!-- Export scope 导出范围，决定使用选中、筛选还是全部工作流 -->
-      <div class="filter-item filter-item--export-scope">
-        <span class="filter-label">导出范围：</span>
-        <el-select v-model="exportScope" placeholder="导出范围">
-          <el-option
-            v-for="item in exportScopeOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-      </div>
-
       <el-button class="reset-button" @click="resetFilters">重置</el-button>
       <el-button
         class="export-skill-button"
@@ -68,6 +55,7 @@
       >
         导出 Skill
       </el-button>
+      <AppSelectionSummary :count="selectedWorkflows.length" unit="工作流" />
     </div>
 
     <!-- Error message 错误提示，展示扩展未响应或调用失败原因 -->
@@ -82,6 +70,7 @@
 
     <!-- Workflow table 工作流列表，展示常用元信息 -->
     <el-table
+      ref="workflowTableRef"
       v-loading="loading"
       class="workflow-table adaptive-table"
       :data="pagedWorkflows"
@@ -92,7 +81,7 @@
       @selection-change="handleSelectionChange"
     >
       <el-table-column type="selection" width="40" align="center" reserve-selection />
-      <el-table-column prop="name" label="工作流名称" min-width="220">
+      <el-table-column prop="name" label="工作流名称" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">
           <button class="workflow-name__link" type="button" @click="openWorkflow(getWorkflowId(row))">
             {{ row.name || '' }}
@@ -100,9 +89,9 @@
         </template>
       </el-table-column>
 
-      <el-table-column prop="description" label="工作流描述" min-width="220">
+      <el-table-column prop="description" label="工作流描述" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">
-          <span class="workflow-description" :title="row.description || ''">
+          <span class="workflow-description">
             {{ row.description || '' }}
           </span>
         </template>
@@ -221,17 +210,23 @@
 
 <script setup>
 import { Download, SortDown, SortUp } from '@element-plus/icons-vue'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
+import { useDebouncedAction } from '@/composables/useDebouncedAction'
+import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import {
   exportAgentAutomaSkill,
   listAgentAutomaWorkflows,
   openAgentAutomaWorkflow,
   runAgentAutomaWorkflow,
 } from '@/services/automa'
+import { downloadBlob } from '@/utils/browser'
+import { formatDate } from '@/utils/format'
+import { DEFAULT_PAGE_SIZES, getSafePage } from '@/utils/list'
 
 const PAGE_SIZE = 10
 const SORT_STORAGE_KEY = 'workflow-sorts'
@@ -240,16 +235,17 @@ const savedSorts = JSON.parse(localStorage.getItem(SORT_STORAGE_KEY) || '{}')
 
 const currentPage = ref(1)
 const pageSize = ref(savedSorts.perPage || PAGE_SIZE)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
 const searchKeywordInput = ref('')
 const searchKeyword = ref('')
 const createdTimeRange = ref([])
 const statusFilter = ref('')
 const sortBy = ref(savedSorts.sortBy || 'createdAt')
 const sortOrder = ref(savedSorts.sortOrder || 'desc')
-const filterSearchDelay = 200
-
-let filterSearchTimer = 0
+const {
+  run: debounceSearchKeyword,
+  cancel: clearFilterSearchTimer,
+} = useDebouncedAction(applySearchKeyword, 200)
 
 const sortOptions = [
   { label: '名称', value: 'name' },
@@ -257,20 +253,14 @@ const sortOptions = [
   { label: '上次更新', value: 'updatedAt' },
   { label: '最常用', value: 'mostUsed' },
 ]
-const exportScopeOptions = [
-  { label: '已选工作流', value: 'selected' },
-  { label: '当前筛选结果', value: 'filtered' },
-  { label: '全部工作流', value: 'all' },
-]
 
 // Agent state 工作流页面只通过后端读取浏览器执行端，不直接桥接管理端 Automa
 const error = ref('')
 const loading = ref(false)
 const skillExporting = ref(false)
 const workflows = ref([])
-const exportScope = ref('filtered')
-const selectedWorkflows = ref([])
 const agentBrowserId = ref('')
+const workflowTableRef = ref(null)
 const paramDialogVisible = ref(false)
 const paramSubmitting = ref(false)
 const paramWorkflow = ref(null)
@@ -309,9 +299,16 @@ const pagedWorkflows = computed(() => {
 })
 
 const exportTargetWorkflows = computed(() => {
-  if (exportScope.value === 'selected') return selectedWorkflows.value
-  if (exportScope.value === 'all') return workflows.value
-  return sortedWorkflows.value
+  return selectedWorkflows.value.length > 0 ? selectedWorkflows.value : workflows.value
+})
+const {
+  selectedRows: selectedWorkflows,
+  handleSelectionChange,
+  restoreSelection: restoreWorkflowSelection,
+  resetSelection: resetWorkflowSelection,
+} = usePagedTableSelection({
+  rows: pagedWorkflows,
+  getRowKey: getWorkflowId,
 })
 
 const toggleSortOrder = () => {
@@ -353,14 +350,15 @@ watch(searchKeywordInput, () => {
 
 watch([searchKeyword, createdTimeRange, statusFilter, sortBy, sortOrder], () => {
   currentPage.value = 1
+  resetWorkflowSelection(workflowTableRef)
+})
+
+watch(pagedWorkflows, () => {
+  restoreWorkflowSelection(workflowTableRef)
 })
 
 onMounted(() => {
   loadWorkflows()
-})
-
-onBeforeUnmount(() => {
-  clearFilterSearchTimer()
 })
 
 async function loadWorkflows() {
@@ -371,11 +369,11 @@ async function loadWorkflows() {
     // Agent list 工作流列表来自当前启动浏览器中的 browser-agent
     const data = await listAgentAutomaWorkflows()
     workflows.value = normalizeAgentWorkflows(data)
-    selectedWorkflows.value = []
+    resetWorkflowSelection(workflowTableRef)
     agentBrowserId.value = data?.browser_id || ''
   } catch (err) {
     workflows.value = []
-    selectedWorkflows.value = []
+    resetWorkflowSelection(workflowTableRef)
     agentBrowserId.value = ''
     error.value = err.message
   } finally {
@@ -507,11 +505,11 @@ async function handleExportSkill() {
   error.value = ''
 
   try {
-    // Export scope 按用户选择决定导出范围，后端再按 scope 做最终解释
+    // Export scope 复用表格多选；有选中导出选中项，否则导出当前浏览器全部工作流
     const workflowIds = exportTargetWorkflows.value.map(getWorkflowId).filter(Boolean)
     const blob = await exportAgentAutomaSkill({
       browserId: agentBrowserId.value,
-      scope: exportScope.value,
+      scope: selectedWorkflows.value.length > 0 ? 'selected' : 'all',
       workflowIds,
     })
     downloadBlob(blob, 'SKILL_AUTOMA.md')
@@ -522,23 +520,6 @@ async function handleExportSkill() {
   } finally {
     skillExporting.value = false
   }
-}
-
-function downloadBlob(blob, filename) {
-  // Download file 创建临时链接触发浏览器下载
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-}
-
-function handleSelectionChange(rows) {
-  // Selected rows 保留当前已选工作流，供“已选工作流”导出范围使用
-  selectedWorkflows.value = Array.isArray(rows) ? rows : []
 }
 
 function normalizeAgentWorkflows(data) {
@@ -577,24 +558,8 @@ function getRunCounts() {
   }
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
-function debounceSearchKeyword() {
-  clearFilterSearchTimer()
-  // Filter debounce 可输入筛选条件 200ms 防抖，保持与其他页面一致。
-  filterSearchTimer = window.setTimeout(() => {
-    searchKeyword.value = searchKeywordInput.value
-    filterSearchTimer = 0
-  }, filterSearchDelay)
-}
-
-function clearFilterSearchTimer() {
-  if (!filterSearchTimer) return
-  window.clearTimeout(filterSearchTimer)
-  filterSearchTimer = 0
+function applySearchKeyword() {
+  searchKeyword.value = searchKeywordInput.value
 }
 
 function getTriggerParameters(workflow) {
@@ -636,7 +601,7 @@ function getTriggerParamKey(param, index) {
 
 function getTriggerParamTitle(param) {
   const parts = [
-    `名称：${param?.name || '-'}`,
+    `名称：${param?.name || ''}`,
     `类型：${formatTriggerParamType(param?.type)}`,
     `默认值：${formatTriggerParamDefaultValue(param?.defaultValue)}`,
   ]
@@ -648,12 +613,12 @@ function getTriggerParamTitle(param) {
 
 function formatTriggerParamName(param) {
   // Param name keeps Automa variable key visible 参数名直接展示 Automa 变量键
-  return param?.name || '未命名'
+  return param?.name || ''
 }
 
 function formatTriggerParamMeaning(param) {
   // Meaning prefers explicit description, then placeholder 参数意义优先使用说明，其次使用占位提示
-  return param?.description || param?.placeholder || '-'
+  return param?.description || param?.placeholder || ''
 }
 
 function formatTriggerParamType(type) {
@@ -717,24 +682,6 @@ function getCreatedTimeRange() {
   return [range[0] || '', range[1] || '']
 }
 
-function formatDate(value) {
-  if (!value) return ''
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const year = date.getFullYear()
-  const month = padDatePart(date.getMonth() + 1)
-  const day = padDatePart(date.getDate())
-  const hour = padDatePart(date.getHours())
-  const minute = padDatePart(date.getMinutes())
-  const second = padDatePart(date.getSeconds())
-
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-}
-
-function padDatePart(value) {
-  return String(value).padStart(2, '0')
-}
 </script>
 
 <style scoped>
@@ -776,10 +723,6 @@ function padDatePart(value) {
   flex: 0 1 190px;
 }
 
-.filter-item--export-scope {
-  flex: 0 1 220px;
-}
-
 .filter-label {
   flex-shrink: 0;
   color: #606266;
@@ -788,7 +731,6 @@ function padDatePart(value) {
 
 .filter-item--name :deep(.el-input),
 .filter-item--status :deep(.el-select),
-.filter-item--export-scope :deep(.el-select),
 .filter-item--time :deep(.el-date-editor) {
   width: 100%;
   min-width: 0;
@@ -859,16 +801,21 @@ function padDatePart(value) {
 }
 
 .trigger-param-list {
-  display: grid;
+  display: flex;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .trigger-param-item {
-  display: grid;
-  gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  padding: 8px 10px;
+  max-width: 100%;
+  padding: 4px 8px;
+  overflow: hidden;
   background: #f8fbff;
   border: 1px solid #dce8f5;
   border-radius: 6px;
@@ -880,6 +827,7 @@ function padDatePart(value) {
   align-items: center;
   gap: 3px;
   min-width: 0;
+  max-width: 160px;
 }
 
 .trigger-param-field small {
@@ -943,7 +891,6 @@ function padDatePart(value) {
   .filter-item--name,
   .filter-item--time,
   .filter-item--status,
-  .filter-item--export-scope,
   .workflow-sort {
     width: 100%;
     max-width: none;

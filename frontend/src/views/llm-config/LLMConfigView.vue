@@ -10,7 +10,10 @@
 
     <main class="config-layout">
       <section class="config-form-panel">
-        <div class="panel-title">新增配置</div>
+        <div class="panel-title">
+          <span>{{ configForm.id ? '编辑配置' : '新增配置' }}</span>
+          <el-button type="primary" :icon="Plus" @click="handleNewConfig">新建</el-button>
+        </div>
         <el-form label-width="96px" :model="configForm">
           <el-form-item label="配置名称">
             <el-input v-model="configForm.name" placeholder="例如：deepseek" />
@@ -29,7 +32,13 @@
             <el-input v-model="configForm.model" placeholder="请输入模型名称，例如：deepseek-chat" />
           </el-form-item>
           <el-form-item label="API Key">
-            <el-input v-model="configForm.api_key" show-password placeholder="Ollama 可不填" />
+            <el-input
+              v-model="configForm.api_key"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              placeholder="Ollama 可不填"
+            />
           </el-form-item>
           <el-form-item label="Base URL">
             <el-input v-model="configForm.base_url" placeholder="可不填，不填时后端使用提供商默认地址" />
@@ -40,7 +49,7 @@
           </el-form-item>
           <el-form-item>
             <el-button :loading="testing" @click="handleTestConfig">测试连接</el-button>
-            <el-button type="primary" :loading="saving" @click="handleSaveConfig">保存配置</el-button>
+            <el-button type="primary" :loading="saving" @click="handleSaveConfig">{{ saveButtonText }}</el-button>
           </el-form-item>
         </el-form>
       </section>
@@ -109,6 +118,7 @@
           >
             删除选中
           </el-button>
+          <AppSelectionSummary :count="selectedConfigIds.length" unit="配置" />
         </div>
 
         <el-table
@@ -116,13 +126,18 @@
           class="config-table adaptive-table"
           :data="pagedConfigs"
           border
+          highlight-current-row
           height="100%"
+          :current-row-key="selectedConfigId"
           empty-text="暂无配置"
+          row-key="id"
+          @row-click="selectConfig"
         >
           <el-table-column width="40" align="center" class-name="action-column">
             <template #default="{ row }">
               <el-checkbox
                 :model-value="selectedConfigIds.includes(row.id)"
+                @click.stop
                 @change="(checked) => handleToggleConfig(row.id, checked)"
               />
             </template>
@@ -153,36 +168,39 @@
             class-name="ellipsis-column"
             show-overflow-tooltip
           />
-          <el-table-column label="默认" width="96" align="center" class-name="action-column">
+          <el-table-column label="默认" width="96" align="center" class-name="action-column default-column">
             <template #default="{ row }">
-              <el-tag v-if="row.is_default" type="success" effect="plain">默认</el-tag>
-              <el-button
-                v-else
-                link
-                type="primary"
-                :loading="isDefaultUpdating(row.id)"
-                :disabled="!row.is_active"
-                @click="handleSetDefaultConfig(row)"
-              >
-                设为默认
-              </el-button>
+              <div :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`" class="quick-edit-cell">
+                <span v-if="row.is_default" class="quick-edit-action quick-edit-badge">默认</span>
+                <button
+                  v-else
+                  class="quick-edit-action quick-edit-button"
+                  type="button"
+                  :disabled="isDefaultUpdating(row.id)"
+                  @click.stop="handleSetDefaultConfig(row)"
+                >
+                  {{ isDefaultUpdating(row.id) ? '设置中' : '设为默认' }}
+                </button>
+              </div>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="80" align="center" class-name="action-column">
+          <el-table-column label="状态" width="86" align="center" class-name="action-column quick-edit-column">
             <template #default="{ row }">
               <el-switch
+                class="quick-edit-switch"
                 :model-value="row.is_active"
                 :loading="isStatusUpdating(row.id)"
-                active-text="启用"
-                inactive-text="停用"
+                active-text="启"
+                inactive-text="停"
                 inline-prompt
+                @click.stop
                 @change="(checked) => handleToggleConfigStatus(row, checked)"
               />
             </template>
           </el-table-column>
           <el-table-column label="操作" width="70" align="center" class-name="action-column">
             <template #default="{ row }">
-              <el-button link type="danger" @click="handleDeleteConfig(row.id)">删除</el-button>
+              <el-button link type="danger" @click.stop="handleDeleteConfig(row.id)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -200,10 +218,12 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { RefreshRight } from '@element-plus/icons-vue'
+import { Plus, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import { DEFAULT_PAGE_SIZES, getSafePage } from '@/utils/list'
 import {
   createLLMConfig,
   deleteLLMConfig,
@@ -221,16 +241,18 @@ const saving = ref(false)
 const testing = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
 const searchKeyword = ref('')
 const providerFilter = ref('')
 const defaultFilter = ref('')
 const statusFilter = ref('')
+const selectedConfigId = ref('')
 const selectedConfigIds = ref([])
-const statusUpdatingIds = ref([])
 const defaultUpdatingIds = ref([])
+const statusUpdatingIds = ref([])
 
 const configForm = reactive(createEmptyForm())
+const saveButtonText = computed(() => (configForm.id ? '保存修改' : '新增配置'))
 
 const filteredConfigs = computed(() => {
   const keyword = searchKeyword.value.trim().toLocaleLowerCase()
@@ -297,6 +319,9 @@ async function loadConfigs() {
   selectedConfigIds.value = selectedConfigIds.value.filter((id) =>
     configs.value.some((config) => config.id === id),
   )
+  if (selectedConfigId.value && !configs.value.some((config) => config.id === selectedConfigId.value)) {
+    resetConfigForm()
+  }
 }
 
 function handleProviderChange() {
@@ -309,10 +334,13 @@ function handleProviderChange() {
 async function handleSaveConfig() {
   saving.value = true
   try {
-    await createLLMConfig({ ...configForm })
-    appMessage({ type: APP_MESSAGE_TYPE.success, message: '保存成功' })
-    resetConfigForm()
+    const isCreate = !configForm.id
+    const data = isCreate
+      ? await createLLMConfig(buildPayload())
+      : await updateLLMConfig(configForm.id, buildPayload())
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: isCreate ? '新增成功' : '保存成功' })
     await loadConfigs()
+    selectSavedConfig(data?.config || configForm)
   } finally {
     saving.value = false
   }
@@ -321,7 +349,7 @@ async function handleSaveConfig() {
 async function handleTestConfig() {
   testing.value = true
   try {
-    const data = await testLLMConfig({ ...configForm })
+    const data = await testLLMConfig(buildPayload())
     if (data.success === false) {
       appMessage({ type: APP_MESSAGE_TYPE.error, message: data.message || '连接失败' })
       return
@@ -343,6 +371,9 @@ async function handleDeleteConfig(configId) {
 
   await deleteLLMConfig(configId)
   removeConfigsFromState([configId])
+  if (configForm.id === configId) {
+    resetConfigForm()
+  }
   await loadConfigs()
 }
 
@@ -354,10 +385,16 @@ async function handleToggleConfigStatus(config, checked) {
 
   try {
     // Status update 状态更新，复用完整配置更新接口避免新增后端路由
-    await updateLLMConfig(config.id, { ...config, is_active: nextActive })
+    await updateLLMConfig(config.id, buildConfigPayload(config, { is_active: nextActive }))
+    if (configForm.id === config.id) {
+      configForm.is_active = nextActive
+    }
     appMessage({ type: APP_MESSAGE_TYPE.success, message: nextActive ? '已启用' : '已停用' })
   } catch (error) {
     config.is_active = previousActive
+    if (configForm.id === config.id) {
+      configForm.is_active = previousActive
+    }
     throw error
   } finally {
     statusUpdatingIds.value = statusUpdatingIds.value.filter((id) => id !== config.id)
@@ -365,17 +402,15 @@ async function handleToggleConfigStatus(config, checked) {
 }
 
 async function handleSetDefaultConfig(config) {
-  if (!config.is_active) {
-    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先启用该模型配置' })
-    return
-  }
+  if (config.is_default) return
 
   defaultUpdatingIds.value = Array.from(new Set([...defaultUpdatingIds.value, config.id]))
   try {
-    // Default update 设为默认后由后端清空旧默认项，再刷新列表同步最新状态
-    await updateLLMConfig(config.id, { ...config, is_default: true })
-    await loadConfigs()
+    // Default update 默认配置只允许一个，后端保存时会清理其他默认项
+    await updateLLMConfig(config.id, buildConfigPayload(config, { is_default: true }))
     appMessage({ type: APP_MESSAGE_TYPE.success, message: '已设为默认模型' })
+    await loadConfigs()
+    syncSelectedConfigFlags()
   } finally {
     defaultUpdatingIds.value = defaultUpdatingIds.value.filter((id) => id !== config.id)
   }
@@ -407,6 +442,9 @@ async function handleDeleteSelectedConfigs() {
 
   await deleteLLMConfigs(ids)
   removeConfigsFromState(ids)
+  if (ids.includes(configForm.id)) {
+    resetConfigForm()
+  }
   await loadConfigs()
 }
 
@@ -432,17 +470,31 @@ function getTimeValue(value) {
   return value ? new Date(value).getTime() || 0 : 0
 }
 
+function selectConfig(row) {
+  selectedConfigId.value = row.id
+  Object.assign(configForm, normalizeConfigForm(row))
+}
+
+function selectSavedConfig(config) {
+  // Saved selection 保存后回到已持久化配置，保持表格高亮与表单一致
+  if (!config?.id) return
+  const current = configs.value.find((item) => item.id === config.id) || config
+  if (current?.id) {
+    selectConfig(current)
+  }
+}
+
+function handleNewConfig() {
+  resetConfigForm()
+}
+
 function resetConfigForm() {
+  selectedConfigId.value = ''
   Object.assign(configForm, createEmptyForm())
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function getProviderName(providerId) {
-  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || '-'
+  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || ''
 }
 
 function isStatusUpdating(configId) {
@@ -453,8 +505,47 @@ function isDefaultUpdating(configId) {
   return defaultUpdatingIds.value.includes(configId)
 }
 
+function buildPayload() {
+  // Payload whitelist 表单入参白名单，避免列表时间字段回传
+  return buildConfigPayload(configForm)
+}
+
+function buildConfigPayload(config, overrides = {}) {
+  const nextConfig = { ...config, ...overrides }
+  return {
+    id: nextConfig.id,
+    name: nextConfig.name,
+    provider: nextConfig.provider,
+    api_key: nextConfig.api_key,
+    model: nextConfig.model,
+    base_url: nextConfig.base_url,
+    is_default: Boolean(nextConfig.is_default),
+    is_active: Boolean(nextConfig.is_active),
+  }
+}
+
+function syncSelectedConfigFlags() {
+  if (!configForm.id) return
+
+  const current = configs.value.find((config) => config.id === configForm.id)
+  if (!current) return
+
+  configForm.is_default = Boolean(current.is_default)
+  configForm.is_active = Boolean(current.is_active)
+}
+
+function normalizeConfigForm(config) {
+  return {
+    ...createEmptyForm(),
+    ...config,
+    is_default: Boolean(config.is_default),
+    is_active: Boolean(config.is_active),
+  }
+}
+
 function createEmptyForm() {
   return {
+    id: '',
     name: '',
     provider: 'openai',
     api_key: '',
@@ -534,11 +625,25 @@ function createEmptyForm() {
   white-space: nowrap;
 }
 
+.config-table :deep(.default-column .cell) {
+  display: flex;
+  justify-content: center;
+  padding: 0 8px;
+}
+
 .panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 16px;
   color: #303133;
   font-size: 18px;
   font-weight: 700;
+}
+
+.config-table :deep(.el-table__row) {
+  cursor: pointer;
 }
 
 .config-filters {

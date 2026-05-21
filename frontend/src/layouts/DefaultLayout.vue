@@ -39,6 +39,7 @@ import { getRuntimeConfig } from '@/services/app'
 const runtimeConfig = ref({
   mode: '',
   disabled_routes: [],
+  backend_available: true,
 })
 
 // Navigation groups disabled by runtime mode 导航分组，按运行模式禁用部分路由
@@ -64,6 +65,7 @@ const navSections = [
 ]
 
 const disabledRouteSet = computed(() => new Set(runtimeConfig.value.disabled_routes || []))
+const backendAvailable = computed(() => runtimeConfig.value.backend_available !== false)
 
 onMounted(() => {
   loadRuntimeConfig()
@@ -71,17 +73,21 @@ onMounted(() => {
 
 async function loadRuntimeConfig() {
   try {
-    runtimeConfig.value = await getRuntimeConfig()
+    runtimeConfig.value = {
+      ...(await getRuntimeConfig()),
+      backend_available: true,
+    }
   } catch {
     runtimeConfig.value = {
       mode: '',
       disabled_routes: [],
+      backend_available: false,
     }
   }
 }
 
 function isRouteDisabled(routePath) {
-  return disabledRouteSet.value.has(routePath)
+  return !backendAvailable.value || disabledRouteSet.value.has(routePath)
 }
 </script>
 

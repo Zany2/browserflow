@@ -7,6 +7,10 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
+	"github.com/Zany2/browserflow/backend/internal/consts"
+	"github.com/Zany2/browserflow/backend/internal/dao"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
@@ -15,6 +19,27 @@ import (
 
 // WorkflowUpdate updates local workflow metadata 修改本地工作流元信息
 func (c *ControllerV1) WorkflowUpdate(ctx context.Context, req *v1.WorkflowUpdateReq) (res *v1.WorkflowUpdateRes, err error) {
+	if consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer {
+		item := entity.AutomaWorkflows{}
+		if err = dao.AutomaWorkflows.Ctx(ctx).WherePri(req.ID).Scan(&item); err != nil {
+			return nil, err
+		}
+		if item.Id <= 0 {
+			return nil, fmt.Errorf("automa workflow not found")
+		}
+		if req.Revision > 0 && item.Revision != req.Revision {
+			return nil, fmt.Errorf("鐗堟湰宸插彉鍖栵紝璇峰埛鏂板悗閲嶈瘯")
+		}
+		updateData := do.AutomaWorkflows{Name: strings.TrimSpace(req.Name), Description: strings.TrimSpace(req.Description), IsProtected: req.IsProtected, Revision: item.Revision + 1}
+		if req.Source == 1 || req.Source == 2 {
+			updateData.Source = req.Source
+		}
+		if _, err = dao.AutomaWorkflows.Ctx(ctx).WherePri(req.ID).Data(updateData).Update(); err != nil {
+			return nil, err
+		}
+		return &v1.WorkflowUpdateRes{}, nil
+	}
+
 	state.DBMu.Lock()
 	if state.DB == nil {
 		dbPath := os.Getenv("DB_PATH")
@@ -40,12 +65,8 @@ func (c *ControllerV1) WorkflowUpdate(ctx context.Context, req *v1.WorkflowUpdat
 	if req.Revision > 0 && record.Revision != req.Revision {
 		return nil, fmt.Errorf("版本已变化，请刷新后重试")
 	}
-	if strings.TrimSpace(req.Name) != "" {
-		record.Name = strings.TrimSpace(req.Name)
-	}
-	if strings.TrimSpace(req.Description) != "" {
-		record.Description = strings.TrimSpace(req.Description)
-	}
+	record.Name = strings.TrimSpace(req.Name)
+	record.Description = strings.TrimSpace(req.Description)
 	if req.Source == 1 || req.Source == 2 {
 		record.Source = req.Source
 	}

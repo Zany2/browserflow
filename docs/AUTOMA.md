@@ -526,6 +526,11 @@ const hasParams =
 - File: `backend/internal/controller/workflows/automa_v1_automa_workflow_run.go`
 - Behavior: 后端执行工作流命令下发 `check_params: false`，表示参数已经由 BrowserFlow 侧处理完成。
 
+## Refresh workflow cache before external execution
+- File: `third_party/automa/src/content/services/shortcutListener.js`
+- Purpose: BrowserFlow may keep the browser-agent page open while users create or update Automa workflows. The Automa shortcut listener originally captured the workflow list only when the content script initialized, so a later `automa:execute-workflow` event could fail silently when the target workflow was created after page load.
+- Behavior: If the target workflow is not found in the cached list, BrowserFlow refreshes the workflow list from Automa storage once and tries the lookup again before returning.
+
 ## BrowserFlow execution completion and returned data
 - File: `third_party/automa/src/background/index.js`
 - File: `third_party/automa/src/workflowEngine/WorkflowManager.js`
@@ -533,3 +538,21 @@ const hasParams =
 - Purpose: BrowserFlow exported Automa Skills support both async dispatch and sync wait. When sync wait is requested, Automa sends the terminal status and selected output data back to the browser-agent page, and browser-agent returns it to the backend through the existing WebSocket command result.
 - Behavior: BrowserFlow sends `browserFlowRequestId`, `browserFlowWaitResult`, and `browserFlowReturnData` through workflow options. Automa records the source tab id as `browserFlowSourceTabId`, emits a result from `engine.on('destroyed')`, and forwards `browserflow:workflow-result` to the page event `__browserflow_automa_workflow_result__`.
 - Data rule: Workflows should write business output to the `browserflow_output` variable. Sync Skill calls should request and read that variable first instead of returning all variables, table rows, or logs.
+
+## Manual import keeps workflow identity and timestamps
+- File: `third_party/automa/src/utils/workflowData.js`
+- Purpose: Automa 页面手动导入 `.automa.json` 时，也要复用导出文件中的 `id`、`createdAt`、`updatedAt`。
+- Behavior: 主工作流导入时调用 `workflowStore.insert(..., { duplicateId: true })`，避免上游默认删除 `id` 后重新生成；子工作流导入时保留 `createdAt` 和 `updatedAt`。
+- Reason: BrowserFlow 工作流管理以 Automa 原始 `id` 为中心比对客户端和数据库工作流。如果手动导入重新生成 ID，客户端同步会显示“数据库无记录”。
+
+关键代码：
+```js
+workflowStore.insert(
+  {
+    ...workflow,
+    createdAt: workflow.createdAt || Date.now(),
+    updatedAt: workflow.updatedAt || Date.now(),
+  },
+  { duplicateId: true }
+);
+```

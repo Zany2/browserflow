@@ -6,15 +6,15 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
-	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/os/gtime"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/clientops"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // ClientUnban removes client ban 解除客户端拉黑
 func (c *ControllerV1) ClientUnban(ctx context.Context, req *v1.ClientUnbanReq) (res *v1.ClientUnbanRes, err error) {
 	// Query target client 查询目标客户端
-	record, err := queryClientRecord(ctx, req.ID)
+	record, err := clientops.QueryRecord(ctx, req.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -27,17 +27,16 @@ func (c *ControllerV1) ClientUnban(ctx context.Context, req *v1.ClientUnbanReq) 
 	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
 	_, err = dao.Clients.Ctx(ctx).
 		Where(columns.ClientIp, clientIP).
-		Data(g.Map{
-			columns.IsBanned:  false,
-			columns.BanReason: "",
-			columns.UpdatedAt: gtime.Now(),
+		Data(do.Clients{
+			IsBanned:  false,
+			BanReason: "",
 		}).
 		Update()
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := clientRecordToEntity(record)
+	client, err := clientops.RecordToEntity(record)
 	if err != nil {
 		return nil, err
 	}

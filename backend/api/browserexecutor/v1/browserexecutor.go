@@ -39,7 +39,7 @@ type BrowserExecutorExportSkillRes struct{}
 type BrowserExecutorNavigateReq struct {
 	g.Meta        `path:"/navigate" method:"post" tags:"浏览器执行器" summary:"打开 URL"`
 	URL           string `json:"url" v:"required#URL不能为空" dc:"URL"`
-	WaitUntil     string `json:"wait_until" dc:"等待条件"`
+	WaitUntil     string `json:"wait_until" dc:"等待条件 load/dom-stable/request-idle/page-stable/none"`
 	Timeout       int    `json:"timeout" dc:"超时秒数"`
 	ReturnObserve bool   `json:"return_observe" dc:"是否返回操作后的页面观察"`
 	IncludeText   bool   `json:"include_text" dc:"是否包含页面文本"`
@@ -354,6 +354,40 @@ type BrowserExecutorEvaluateRes struct {
 	Result *model.BrowserExecutorOperationResult `json:"result,omitempty" dc:"操作结果"`
 }
 
+// BrowserExecutorCookiesReq manages browser cookies. 管理浏览器 Cookie。
+type BrowserExecutorCookiesReq struct {
+	g.Meta   `path:"/cookies" method:"post" tags:"浏览器执行器" summary:"管理 Cookie"`
+	Action   string  `json:"action" d:"list" dc:"操作 list/set/delete/clear"`
+	Name     string  `json:"name" dc:"Cookie 名称"`
+	Value    string  `json:"value" dc:"Cookie 值"`
+	URL      string  `json:"url" dc:"Cookie URL，未填时使用当前页面 URL"`
+	Domain   string  `json:"domain" dc:"Cookie 域名"`
+	Path     string  `json:"path" dc:"Cookie 路径"`
+	Secure   bool    `json:"secure" dc:"是否 Secure"`
+	HTTPOnly bool    `json:"http_only" dc:"是否 HttpOnly"`
+	SameSite string  `json:"same_site" dc:"Strict/Lax/None"`
+	Expires  float64 `json:"expires" dc:"过期时间戳，0 表示会话 Cookie"`
+}
+
+// BrowserExecutorCookiesRes is the cookie operation response. Cookie 操作响应。
+type BrowserExecutorCookiesRes struct {
+	Result *model.BrowserExecutorOperationResult `json:"result,omitempty" dc:"操作结果"`
+}
+
+// BrowserExecutorStorageReq manages page storage. 管理页面存储。
+type BrowserExecutorStorageReq struct {
+	g.Meta `path:"/storage" method:"post" tags:"浏览器执行器" summary:"管理 localStorage/sessionStorage"`
+	Action string `json:"action" d:"list" dc:"操作 list/get/set/delete/clear"`
+	Type   string `json:"type" d:"local" dc:"存储类型 local/session"`
+	Key    string `json:"key" dc:"存储键"`
+	Value  string `json:"value" dc:"存储值"`
+}
+
+// BrowserExecutorStorageRes is the storage operation response. 存储操作响应。
+type BrowserExecutorStorageRes struct {
+	Result *model.BrowserExecutorOperationResult `json:"result,omitempty" dc:"操作结果"`
+}
+
 // BrowserExecutorTabsReq manages tabs. 管理标签页。
 type BrowserExecutorTabsReq struct {
 	g.Meta `path:"/tabs" method:"post" tags:"浏览器执行器" summary:"管理标签页"`
@@ -489,6 +523,7 @@ type BrowserExecutorActReq struct {
 	Identifier string `json:"identifier" dc:"元素标识"`
 	Value      any    `json:"value" dc:"动作值"`
 	Text       string `json:"text" dc:"输入文本"`
+	WaitUntil  string `json:"wait_until" dc:"导航等待条件"`
 	Fields     []struct {
 		Name  string `json:"name" v:"required#字段名称不能为空" dc:"字段名称"`
 		Value any    `json:"value" dc:"字段值"`

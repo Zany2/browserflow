@@ -1,8 +1,9 @@
-package browser
+package browserruntime
 
 import (
 	"time"
 
+	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 	"github.com/Zany2/browserflow/backend/utility/state"
 )
 
@@ -10,8 +11,8 @@ const browserRuntimeProbeInterval = 2 * time.Second
 const browserRuntimeProbeTimeout = 1 * time.Second
 const browserRuntimeProbeFailureLimit = 2
 
-// watchBrowserRuntime probes the browser CDP connection and clears stale runtime state. 监听浏览器连接，关闭后清理运行态。
-func watchBrowserRuntime(instanceID string, runtime *state.BrowserRuntime) {
+// Watch probes the browser CDP connection and clears stale runtime state. ?????????????????
+func Watch(instanceID string, runtime *state.BrowserRuntime) {
 	if runtime == nil || runtime.Browser == nil {
 		return
 	}
@@ -29,7 +30,7 @@ func watchBrowserRuntime(instanceID string, runtime *state.BrowserRuntime) {
 				return
 			}
 
-			if browserRuntimeAlive(runtime) {
+			if runtimeAlive(runtime) {
 				failureCount = 0
 				continue
 			}
@@ -37,6 +38,7 @@ func watchBrowserRuntime(instanceID string, runtime *state.BrowserRuntime) {
 			failureCount += 1
 			if failureCount >= browserRuntimeProbeFailureLimit {
 				state.RemoveBrowserRuntime(instanceID, runtime)
+				browserexecutor.Cleanup(instanceID)
 				state.CleanupBrowserRuntime(runtime)
 				return
 			}
@@ -44,12 +46,13 @@ func watchBrowserRuntime(instanceID string, runtime *state.BrowserRuntime) {
 	}()
 }
 
-func browserRuntimeAlive(runtime *state.BrowserRuntime) bool {
+// runtimeAlive checks whether CDP still responds. ?? CDP ???????
+func runtimeAlive(runtime *state.BrowserRuntime) bool {
 	if runtime == nil || runtime.Browser == nil {
 		return false
 	}
 
-	// CDP probe 使用超时探测，避免浏览器关闭后请求长时间挂起
+	// CDP probe uses timeout to avoid hanging after browser shutdown. CDP ??????????????????????
 	browser := runtime.Browser.Timeout(browserRuntimeProbeTimeout)
 	defer browser.CancelTimeout()
 	_, err := browser.Version()

@@ -85,10 +85,33 @@ type BrowserExecutorActOptions struct {
 	Identifier string
 	Value      any
 	Text       string
+	WaitUntil  string
 	Fields     []BrowserExecutorFormField
 	Submit     bool
 	Clear      bool
 	Timeout    int
+}
+
+// BrowserExecutorCookieOptions describes cookie operations. 描述 Cookie 操作参数。
+type BrowserExecutorCookieOptions struct {
+	Action   string
+	Name     string
+	Value    string
+	URL      string
+	Domain   string
+	Path     string
+	Secure   bool
+	HTTPOnly bool
+	SameSite string
+	Expires  float64
+}
+
+// BrowserExecutorStorageOptions describes local/session storage operations. 描述 localStorage/sessionStorage 操作参数。
+type BrowserExecutorStorageOptions struct {
+	Action string
+	Type   string
+	Key    string
+	Value  string
 }
 
 // BrowserExecutorPageStructureOptions describes compact page structure extraction. Page structure options.

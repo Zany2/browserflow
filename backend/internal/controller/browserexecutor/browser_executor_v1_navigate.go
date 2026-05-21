@@ -14,7 +14,7 @@ func (c *ControllerV1) BrowserExecutorNavigate(ctx context.Context, req *v1.Brow
 	if err != nil {
 		return nil, err
 	}
-	result, opErr := executor.Navigate(ctx, strings.TrimSpace(req.URL), req.Timeout)
+	result, opErr := executor.Navigate(ctx, strings.TrimSpace(req.URL), req.WaitUntil, req.Timeout)
 	result, observeErr := executor.AppendObserve(ctx, result, req.ReturnObserve, req.IncludeText, req.TextLimit)
 	if opErr == nil {
 		opErr = observeErr

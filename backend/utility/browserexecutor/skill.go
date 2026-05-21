@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/Zany2/browserflow/backend/internal/model"
 )
 
 // GenerateSkill builds SKILL.md content for direct browser control. GenerateSkill builds SKILL.md content.
-func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
+func GenerateSkill(baseURL string) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
 	sb.WriteString("name: browserflow-browser-executor\n")
-	sb.WriteString("description: Control the current BrowserFlow Windows browser directly through HTTP APIs. Use observe, act, accessibility snapshots, RefIDs, page structure, element diagnostics, page text, page HTML, and compact actions to navigate, click, type, fill forms, upload files, drag, handle dialogs, scroll, reload, extract data, screenshot, operate mouse/window, run JavaScript, and manage tabs without Automa workflows.\n")
+	sb.WriteString("description: Control the current BrowserFlow Windows browser directly through HTTP APIs. Use observe, act, accessibility snapshots, RefIDs, page structure, element diagnostics, page text, page HTML, cookies, storage, and compact actions to navigate, click, type, fill forms, upload files, drag, handle dialogs, scroll, reload, extract data, screenshot, operate mouse/window, run JavaScript, and manage tabs without Automa workflows.\n")
 	sb.WriteString("---\n\n")
 
 	sb.WriteString("# BrowserFlow Browser Executor\n\n")
@@ -21,12 +19,6 @@ func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
 	sb.WriteString("Use this skill when the user wants to operate the browser directly with an LLM instead of running a prebuilt Automa workflow.\n\n")
 	sb.WriteString("Keep the BrowserFlow `browser-agent` client tab alive. Do not close the whole browser after a task; when cleanup is needed, close only task-related business tabs that were opened or used for that task.\n\n")
 	sb.WriteString(fmt.Sprintf("**API Base URL:** `%s/browser-executor`\n\n", baseURL))
-	if status.BrowserID != "" {
-		sb.WriteString(fmt.Sprintf("**Current Browser Instance ID:** `%s`\n\n", inline(status.BrowserID)))
-	}
-	if status.URL != "" {
-		sb.WriteString(fmt.Sprintf("**Current Page:** `%s`\n\n", inline(status.URL)))
-	}
 
 	sb.WriteString("## Mandatory Workflow\n\n")
 	sb.WriteString("1. Check `status` before controlling the browser.\n")
@@ -39,8 +31,9 @@ func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
 	sb.WriteString("8. Prefer `fill-form` for multiple fields and `batch` for deterministic sequential actions; do not batch steps that need observation between them.\n")
 	sb.WriteString("9. If a RefID fails, call `observe` or `snapshot` again because the page may have changed.\n")
 	sb.WriteString("10. Prefer `page-structure` for structured extraction before requesting full `page-content`, and use `element-info` to diagnose one uncertain element.\n")
-	sb.WriteString("11. Use `wait` states precisely: `load`, `visible`, `hidden`, `enabled`, `interactable`, `writable`, `stable`, `dom-stable`, `request-idle`, `elements-more-than`, or `time`.\n")
-	sb.WriteString("12. Never close the BrowserFlow browser or any `#/browser-agent` client tab. Before using `close-page` or `tabs` with `action:\"close\"`, call `tabs` with `action:\"list\"` and close only task-related business tabs.\n\n")
+	sb.WriteString("11. Use `wait` states precisely: `load`, `visible`, `hidden`, `enabled`, `interactable`, `writable`, `stable`, `dom-stable`, `request-idle`, `elements-more-than`, or `time`. For navigation, set `wait_until` to `load`, `dom-stable`, `request-idle`, `page-stable`, or `none`.\n")
+	sb.WriteString("12. Use `cookies` and `storage` when the task needs to inspect login/session state or clean up page state. Prefer these semantic APIs over ad hoc JavaScript.\n")
+	sb.WriteString("13. Never close the BrowserFlow browser or any `#/browser-agent` client tab. Before using `close-page` or `tabs` with `action:\"close\"`, call `tabs` with `action:\"list\"` and close only task-related business tabs.\n\n")
 
 	sb.WriteString("## Preflight\n\n")
 	sb.WriteString("```bash\n")
@@ -49,7 +42,7 @@ func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("## Core Commands\n\n")
-	appendCurl(&sb, baseURL, "Open URL", "navigate", map[string]any{"url": "https://example.com"})
+	appendCurl(&sb, baseURL, "Open URL", "navigate", map[string]any{"url": "https://example.com", "wait_until": "load"})
 	appendCurl(&sb, baseURL, "Observe Page", "observe", map[string]any{"include_text": false, "text_limit": 8000})
 	appendCurl(&sb, baseURL, "Get Snapshot", "snapshot", nil)
 	appendCurl(&sb, baseURL, "Clickable Elements", "clickable-elements", map[string]any{"limit": 50})
@@ -71,6 +64,10 @@ func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
 	appendCurl(&sb, baseURL, "Get Value", "get-value", map[string]any{"identifier": "@e2"})
 	appendCurl(&sb, baseURL, "Page Text", "page-text", map[string]any{"limit": 8000})
 	appendCurl(&sb, baseURL, "Page Content", "page-content", map[string]any{"limit": 12000})
+	appendCurl(&sb, baseURL, "List Cookies", "cookies", map[string]any{"action": "list"})
+	appendCurl(&sb, baseURL, "Set Cookie", "cookies", map[string]any{"action": "set", "name": "token", "value": "abc", "url": "https://example.com", "same_site": "Lax"})
+	appendCurl(&sb, baseURL, "List Local Storage", "storage", map[string]any{"action": "list", "type": "local"})
+	appendCurl(&sb, baseURL, "Set Local Storage", "storage", map[string]any{"action": "set", "type": "local", "key": "token", "value": "abc"})
 	appendCurl(&sb, baseURL, "Scroll Page", "scroll", map[string]any{"direction": "down", "pixels": 700})
 	appendCurl(&sb, baseURL, "Reload Page", "reload", map[string]any{})
 	appendCurl(&sb, baseURL, "Resize Viewport", "resize", map[string]any{"width": 1440, "height": 900})
@@ -104,6 +101,7 @@ func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
 	sb.WriteString("- If a page did not update, call `wait` with `dom-stable`, `request-idle`, or a specific element state, then `observe`.\n")
 	sb.WriteString("- If a click fails, use `element-info` to check visibility, disabled state, box coordinates, and XPath; then retry with a better identifier or coordinate `mouse` fallback.\n")
 	sb.WriteString("- If extraction is empty, try `page-structure`, `page-text`, `page-content`, or a broader selector with a smaller limit.\n")
+	sb.WriteString("- If login state or a persisted setting looks wrong, inspect `cookies` and `storage` before retrying page actions.\n")
 	sb.WriteString("- If `status.running` is false, ask the user to reopen the BrowserFlow browser-agent page.\n\n")
 
 	sb.WriteString("## Other Endpoints\n\n")
@@ -119,7 +117,9 @@ func GenerateSkill(baseURL string, status model.BrowserExecutorStatus) string {
 	sb.WriteString("- Set `return_observe:true` on `act`, `navigate`, `click`, `type`, `select`, `fill-form`, or `scroll` when you need the updated page state.\n")
 	sb.WriteString("- Prefer `fill-form` over repeated `type` calls when a page has several fields.\n")
 	sb.WriteString("- Prefer `wait` with specific states (`interactable`, `enabled`, `writable`, `dom-stable`, `request-idle`) instead of blind time sleeps.\n")
+	sb.WriteString("- For `navigate`, choose `wait_until` deliberately. Use `request-idle` for network-heavy SPAs, `dom-stable` for DOM-rendered pages, and `none` only when the next step explicitly waits for something else.\n")
 	sb.WriteString("- Call `handle-dialog` before the action that triggers an alert, confirm, prompt, or beforeunload dialog.\n")
+	sb.WriteString("- Use `cookies` for authentication/session inspection and `storage` for localStorage/sessionStorage reads or cleanup. Avoid raw `evaluate` for these common state tasks.\n")
 	sb.WriteString("- Prefer `page-text` or `page-content` only when the model needs broad context, and keep limits small.\n")
 	sb.WriteString("- Browser control APIs are powerful. Use them only against the local BrowserFlow backend.\n")
 	sb.WriteString("- Do not close the browser as a task cleanup step. Keep the BrowserFlow `browser-agent` client tab open so the local executor remains connected.\n")

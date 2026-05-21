@@ -143,7 +143,7 @@ func (e *Executor) InvalidateSnapshot() {
 
 // GetSnapshot returns cached or fresh accessibility snapshot. GetSnapshot returns cached or fresh snapshot.
 func (e *Executor) GetSnapshot(ctx context.Context) (*model.BrowserExecutorAccessibilitySnapshot, error) {
-	page, err := e.activePage()
+	page, err := e.businessPage()
 	if err != nil {
 		return nil, err
 	}

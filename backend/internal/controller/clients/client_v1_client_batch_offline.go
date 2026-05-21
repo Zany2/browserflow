@@ -6,7 +6,8 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
-	"github.com/gogf/gf/v2/frame/g"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/clientops"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
 )
@@ -18,11 +19,10 @@ func (c *ControllerV1) ClientBatchOffline(ctx context.Context, req *v1.ClientBat
 		Total: len(req.IDs),
 	}
 	columns := dao.Clients.Columns()
-	now := gtime.Now()
 
 	for _, id := range req.IDs {
 		// Query client 按选择的客户端标识查询记录
-		record, queryErr := queryClientRecord(ctx, id)
+		record, queryErr := clientops.QueryRecord(ctx, id)
 		if queryErr != nil {
 			return nil, queryErr
 		}
@@ -33,13 +33,12 @@ func (c *ControllerV1) ClientBatchOffline(ctx context.Context, req *v1.ClientBat
 
 		// Mark offline 标记离线并关闭当前连接
 		clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
-		closed := closeClientConnection(ctx, clientIP)
+		closed := clientops.CloseConnection(ctx, clientIP)
 		if _, err = dao.Clients.Ctx(ctx).
 			Where(columns.ClientIp, clientIP).
-			Data(g.Map{
-				columns.Status:         "offline",
-				columns.DisconnectedAt: now,
-				columns.UpdatedAt:      now,
+			Data(do.Clients{
+				Status:         "offline",
+				DisconnectedAt: gtime.Now(),
 			}).
 			Update(); err != nil {
 			return nil, err

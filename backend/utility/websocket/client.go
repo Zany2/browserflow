@@ -13,6 +13,8 @@ import (
 type Client struct {
 	// Ctx client context 连接上下文
 	Ctx context.Context
+	// connectionID internal connection identity 内部连接标识
+	connectionID string
 	// clientIP client identity 客户端唯一标识
 	clientIP string
 	// clientID business client id 业务客户端标识
@@ -33,6 +35,8 @@ type Client struct {
 	conn *websocket.Conn
 	// manager owner manager 所属管理器
 	manager *WebSocketManager
+	// requireHeartbeat read timeout guard 是否要求心跳保活
+	requireHeartbeat bool
 	// message write queue 写队列
 	message chan *messageData
 	// closeOnce close queue once 只关闭一次消息通道
@@ -47,6 +51,11 @@ type messageData struct {
 	dataType int
 	// data message payload 消息内容
 	data []byte
+}
+
+// ConnectionID get internal connection id 获取内部连接标识
+func (c *Client) ConnectionID() string {
+	return c.connectionID
 }
 
 // ClientIP get client ip 获取客户端标识
@@ -105,6 +114,9 @@ func (c *Client) markHeartbeat(clientHeartbeatTime int64, now time.Time) {
 
 // refreshReadDeadline refresh read deadline 刷新读超时
 func (c *Client) refreshReadDeadline() error {
+	if !c.requireHeartbeat {
+		return c.conn.SetReadDeadline(time.Time{})
+	}
 	return c.conn.SetReadDeadline(time.Now().Add(c.manager.heartbeatTimeout))
 }
 

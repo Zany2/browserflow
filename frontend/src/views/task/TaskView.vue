@@ -7,43 +7,54 @@
 
     <section class="task-panel">
       <div class="task-filters">
-        <div class="filter-item filter-item--keyword">
-          <span class="filter-label">关键词</span>
-          <el-input v-model="taskFilters.keyword" clearable placeholder="任务名称或任务说明" />
+        <div class="task-filter-fields">
+          <div class="filter-item filter-item--keyword">
+            <span class="filter-label">关键词</span>
+            <el-input v-model="taskFilters.keyword" clearable placeholder="任务名称或任务说明" />
+          </div>
+          <div class="filter-item filter-item--workflow">
+            <span class="filter-label">自定义工作流名称</span>
+            <el-input v-model="taskFilters.workflow_name" clearable placeholder="模糊检索自定义工作流名称" />
+          </div>
+          <div class="filter-item filter-item--created-time">
+            <span class="filter-label">创建时间</span>
+            <AppTimeRangeFilter v-model="taskFilters.created_time_range" />
+          </div>
+          <div class="filter-item filter-item--enabled">
+            <span class="filter-label">状态</span>
+            <el-select v-model="taskFilters.enabled" clearable placeholder="全部">
+              <el-option label="全部" value="" />
+              <el-option label="启用" value="true" />
+              <el-option label="停用" value="false" />
+            </el-select>
+          </div>
         </div>
-        <div class="filter-item filter-item--workflow">
-          <span class="filter-label">工作流名称</span>
-          <el-input v-model="taskFilters.workflow_name" clearable placeholder="模糊检索工作流名称" />
+        <div class="task-filter-actions">
+          <el-button @click="resetTaskFilters">重置</el-button>
+          <el-button type="danger" :disabled="selectedTaskIds.length === 0" @click="handleBatchDeleteTasks">
+            删除选中
+          </el-button>
+          <AppSelectionSummary :count="selectedTaskIds.length" unit="任务" />
         </div>
-        <div class="filter-item filter-item--created-time">
-          <span class="filter-label">创建时间</span>
-          <AppTimeRangeFilter v-model="taskFilters.created_time_range" />
-        </div>
-        <div class="filter-item filter-item--enabled">
-          <span class="filter-label">状态</span>
-          <el-select v-model="taskFilters.enabled" clearable placeholder="全部">
-            <el-option label="全部" value="" />
-            <el-option label="启用" value="true" />
-            <el-option label="停用" value="false" />
-          </el-select>
-        </div>
-        <el-button @click="resetTaskFilters">重置</el-button>
       </div>
 
       <el-table
+        ref="taskTableRef"
         v-loading="loadingTasks"
         class="task-table adaptive-table"
         :data="pagedTasks"
         border
         height="100%"
-        row-key="id"
+        :row-key="getTaskSelectionKey"
         empty-text="暂无任务配置"
+        @selection-change="handleTaskSelectionChange"
       >
-        <el-table-column prop="name" label="任务名称" min-width="140" />
+        <el-table-column type="selection" width="40" reserve-selection />
+        <el-table-column prop="name" label="任务名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="description" label="任务说明" min-width="180" show-overflow-tooltip />
-        <el-table-column label="工作流名称" min-width="160" show-overflow-tooltip>
+        <el-table-column label="自定义工作流名称" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.workflow_name || row.workflow_id || '-' }}
+            {{ row.workflow_name || row.workflow_id || '' }}
           </template>
         </el-table-column>
         <el-table-column label="执行客户端IP" min-width="140" show-overflow-tooltip>
@@ -51,7 +62,7 @@
             {{ getTaskClientIp(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="执行计划" min-width="140">
+        <el-table-column label="执行计划" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getScheduleText(row) }}
           </template>
@@ -61,11 +72,19 @@
             {{ getTaskParamCount(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="70" align="center">
+        <el-table-column label="状态" width="86" align="center" class-name="quick-edit-column">
           <template #default="{ row }">
-            <el-tag :type="row.enabled === false ? 'info' : 'success'" effect="plain">
-              {{ row.enabled === false ? '停用' : '启用' }}
-            </el-tag>
+            <div class="quick-edit-cell">
+              <el-switch
+                class="quick-edit-switch"
+                :model-value="row.enabled !== false"
+                inline-prompt
+                active-text="启"
+                inactive-text="停"
+                :loading="isTaskStatusUpdating(row)"
+                @change="(value) => handleQuickUpdateTaskStatus(row, value)"
+              />
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="170" class-name="nowrap-column">
@@ -96,9 +115,9 @@
       width="920px"
       @closed="handleDialogClosed"
     >
-      <el-form label-width="120px" :model="taskForm">
+      <el-form class="task-config-form" label-width="136px" :model="taskForm">
         <el-form-item label="任务名称">
-          <el-input v-model="taskForm.name" placeholder="请输入任务名称" />
+          <el-input v-model="taskForm.name" placeholder="请填写任务名称，不填写则随机生成" />
         </el-form-item>
 
         <el-form-item label="任务说明">
@@ -106,11 +125,11 @@
             v-model="taskForm.description"
             type="textarea"
             :rows="3"
-            placeholder="请输入任务说明"
+            placeholder="请填写任务说明，不填写则随机生成"
           />
         </el-form-item>
 
-        <el-form-item label="Automa 工作流">
+        <el-form-item label="工作流" required>
           <el-select
             v-model="taskForm.workflow_id"
             class="full-width"
@@ -126,7 +145,7 @@
               :value="getWorkflowId(workflow)"
             >
               <div class="workflow-option">
-                <span>{{ workflow.name || '未命名工作流' }}</span>
+                <span>{{ workflow.name || '' }}</span>
                 <small>{{ getWorkflowId(workflow) }}</small>
               </div>
             </el-option>
@@ -141,7 +160,7 @@
                 class="client-select"
                 clearable
                 filterable
-                placeholder="搜索并选择客户端名称、ID、IP、浏览器"
+                placeholder="可选，搜索并选择客户端名称、ID、IP、浏览器"
                 :filter-method="handleClientKeywordFilter"
                 :loading="clientLoading"
                 @change="handleClientChange"
@@ -155,7 +174,7 @@
                   :value="getClientId(client)"
                 >
                   <div class="client-option">
-                    <span>{{ getClientIp(client) || '-' }}</span>
+                    <span>{{ getClientIp(client) || '' }}</span>
                     <small>{{ getClientSelectMeta(client) }}</small>
                   </div>
                 </el-option>
@@ -167,23 +186,83 @@
 
             <div class="client-selection-summary">
               <template v-if="selectedClient">
-                <el-tag effect="plain">{{ getClientIp(selectedClient) || '-' }}</el-tag>
+                <el-tag effect="plain">{{ getClientIp(selectedClient) || '' }}</el-tag>
                 <span class="client-selection-text">{{ getClientSelectMeta(selectedClient) }}</span>
+                <span v-if="clientWorkflowStatusText" :class="clientWorkflowStatusClass">
+                  {{ clientWorkflowStatusText }}
+                </span>
               </template>
-              <span v-else class="client-selection-empty">未选择执行客户端</span>
+              <span v-else class="client-selection-empty">
+                未选择时，后端会匹配拥有该工作流的在线客户端执行
+              </span>
             </div>
           </div>
         </el-form-item>
 
         <el-form-item label="执行参数">
           <div class="params-editor">
+            <div v-if="workflowParamLoading" class="param-loading">正在解析工作流参数...</div>
+            <div v-else-if="autoParamItems.length > 0" class="auto-param-list">
+              <div
+                v-for="param in autoParamItems"
+                :key="param.key"
+                class="auto-param-row"
+              >
+                <div class="auto-param-meta">
+                  <div class="auto-param-title">
+                    <span>{{ param.name }}</span>
+                    <el-tag v-if="param.required" size="small" type="danger" effect="plain">必填</el-tag>
+                    <el-tag size="small" effect="plain">{{ formatParamTypeText(param.type) }}</el-tag>
+                  </div>
+                </div>
+                <div class="auto-param-control">
+                  <el-switch
+                    v-if="param.type === 'checkbox'"
+                    v-model="param.value"
+                    active-text="是"
+                    inactive-text="否"
+                  />
+                  <el-input
+                    v-else
+                    v-model="param.value"
+                    :type="param.type === 'json' ? 'textarea' : param.type === 'number' ? 'number' : 'text'"
+                    :rows="param.type === 'json' ? 4 : undefined"
+                    :placeholder="param.placeholder"
+                  />
+                  <span v-if="getParamDescriptionText(param)" class="form-help">
+                    {{ getParamDescriptionText(param) }}
+                  </span>
+                  <span v-if="param.defaultText" class="form-help">默认值：{{ param.defaultText }}</span>
+                </div>
+              </div>
+            </div>
+            <span v-else class="form-help">当前工作流未配置 Param 参数。</span>
+
             <div
               v-for="(item, index) in paramEntries"
               :key="`param_${index}`"
               class="param-row"
             >
               <el-input v-model="item.key" placeholder="key" />
-              <el-input v-model="item.value" placeholder="value" />
+              <el-select v-model="item.type" class="param-type-select" @change="handleManualParamTypeChange(item)">
+                <el-option label="文本" value="string" />
+                <el-option label="数字" value="number" />
+                <el-option label="JSON" value="json" />
+                <el-option label="勾选" value="checkbox" />
+              </el-select>
+              <el-switch
+                v-if="item.type === 'checkbox'"
+                v-model="item.value"
+                active-text="是"
+                inactive-text="否"
+              />
+              <el-input
+                v-else
+                v-model="item.value"
+                :type="item.type === 'json' ? 'textarea' : item.type === 'number' ? 'number' : 'text'"
+                :rows="item.type === 'json' ? 3 : undefined"
+                placeholder="value"
+              />
               <el-button
                 link
                 type="danger"
@@ -195,7 +274,7 @@
             </div>
             <el-button :icon="Plus" @click="addParam">新增参数</el-button>
             <span class="form-help">
-              多个参数会在客户端执行 Automa 工作流时作为变量传入。
+              工作流 Param 会自动渲染，手动新增的参数也会作为变量传入。
             </span>
           </div>
         </el-form-item>
@@ -207,7 +286,7 @@
               placeholder="可选，例如 0 */10 * * * *"
             />
             <span class="form-help">
-              不填写时，后端按创建后执行一次处理；填写后按定时任务处理。
+              不填写时不会自动调度，可在任务列表手动执行一次；填写后按定时任务处理。
             </span>
           </div>
         </el-form-item>
@@ -265,35 +344,53 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Plus, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
-import { getAutomaWorkflowDetail, listAutomaWorkflows } from '@/services/automa'
+import { useDebouncedAction } from '@/composables/useDebouncedAction'
+import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
+import {
+  getAutomaWorkflowDetail,
+  listAutomaSyncCandidatesByWorkflow,
+  listAutomaWorkflows,
+} from '@/services/automa'
 import { listClients } from '@/services/client'
 import { createTask, deleteTask, executeTask, listTasks, updateTask } from '@/services/task'
+import { formatDate as formatBaseDate } from '@/utils/format'
+import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList } from '@/utils/list'
 
 const tasks = ref([])
 const workflowOptions = ref([])
 const clientOptions = ref([])
 const loadingTasks = ref(false)
+const taskTableRef = ref(null)
 const workflowLoading = ref(false)
+const workflowParamLoading = ref(false)
 const clientLoading = ref(false)
+const clientWorkflowChecking = ref(false)
+const clientWorkflowCheckSeq = ref(0)
 const saving = ref(false)
 const taskDialogVisible = ref(false)
 const executeParamDialogVisible = ref(false)
 const executeParamSubmitting = ref(false)
 const executeParamTask = ref(null)
 const executeParamItems = ref([])
+const taskStatusUpdatingIds = ref(new Set())
 const taskPage = ref(1)
 const taskPageSize = ref(10)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
+const clientWorkflowCheckPageSize = DEFAULT_PAGE_SIZES[0]
+const autoParamItems = ref([])
 const paramEntries = ref([createEmptyParamEntry()])
-const filterSearchDelay = 200
-let filterSearchTimer = null
+const {
+  run: scheduleFilterSearch,
+  cancel: clearFilterSearchTimer,
+} = useDebouncedAction(searchTasksNow, 200)
 
 const taskForm = reactive(createEmptyTaskForm())
 const taskFilters = reactive({
@@ -310,6 +407,17 @@ const taskDialogTitle = computed(() => (taskForm.id ? '编辑任务' : '新增�
 const pagedTasks = computed(() => {
   const start = (taskPage.value - 1) * taskPageSize.value
   return tasks.value.slice(start, start + taskPageSize.value)
+})
+const {
+  selectedKeys: selectedTaskIds,
+  handleSelectionChange: handleTaskSelectionChange,
+  restoreSelection: restoreTaskSelection,
+  resetSelection: resetTaskSelection,
+  retainSelectionByRows: retainTaskSelectionByRows,
+  removeSelectionKeys: removeTaskSelectionKeys,
+} = usePagedTableSelection({
+  rows: pagedTasks,
+  getRowKey: getTaskSelectionKey,
 })
 const filteredClients = computed(() => {
   const keyword = clientSelector.keyword.trim().toLowerCase()
@@ -333,14 +441,25 @@ const filteredClients = computed(() => {
   })
 })
 const selectedClient = computed(() => findClientById(taskForm.client_id))
+const clientWorkflowStatusText = computed(() => {
+  if (!taskForm.workflow_id || !selectedClient.value) return ''
+  if (clientWorkflowChecking.value) return '正在检测当前客户端是否拥有该工作流...'
+  if (selectedClientHasWorkflow.value === true) return '当前客户端已拥有该工作流'
+  if (selectedClientHasWorkflow.value === false) {
+    return '当前客户端没有上报该工作流，保存后执行会直接失败'
+  }
+  return ''
+})
+const clientWorkflowStatusClass = computed(() => {
+  if (selectedClientHasWorkflow.value === true) return 'form-success'
+  if (selectedClientHasWorkflow.value === false) return 'form-warning'
+  return 'form-help'
+})
+const selectedClientHasWorkflow = ref(null)
 
 onMounted(() => {
   loadTasks()
   loadClients()
-})
-
-onBeforeUnmount(() => {
-  clearFilterSearchTimer()
 })
 
 watch(() => [taskFilters.keyword, taskFilters.workflow_name], () => {
@@ -361,6 +480,10 @@ watch([tasks, taskPageSize], () => {
   })
 })
 
+watch(pagedTasks, () => {
+  restoreTaskSelection(taskTableRef)
+})
+
 async function loadTasks() {
   loadingTasks.value = true
   try {
@@ -373,26 +496,20 @@ async function loadTasks() {
       enabled: taskFilters.enabled,
     })
     tasks.value = sortByTimeDesc(normalizeList(data, 'tasks'))
+    retainTaskSelectionByRows(tasks.value)
   } finally {
     loadingTasks.value = false
   }
 }
 
-// Filter debounce 手动输入筛选条件 200ms 防抖
-function scheduleFilterSearch() {
-  clearFilterSearchTimer()
-  filterSearchTimer = window.setTimeout(() => {
-    filterSearchTimer = null
-    taskPage.value = 1
-    loadTasks()
-  }, filterSearchDelay)
+function searchTasksNow() {
+  taskPage.value = 1
+  loadTasks()
 }
 
-function clearFilterSearchTimer() {
-  if (!filterSearchTimer) return
-
-  window.clearTimeout(filterSearchTimer)
-  filterSearchTimer = null
+function getTaskSelectionKey(row) {
+  // Selection key 使用任务 ID 保持跨分页多选状态
+  return String(row?.id || '').trim()
 }
 
 async function loadWorkflowOptions() {
@@ -443,8 +560,54 @@ async function editTask(row) {
     cron_expression: row.cron_expression || row.cron || '',
     enabled: row.enabled !== false,
   })
-  paramEntries.value = normalizeParamEntries(row.params)
+  await loadWorkflowParamItems(taskForm.workflow_id, row.params || {})
+  paramEntries.value = normalizeParamEntriesWithoutAuto(row.params)
+  checkSelectedClientWorkflow()
   taskDialogVisible.value = true
+}
+
+async function loadWorkflowParamItems(workflowId, savedParams = {}) {
+  autoParamItems.value = []
+  workflowId = String(workflowId || '').trim()
+  if (!workflowId) return
+
+  workflowParamLoading.value = true
+  try {
+    const detail = await getAutomaWorkflowDetail(workflowId)
+    const params = getUniqueTriggerParameters(parseWorkflowDetailPayload(detail))
+    autoParamItems.value = params.map((param, index) => createExecuteParamItem(param, index, savedParams))
+  } catch {
+    autoParamItems.value = []
+  } finally {
+    workflowParamLoading.value = false
+  }
+}
+
+async function checkSelectedClientWorkflow() {
+  const seq = clientWorkflowCheckSeq.value + 1
+  clientWorkflowCheckSeq.value = seq
+  selectedClientHasWorkflow.value = null
+  clientWorkflowChecking.value = false
+  const workflowId = taskForm.workflow_id.trim()
+  const clientIp = taskForm.client_ip.trim()
+  if (!workflowId || !clientIp) return
+
+  clientWorkflowChecking.value = true
+  try {
+    const data = await listAutomaSyncCandidatesByWorkflow(workflowId, {
+      page_num: 1,
+      page_size: clientWorkflowCheckPageSize,
+      source_ip: clientIp,
+    })
+    const candidates = normalizeList(data)
+    if (seq !== clientWorkflowCheckSeq.value) return
+    selectedClientHasWorkflow.value = candidates.some((item) => getClientIp(item) === clientIp)
+  } catch {
+    if (seq !== clientWorkflowCheckSeq.value) return
+    selectedClientHasWorkflow.value = null
+  } finally {
+    if (seq === clientWorkflowCheckSeq.value) clientWorkflowChecking.value = false
+  }
 }
 
 async function handleSaveTask() {
@@ -484,8 +647,51 @@ async function handleDeleteTask(row) {
   if (!confirmed) return
 
   await deleteTask(row.id)
+  removeTaskSelectionKeys([row.id])
   tasks.value = tasks.value.filter((item) => item.id !== row.id)
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已删除' })
+}
+
+async function handleBatchDeleteTasks() {
+  const ids = selectedTaskIds.value.slice()
+  if (ids.length === 0) return
+
+  const confirmed = await appConfirm({
+    title: '批量删除任务',
+    message: `确认删除选中的 ${ids.length} 个任务吗？`,
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
+  await Promise.all(ids.map((id) => deleteTask(id)))
+  const deletedIds = new Set(ids)
+  tasks.value = tasks.value.filter((item) => !deletedIds.has(getTaskSelectionKey(item)))
+  resetTaskSelection(taskTableRef)
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '已删除选中任务' })
+}
+
+async function handleQuickUpdateTaskStatus(row, enabled) {
+  const taskId = getTaskSelectionKey(row)
+  if (!taskId || taskStatusUpdatingIds.value.has(taskId)) return
+
+  const previousEnabled = row.enabled !== false
+  row.enabled = enabled
+  setTaskStatusUpdating(taskId, true)
+  try {
+    const payload = buildTaskPayloadFromRow(row, { enabled })
+    const data = await updateTask(taskId, payload)
+    upsertTask(mergeSavedTask(data?.task, payload, taskId))
+    appMessage({ type: APP_MESSAGE_TYPE.success, message: enabled ? '任务已启用' : '任务已停用' })
+  } catch (error) {
+    row.enabled = previousEnabled
+    appMessage({
+      type: APP_MESSAGE_TYPE.error,
+      message: error?.message || '任务状态修改失败',
+    })
+  } finally {
+    setTaskStatusUpdating(taskId, false)
+  }
 }
 
 async function handleExecuteTask(row) {
@@ -534,7 +740,10 @@ async function confirmExecuteTaskWithParams() {
     await executeTask(row.id, {
       client_id: row.client_id || '',
       client_ip: row.client_ip || '',
-      params,
+      params: {
+        ...(row.params || {}),
+        ...params,
+      },
     })
     appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已下发' })
     executeParamDialogVisible.value = false
@@ -549,15 +758,21 @@ function resetExecuteParamDialog() {
   executeParamItems.value = []
 }
 
-function handleWorkflowChange(workflowId) {
+async function handleWorkflowChange(workflowId) {
   const workflow = workflowOptions.value.find((item) => getWorkflowId(item) === workflowId)
   taskForm.workflow_name = workflow?.name || ''
+  const savedParams = buildParamObject({ silent: true }) || {}
+  const manualParams = buildManualParamObject({ silent: true }) || {}
+  await loadWorkflowParamItems(workflowId, savedParams)
+  paramEntries.value = normalizeParamEntriesWithoutAuto(manualParams)
+  checkSelectedClientWorkflow()
 }
 
 function handleClientChange(clientId) {
   const client = findClientById(clientId)
   taskForm.client_name = client ? getClientName(client) : ''
   taskForm.client_ip = client ? getClientIp(client) : ''
+  checkSelectedClientWorkflow()
 }
 
 function handleClientClear() {
@@ -582,17 +797,17 @@ function removeParam(index) {
   paramEntries.value.splice(index, 1)
 }
 
-function buildTaskPayload() {
-  if (!taskForm.name.trim()) {
-    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请输入任务名称' })
-    return null
+function handleManualParamTypeChange(item) {
+  if (item.type === 'checkbox') {
+    item.value = item.value === true || item.value === 'true'
+    return
   }
+  item.value = formatParamDefaultValue(item.value)
+}
+
+function buildTaskPayload() {
   if (!taskForm.workflow_id.trim()) {
     appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请选择需要执行的工作流' })
-    return null
-  }
-  if (!taskForm.client_id.trim()) {
-    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请选择需要执行的客户端' })
     return null
   }
 
@@ -608,30 +823,90 @@ function buildTaskPayload() {
     client_name: taskForm.client_name.trim(),
     client_ip: taskForm.client_ip.trim(),
     cron_expression: taskForm.cron_expression.trim(),
-    run_once_after_create: !taskForm.cron_expression.trim(),
+    run_once_after_create: false,
     params,
     enabled: taskForm.enabled,
   }
 }
 
-function buildParamObject() {
+function buildTaskPayloadFromRow(row, overrides = {}) {
+  return {
+    name: String(row?.name || '').trim(),
+    description: String(row?.description || '').trim(),
+    workflow_id: String(row?.workflow_id || row?.automa_id || '').trim(),
+    workflow_name: String(row?.workflow_name || '').trim(),
+    client_id: String(row?.client_id || '').trim(),
+    client_name: String(row?.client_name || '').trim(),
+    client_ip: String(getTaskClientIp(row)).trim(),
+    cron_expression: String(row?.cron_expression || row?.cron || '').trim(),
+    run_once_after_create: false,
+    params: normalizeTaskParams(row?.params),
+    enabled: row?.enabled !== false,
+    ...overrides,
+  }
+}
+
+function normalizeTaskParams(params) {
+  if (!params) return {}
+  if (typeof params === 'object') return params
+
+  try {
+    const parsed = JSON.parse(params)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function buildParamObject(options = {}) {
+  const params = {}
+
+  for (const item of autoParamItems.value) {
+    if (isMissingRequiredParam(item)) {
+      if (!options.silent) {
+        appMessage({ type: APP_MESSAGE_TYPE.warning, message: `请填写必填参数：${item.name}` })
+      }
+      return null
+    }
+
+    const value = parseExecuteParamValue(item, options)
+    if (value === undefined && item.type === 'json' && !isEmptyParamValue(item.value)) return null
+    params[item.name] = value
+  }
+
+  const manualParams = buildManualParamObject(options)
+  if (manualParams === null) return null
+  return { ...params, ...manualParams }
+}
+
+function buildManualParamObject(options = {}) {
   const params = {}
 
   for (const item of paramEntries.value) {
     const key = item.key.trim()
-    const value = item.value.trim()
+    const value = item.type === 'checkbox' ? item.value : String(item.value || '').trim()
 
-    if (!key && !value) continue
+    if (!key && isEmptyParamValue(value)) continue
     if (!key) {
-      appMessage({ type: APP_MESSAGE_TYPE.warning, message: '参数 key 不能为空' })
+      if (!options.silent) appMessage({ type: APP_MESSAGE_TYPE.warning, message: '参数 key 不能为空' })
       return null
     }
     if (Object.prototype.hasOwnProperty.call(params, key)) {
-      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 key 重复：${key}` })
+      if (!options.silent) appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 key 重复：${key}` })
+      return null
+    }
+    if (autoParamItems.value.some((param) => param.name === key)) {
+      if (!options.silent) appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 key 已由工作流 Param 使用：${key}` })
       return null
     }
 
-    params[key] = value
+    const parsedValue = parseExecuteParamValue({
+      name: key,
+      type: item.type || 'string',
+      value,
+    }, options)
+    if (parsedValue === undefined && item.type === 'json' && !isEmptyParamValue(value)) return null
+    params[key] = parsedValue
   }
 
   return params
@@ -640,7 +915,11 @@ function buildParamObject() {
 function resetTaskForm() {
   Object.assign(taskForm, createEmptyTaskForm())
   clientSelector.keyword = ''
+  autoParamItems.value = []
   paramEntries.value = [createEmptyParamEntry()]
+  selectedClientHasWorkflow.value = null
+  clientWorkflowChecking.value = false
+  clientWorkflowCheckSeq.value += 1
 }
 
 function resetTaskFilters() {
@@ -648,6 +927,20 @@ function resetTaskFilters() {
   taskFilters.workflow_name = ''
   taskFilters.created_time_range = []
   taskFilters.enabled = ''
+}
+
+function isTaskStatusUpdating(row) {
+  return taskStatusUpdatingIds.value.has(getTaskSelectionKey(row))
+}
+
+function setTaskStatusUpdating(taskId, updating) {
+  const nextIds = new Set(taskStatusUpdatingIds.value)
+  if (updating) {
+    nextIds.add(taskId)
+  } else {
+    nextIds.delete(taskId)
+  }
+  taskStatusUpdatingIds.value = nextIds
 }
 
 function upsertTask(task) {
@@ -675,17 +968,21 @@ function getCreatedTimeRange() {
   return [range[0] || '', range[1] || '']
 }
 
-function normalizeList(data, fallbackKey) {
-  const list = data?.list || data?.[fallbackKey] || []
-  return Array.isArray(list) ? list : []
-}
-
 function normalizeParamEntries(params) {
   const entries = Object.entries(params || {}).map(([key, value]) => ({
     key,
-    value: value == null ? '' : String(value),
+    type: inferManualParamType(value),
+    value: normalizeManualParamValue(value),
   }))
   return entries.length > 0 ? entries : [createEmptyParamEntry()]
+}
+
+function normalizeParamEntriesWithoutAuto(params) {
+  const autoNames = new Set(autoParamItems.value.map((item) => item.name))
+  const manualParams = Object.fromEntries(
+    Object.entries(params || {}).filter(([key]) => !autoNames.has(key))
+  )
+  return normalizeParamEntries(manualParams)
 }
 
 function parseWorkflowDetailPayload(detail) {
@@ -760,7 +1057,7 @@ function buildExecuteParamObject() {
   return params
 }
 
-function parseExecuteParamValue(item) {
+function parseExecuteParamValue(item, options = {}) {
   if (item.type === 'number') {
     const value = Number(item.value)
     return Number.isNaN(value) ? 0 : value
@@ -770,7 +1067,9 @@ function parseExecuteParamValue(item) {
     try {
       return JSON.parse(item.value)
     } catch {
-      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 ${item.name} 不是有效 JSON` })
+      if (!options.silent) {
+        appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 ${item.name} 不是有效 JSON` })
+      }
       return undefined
     }
   }
@@ -797,6 +1096,19 @@ function formatParamDefaultValue(value) {
   return String(value)
 }
 
+function inferManualParamType(value) {
+  if (typeof value === 'boolean') return 'checkbox'
+  if (typeof value === 'number') return 'number'
+  if (value && typeof value === 'object') return 'json'
+  return 'string'
+}
+
+function normalizeManualParamValue(value) {
+  if (typeof value === 'boolean') return value
+  if (value && typeof value === 'object') return JSON.stringify(value, null, 2)
+  return formatParamDefaultValue(value)
+}
+
 function isEmptyParamValue(value) {
   return value === undefined || value === null || value === ''
 }
@@ -805,6 +1117,22 @@ function isMissingRequiredParam(item) {
   if (!item.required) return false
   if (item.type === 'checkbox') return item.value !== true
   return isEmptyParamValue(item.value)
+}
+
+function formatParamTypeText(type) {
+  const texts = {
+    string: '文本',
+    number: '数字',
+    json: 'JSON',
+    checkbox: '勾选',
+  }
+  return texts[type] || type || '文本'
+}
+
+function getParamDescriptionText(param) {
+  const description = String(param?.description || '').trim()
+  const placeholder = String(param?.placeholder || '').trim()
+  return description && description !== placeholder ? description : ''
 }
 
 function findClientById(clientId) {
@@ -824,7 +1152,7 @@ function getClientIp(row) {
 }
 
 function getClientName(row) {
-  return row?.client_name || row?.name || row?.hostname || getClientId(row) || '-'
+  return row?.client_name || row?.name || row?.hostname || getClientId(row) || ''
 }
 
 function getClientStatus(row) {
@@ -841,16 +1169,16 @@ function getClientStatusText(row) {
 }
 
 function getClientSelectMeta(row) {
-  return [getClientId(row) || '-', getClientStatusText(row)].join(' / ')
+  return [getClientId(row), getClientStatusText(row)].filter(Boolean).join(' / ')
 }
 
 function getClientOptionLabel(row) {
-  return `${getClientIp(row) || '-'} / ${getClientSelectMeta(row)}`
+  return [getClientIp(row), getClientSelectMeta(row)].filter(Boolean).join(' / ')
 }
 
 function getTaskClientIp(row) {
   const client = findClientById(row?.client_id)
-  return row?.client_ip || (client ? getClientIp(client) : '') || '-'
+  return row?.client_ip || (client ? getClientIp(client) : '') || '自动匹配'
 }
 
 function getTaskParamCount(row) {
@@ -859,7 +1187,7 @@ function getTaskParamCount(row) {
 
 function getScheduleText(row) {
   const cronExpression = row?.cron_expression || row?.cron || ''
-  return cronExpression || '创建后执行一次'
+  return cronExpression || '手动执行'
 }
 
 function sortByTimeDesc(data) {
@@ -871,32 +1199,14 @@ function getTimeValue(row) {
   return value ? new Date(value).getTime() || 0 : 0
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function formatDate(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-
-  const year = date.getFullYear()
-  const month = padDatePart(date.getMonth() + 1)
-  const day = padDatePart(date.getDate())
-  const hour = padDatePart(date.getHours())
-  const minute = padDatePart(date.getMinutes())
-  const second = padDatePart(date.getSeconds())
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-}
-
-function padDatePart(value) {
-  return String(value).padStart(2, '0')
+  return formatBaseDate(value, { fallback: '' })
 }
 
 function createEmptyParamEntry() {
   return {
     key: '',
+    type: 'string',
     value: '',
   }
 }
@@ -945,10 +1255,19 @@ function createEmptyTaskForm() {
 
 .task-filters {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 12px 16px;
   margin-bottom: 16px;
+}
+
+.task-filter-fields {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.1fr) minmax(380px, 1.4fr) minmax(140px, 0.6fr);
+  gap: 12px 16px;
+  min-width: 0;
 }
 
 .filter-item {
@@ -957,24 +1276,14 @@ function createEmptyTaskForm() {
   gap: 8px;
 }
 
-.filter-item--keyword {
-  width: 300px;
-}
-
-.filter-item--workflow {
-  width: 280px;
-}
-
-.filter-item--created-time {
-  width: 460px;
-}
-
 .filter-item--created-time :deep(.el-date-editor) {
   width: 100%;
 }
 
-.filter-item--enabled {
-  width: 190px;
+.filter-item :deep(.el-input),
+.filter-item :deep(.el-select) {
+  flex: 1;
+  min-width: 0;
 }
 
 .filter-label {
@@ -982,9 +1291,24 @@ function createEmptyTaskForm() {
   color: #606266;
 }
 
+.task-filter-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-left: auto;
+}
+
 .task-table {
   flex: 1;
   min-height: 0;
+}
+
+.task-config-form :deep(.el-form-item__label) {
+  flex: 0 0 136px;
+  padding-right: 12px;
+  white-space: nowrap;
 }
 
 .workflow-option,
@@ -1039,17 +1363,84 @@ function createEmptyTaskForm() {
   min-height: 32px;
 }
 
+.client-selection-summary .form-success,
+.client-selection-summary .form-warning,
+.client-selection-summary .form-help {
+  margin-left: 4px;
+}
+
 .client-selection-text,
 .client-selection-empty,
-.form-help {
+.form-help,
+.form-success {
   color: #909399;
   font-size: 13px;
 }
 
+.form-success {
+  color: #67c23a;
+}
+
+.form-warning {
+  color: #f56c6c;
+  font-size: 13px;
+}
+
+.param-loading {
+  color: #909399;
+  font-size: 13px;
+}
+
+.auto-param-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auto-param-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.auto-param-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.auto-param-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.auto-param-title span:first-child {
+  overflow-wrap: anywhere;
+  font-weight: 500;
+  color: #303133;
+}
+
+.auto-param-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
 .param-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(120px, 180px) 112px minmax(0, 1fr) auto;
   gap: 12px;
+  align-items: start;
+}
+
+.param-type-select {
+  width: 112px;
 }
 
 .execute-param-form {
@@ -1068,23 +1459,39 @@ function createEmptyTaskForm() {
 
 @media (max-width: 768px) {
   .client-select-row,
+  .auto-param-row,
   .param-row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1280px) {
+  .task-filter-fields {
+    flex-basis: 100%;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  }
+
+  .task-filter-actions {
+    justify-content: flex-end;
+    width: 100%;
   }
 }
 
 @media (max-width: 640px) {
   .page-actions,
   .task-filters,
+  .task-filter-actions,
   .filter-item {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .filter-item--keyword,
-  .filter-item--workflow,
-  .filter-item--created-time,
-  .filter-item--enabled {
+  .task-filter-actions {
+    margin-left: 0;
+  }
+
+  .task-filter-fields {
+    grid-template-columns: 1fr;
     width: 100%;
   }
 }

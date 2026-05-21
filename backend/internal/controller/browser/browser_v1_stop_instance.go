@@ -8,6 +8,7 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/browser/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 	"github.com/Zany2/browserflow/backend/utility/state"
 )
 
@@ -47,6 +48,8 @@ func (c *ControllerV1) BrowserInstanceStop(ctx context.Context, req *v1.BrowserI
 	}
 	state.BrowserMu.Unlock()
 
+	browserexecutor.Cleanup(instanceID)
+	state.RemoveAgentConnection(instanceID)
 	if runtime.Browser != nil {
 		_ = runtime.Browser.Close()
 	}

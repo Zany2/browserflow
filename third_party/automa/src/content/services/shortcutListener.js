@@ -6,12 +6,19 @@ Mousetrap.prototype.stopCallback = function () {
   return false;
 };
 
-function automaCustomEventListener(findWorkflow) {
-  function customEventListener({ detail }) {
+function automaCustomEventListener(findWorkflow, refreshWorkflows) {
+  async function customEventListener({ detail }) {
     if (!detail || (!detail.id && !detail.publicId)) return;
 
     const workflowId = detail.id || detail.publicId;
-    const workflow = findWorkflow(workflowId, Boolean(detail.publicId));
+    let workflow = findWorkflow(workflowId, Boolean(detail.publicId));
+
+    // BrowserFlow local change start: refresh workflow cache before external run 外部执行前刷新工作流缓存
+    if (!workflow && refreshWorkflows) {
+      await refreshWorkflows();
+      workflow = findWorkflow(workflowId, Boolean(detail.publicId));
+    }
+    // BrowserFlow local change end
 
     if (!workflow) return;
 
@@ -127,7 +134,9 @@ export default async function () {
       }
     });
 
-    automaCustomEventListener(findWorkflow);
+    automaCustomEventListener(findWorkflow, async () => {
+      workflows = await getWorkflows();
+    });
     workflowShortcutsListener(findWorkflow, storage.shortcuts || {});
   } catch (error) {
     console.error(error);

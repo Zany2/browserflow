@@ -6,58 +6,65 @@
 
     <section class="record-panel">
       <div class="record-filters">
-        <div class="filter-item filter-item--workflow">
-          <span class="filter-label">工作流名称</span>
-          <el-input v-model="recordFilters.workflow_name" clearable placeholder="模糊检索工作流名称" />
+        <div class="record-filter-fields">
+          <div class="filter-item filter-item--workflow">
+            <span class="filter-label">自定义工作流名称</span>
+            <el-input v-model="recordFilters.workflow_name" clearable placeholder="模糊检索自定义工作流名称" />
+          </div>
+
+          <div class="filter-item filter-item--client">
+            <span class="filter-label">客户端IP</span>
+            <el-select v-model="recordFilters.client_ip" clearable filterable placeholder="选择或检索客户端 IP"
+              :loading="clientIpLoading" @visible-change="handleClientIpSelectVisible">
+              <el-option label="全部" value="" />
+              <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
+            </el-select>
+          </div>
+
+          <div class="filter-item filter-item--execute-time">
+            <span class="filter-label">执行时间</span>
+            <AppTimeRangeFilter v-model="recordFilters.execute_time_range" />
+          </div>
+
+          <div class="filter-item filter-item--status">
+            <span class="filter-label">状态</span>
+            <el-select v-model="recordFilters.status" clearable placeholder="全部">
+              <el-option label="全部" value="" />
+              <el-option label="待执行" value="pending" />
+              <el-option label="已下发" value="queued" />
+              <el-option label="执行中" value="running" />
+              <el-option label="成功" value="success" />
+              <el-option label="失败" value="failed" />
+              <el-option label="已取消" value="cancelled" />
+            </el-select>
+          </div>
         </div>
 
-        <div class="filter-item filter-item--client">
-          <span class="filter-label">客户端IP</span>
-          <el-select v-model="recordFilters.client_ip" clearable filterable placeholder="选择或检索客户端 IP"
-            :loading="clientIpLoading" @visible-change="handleClientIpSelectVisible">
-            <el-option label="全部" value="" />
-            <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
-          </el-select>
+        <div class="record-filter-actions">
+          <el-button @click="resetRecordFilters">重置</el-button>
+          <AppSelectionSummary :count="selectedRecordIds.length" unit="记录" />
         </div>
-
-        <div class="filter-item filter-item--execute-time">
-          <span class="filter-label">执行时间</span>
-          <AppTimeRangeFilter v-model="recordFilters.execute_time_range" />
-        </div>
-
-        <div class="filter-item filter-item--status">
-          <span class="filter-label">状态</span>
-          <el-select v-model="recordFilters.status" clearable placeholder="全部">
-            <el-option label="全部" value="" />
-            <el-option label="待执行" value="pending" />
-            <el-option label="已下发" value="queued" />
-            <el-option label="执行中" value="running" />
-            <el-option label="成功" value="success" />
-            <el-option label="失败" value="failed" />
-            <el-option label="已取消" value="cancelled" />
-          </el-select>
-        </div>
-
-        <el-button @click="resetRecordFilters">重置</el-button>
       </div>
 
-      <el-table v-loading="loadingRecords" class="record-table adaptive-table" :data="pagedRecords" border height="100%"
-        row-key="id" empty-text="暂无执行记录">
+      <el-table ref="recordTableRef" v-loading="loadingRecords" class="record-table adaptive-table" :data="pagedRecords"
+        border height="100%" :row-key="getRecordSelectionKey" empty-text="暂无执行记录"
+        @selection-change="handleRecordSelectionChange">
+        <el-table-column type="selection" width="40" reserve-selection />
         <el-table-column label="任务名称" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.task_name || '-' }}
+            {{ row.task_name || '' }}
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流名称" min-width="170" show-overflow-tooltip>
+        <el-table-column label="自定义工作流名称" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.workflow_name || '-' }}
+            {{ row.workflow_name || '' }}
           </template>
         </el-table-column>
 
         <el-table-column label="客户端IP" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.client_ip || '-' }}
+            {{ row.client_ip || '' }}
           </template>
         </el-table-column>
 
@@ -87,7 +94,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="错误信息" min-width="160">
+        <el-table-column label="错误信息" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.error_message || '' }}
           </template>
@@ -110,14 +117,14 @@
     <AppDialog v-model="recordDetailVisible" title="执行记录详情" width="720px">
       <div v-if="recordDetail" class="detail-form">
         <el-descriptions border :column="2" class="detail-descriptions">
-          <el-descriptions-item label="记录 ID">{{ recordDetail.id || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="任务">{{ recordDetail.task_name || recordDetail.task_id || '-'
+          <el-descriptions-item label="记录 ID">{{ recordDetail.id || '' }}</el-descriptions-item>
+          <el-descriptions-item label="任务">{{ recordDetail.task_name || recordDetail.task_id || ''
           }}</el-descriptions-item>
-          <el-descriptions-item label="工作流">{{ recordDetail.workflow_name || recordDetail.workflow_id || '-'
+          <el-descriptions-item label="自定义工作流名称">{{ recordDetail.workflow_name || recordDetail.workflow_id || ''
           }}</el-descriptions-item>
-          <el-descriptions-item label="客户端">{{ recordDetail.client_name || recordDetail.client_id || '-'
+          <el-descriptions-item label="客户端">{{ recordDetail.client_name || recordDetail.client_id || ''
           }}</el-descriptions-item>
-          <el-descriptions-item label="客户端 IP">{{ recordDetail.client_ip || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="客户端 IP">{{ recordDetail.client_ip || '' }}</el-descriptions-item>
           <el-descriptions-item label="触发方式">{{ getTriggerText(recordDetail.trigger_type) }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ recordDetail.status_text || getStatusText(recordDetail.status)
           }}</el-descriptions-item>
@@ -130,7 +137,7 @@
 
         <div class="detail-block">
           <h3>错误信息</h3>
-          <pre class="detail-json">{{ recordDetail.error_message || '-' }}</pre>
+          <pre class="detail-json">{{ recordDetail.error_message || '' }}</pre>
         </div>
 
         <div class="detail-block">
@@ -157,26 +164,34 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
+import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
+import { useDebouncedAction } from '@/composables/useDebouncedAction'
+import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { listClients } from '@/services/client'
 import { executeTask, getTaskRecordDetail, listTaskRecords } from '@/services/task'
+import { formatDate as formatBaseDate, formatJSON } from '@/utils/format'
+import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList } from '@/utils/list'
 
 const records = ref([])
 const clientIpOptions = ref([])
 const loadingRecords = ref(false)
 const clientIpLoading = ref(false)
+const recordTableRef = ref(null)
 const recordPage = ref(1)
 const recordPageSize = ref(10)
-const pageSizes = [10, 30, 60]
+const pageSizes = DEFAULT_PAGE_SIZES
 const recordDetailVisible = ref(false)
 const recordDetail = ref(null)
-const filterSearchDelay = 200
-let filterSearchTimer = null
+const {
+  run: scheduleFilterSearch,
+  cancel: clearFilterSearchTimer,
+} = useDebouncedAction(searchRecordsNow, 200)
 
 const recordFilters = reactive({
   workflow_name: '',
@@ -189,14 +204,19 @@ const pagedRecords = computed(() => {
   const start = (recordPage.value - 1) * recordPageSize.value
   return records.value.slice(start, start + recordPageSize.value)
 })
+const {
+  selectedKeys: selectedRecordIds,
+  handleSelectionChange: handleRecordSelectionChange,
+  restoreSelection: restoreRecordSelection,
+  retainSelectionByRows: retainRecordSelectionByRows,
+} = usePagedTableSelection({
+  rows: pagedRecords,
+  getRowKey: getRecordSelectionKey,
+})
 
 onMounted(() => {
   loadRecords()
   loadClientIpOptions()
-})
-
-onBeforeUnmount(() => {
-  clearFilterSearchTimer()
 })
 
 watch(() => recordFilters.workflow_name, () => {
@@ -217,6 +237,10 @@ watch([records, recordPageSize], () => {
   })
 })
 
+watch(pagedRecords, () => {
+  restoreRecordSelection(recordTableRef)
+})
+
 async function loadRecords() {
   loadingRecords.value = true
   try {
@@ -229,6 +253,7 @@ async function loadRecords() {
       status: recordFilters.status.trim(),
     })
     records.value = sortByTimeDesc(normalizeList(data, 'records'))
+    retainRecordSelectionByRows(records.value)
   } finally {
     loadingRecords.value = false
   }
@@ -251,21 +276,14 @@ function handleClientIpSelectVisible(opened) {
   if (opened) loadClientIpOptions()
 }
 
-// Filter debounce 手动输入筛选条件 200ms 防抖
-function scheduleFilterSearch() {
-  clearFilterSearchTimer()
-  filterSearchTimer = window.setTimeout(() => {
-    filterSearchTimer = null
-    recordPage.value = 1
-    loadRecords()
-  }, filterSearchDelay)
+function searchRecordsNow() {
+  recordPage.value = 1
+  loadRecords()
 }
 
-function clearFilterSearchTimer() {
-  if (!filterSearchTimer) return
-
-  window.clearTimeout(filterSearchTimer)
-  filterSearchTimer = null
+function getRecordSelectionKey(row) {
+  // Selection key 使用执行记录 ID 保持跨分页多选状态
+  return String(row?.id || '').trim()
 }
 
 async function openRecordDetail(row) {
@@ -303,11 +321,6 @@ function getExecuteTimeRange() {
   return [range[0] || '', range[1] || '']
 }
 
-function normalizeList(data, fallbackKey) {
-  const list = data?.list || data?.[fallbackKey] || []
-  return Array.isArray(list) ? list : []
-}
-
 function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
 }
@@ -337,7 +350,7 @@ function getStatusText(status) {
   if (status === 'success' || status === 'done') return '成功'
   if (status === 'failed' || status === 'error') return '失败'
   if (status === 'cancelled') return '已取消'
-  return status || '-'
+  return status || ''
 }
 
 function getTriggerText(triggerType) {
@@ -355,31 +368,8 @@ function formatDuration(value) {
   return `${(duration / 1000).toFixed(duration >= 10000 ? 0 : 1)}s`
 }
 
-function getSafePage({ total, page, size }) {
-  const maxPage = Math.max(Math.ceil(total / size), 1)
-  return Math.min(page, maxPage)
-}
-
 function formatDate(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-
-  const year = date.getFullYear()
-  const month = padDatePart(date.getMonth() + 1)
-  const day = padDatePart(date.getDate())
-  const hour = padDatePart(date.getHours())
-  const minute = padDatePart(date.getMinutes())
-  const second = padDatePart(date.getSeconds())
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-}
-
-function padDatePart(value) {
-  return String(value).padStart(2, '0')
-}
-
-function formatJSON(value) {
-  return JSON.stringify(value ?? {}, null, 2)
+  return formatBaseDate(value, { fallback: '' })
 }
 </script>
 
@@ -413,8 +403,29 @@ function formatJSON(value) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 12px 16px;
   margin-bottom: 16px;
+}
+
+.record-filter-fields,
+.record-filter-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+
+.record-filter-fields {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(280px, 1.1fr) minmax(220px, 0.9fr) minmax(380px, 1.4fr) minmax(140px, 0.6fr);
+  gap: 12px 16px;
+  min-width: 0;
+}
+
+.record-filter-actions {
+  flex-shrink: 0;
 }
 
 .filter-item {
@@ -423,25 +434,15 @@ function formatJSON(value) {
   gap: 8px;
 }
 
-.filter-item--workflow {
-  width: 280px;
-}
-
-.filter-item--client {
-  width: 240px;
-}
-
-.filter-item--execute-time {
-  width: 460px;
-}
-
 .filter-item--client :deep(.el-select),
 .filter-item--execute-time :deep(.el-date-editor) {
   width: 100%;
 }
 
-.filter-item--status {
-  width: 180px;
+.filter-item :deep(.el-input),
+.filter-item :deep(.el-select) {
+  flex: 1;
+  min-width: 0;
 }
 
 .filter-label {
@@ -487,19 +488,31 @@ function formatJSON(value) {
   word-break: break-word;
 }
 
+@media (max-width: 1280px) {
+  .record-filter-fields {
+    flex-basis: 100%;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  }
+
+  .record-filter-actions {
+    justify-content: flex-end;
+    width: 100%;
+  }
+}
+
 @media (max-width: 640px) {
 
   .page-actions,
   .record-filters,
+  .record-filter-fields,
+  .record-filter-actions,
   .filter-item {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .filter-item--workflow,
-  .filter-item--client,
-  .filter-item--execute-time,
-  .filter-item--status {
+  .record-filter-fields {
+    grid-template-columns: 1fr;
     width: 100%;
   }
 }
