@@ -5,6 +5,14 @@
         <el-button @click="createDialogVisible = true">新增</el-button>
         <el-button @click="importDialogVisible = true">导入</el-button>
         <el-button type="primary" @click="syncDialogVisible = true">客户端同步</el-button>
+        <el-button
+          :icon="Download"
+          :loading="skillExporting"
+          :disabled="workflows.length === 0"
+          @click="handleExportSkill"
+        >
+          导出 Skill
+        </el-button>
         <el-button :icon="RefreshRight" @click="loadWorkflows">刷新</el-button>
       </div>
     </header>
@@ -142,7 +150,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { CopyDocument, RefreshRight } from '@element-plus/icons-vue'
+import { CopyDocument, Download, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
@@ -157,6 +165,7 @@ import {
   batchDeleteAutomaWorkflows,
   createAutomaWorkflow,
   deleteAutomaWorkflow,
+  exportServerAutomaSkill,
   getAutomaWorkflowDetail,
   importAutomaWorkflowFiles,
   listAutomaWorkflows,
@@ -164,6 +173,7 @@ import {
   updateAutomaWorkflowProtected,
 } from '@/services/automa'
 import { listClients } from '@/services/client'
+import { downloadBlob } from '@/utils/browser'
 import AutomaImportDialog from './components/AutomaImportDialog.vue'
 import AutomaJsonDialog from './components/AutomaJsonDialog.vue'
 import AutomaSyncDialog from './components/AutomaSyncDialog.vue'
@@ -181,6 +191,7 @@ const detailVisible = ref(false)
 const detailWorkflow = ref(null)
 const detailForm = reactive(createDetailForm())
 const workflowTableRef = ref(null)
+const skillExporting = ref(false)
 const clientIpLoading = ref(false)
 const clientIpOptions = ref([])
 const createDialogVisible = ref(false)
@@ -413,6 +424,28 @@ async function handleBatchDelete() {
   await batchDeleteAutomaWorkflows(ids)
   showSuccessMessage('已删除选中工作流')
   await loadWorkflows()
+}
+
+async function handleExportSkill() {
+  if (workflows.value.length === 0) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '暂无可导出的工作流' })
+    return
+  }
+
+  skillExporting.value = true
+  try {
+    const workflowIds = selectedWorkflowIds.value.slice()
+    const blob = await exportServerAutomaSkill({
+      scope: workflowIds.length > 0 ? 'selected' : 'all',
+      workflowIds,
+    })
+    downloadBlob(blob, 'SKILL_AUTOMA.md')
+    showSuccessMessage('Skill 已导出')
+  } catch (error) {
+    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message || '导出 Skill 失败' })
+  } finally {
+    skillExporting.value = false
+  }
 }
 
 function resetFilters() {

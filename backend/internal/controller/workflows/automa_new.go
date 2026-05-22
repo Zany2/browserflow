@@ -7,7 +7,15 @@ package workflows
 // ControllerV1 workflows controller 工作流控制器
 type ControllerV1 struct{}
 
+// ServerControllerV1 handles Server-only workflow APIs. ServerControllerV1 承载 Server 专属工作流接口。
+type ServerControllerV1 struct{}
+
 // NewV1 creates workflows controller 创建工作流控制器
 func NewV1() *ControllerV1 {
 	return &ControllerV1{}
+}
+
+// NewServerV1 creates Server-only workflows controller 创建 Server 专属工作流控制器
+func NewServerV1() *ServerControllerV1 {
+	return &ServerControllerV1{}
 }

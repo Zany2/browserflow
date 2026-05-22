@@ -215,6 +215,32 @@ export async function exportAgentAutomaSkill({
   return response.blob()
 }
 
+export async function exportServerAutomaSkill({ scope = 'all', workflowIds = [] } = {}) {
+  const response = await fetch(`${API_BASE_URL}/automa/export/skill`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      scope,
+      workflow_ids: workflowIds,
+    }),
+  })
+  const contentType = response.headers.get('content-type') || ''
+
+  // Error json 后端业务失败时仍返回统一 JSON，需要先解析提示信息
+  if (contentType.includes('application/json')) {
+    const result = await response.json().catch(() => null)
+    throw new Error(result?.message || '导出 Skill 失败')
+  }
+
+  if (!response.ok) {
+    throw new Error(`导出 Skill 失败，HTTP 状态码：${response.status}`)
+  }
+
+  return response.blob()
+}
+
 function normalizeListParams(params) {
   const source = normalizeSource(params.source)
   return {

@@ -182,10 +182,12 @@ class WorkflowManager {
     };
     if (returnData.include_table) {
       const limit = Number(returnData.table_limit || 20);
-      data.table = (engine.referenceData?.table || []).slice(
-        0,
-        Number.isFinite(limit) && limit > 0 ? limit : 20
-      );
+      const table = engine.referenceData?.table || [];
+      const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 20;
+      data.table = table.slice(0, safeLimit);
+      data.table_total = table.length;
+      data.table_limit = safeLimit;
+      data.table_truncated = table.length > safeLimit;
     }
     if (returnData.include_history) {
       data.history = event.history || [];

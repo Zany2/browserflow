@@ -1,4 +1,5 @@
 import request from '@/api/request'
+import { API_BASE_URL } from '@/api/request'
 
 export function listTasks(params = {}) {
   return request({
@@ -72,4 +73,8 @@ export function deleteTaskRecords(ids = []) {
     data: { ids },
     showSuccessMessage: false,
   })
+}
+
+export function getTaskRecordFileDownloadUrl(id) {
+  return `${API_BASE_URL}/task-records/files/${encodeURIComponent(id)}/download`
 }

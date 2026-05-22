@@ -542,7 +542,7 @@ const hasParams =
 ## Client task execution returns terminal status and data
 - File: `third_party/automa/src/workflowEngine/WorkflowManager.js`
 - Purpose: Server-mode client task dispatch needs the final Automa status and returned data written back to backend `task_records`, not only the immediate queued response.
-- Behavior: When `browserFlowReturnData.variables` contains names, Automa returns only those variables. When it is an empty array or omitted, Automa returns all current workflow variables. If `include_table` is true, Automa also returns table rows with `table_limit`.
+- Behavior: When `browserFlowReturnData.variables` contains names, Automa returns only those variables. When it is an empty array or omitted, Automa returns all current workflow variables. If `include_table` is true, Automa also returns table rows with `table_limit` plus `table_total`, `table_limit`, and `table_truncated` metadata.
 - Backend fit: Server-mode task dispatch sends `execution_id` as `task-record-{id}` and requests returned variables plus table data. The client-agent page maps the final `__browserflow_automa_workflow_result__` event back to the original WebSocket command id so the backend updates `task_records.status`, `result_json`, `error_message`, and `finished_at`.
 - Reliability fit: Backend dispatch now acquires a Redis per-client task lease before sending `task.execute`; the client-agent page also keeps a localStorage lease while Automa is running. Heartbeats renew the lease, final Automa results release it, and the server scheduler marks stale `queued/running` records failed after the lease window if the client disappears.
 

@@ -27,3 +27,7 @@ type IWorkflowsV1 interface {
 	WorkflowExecutionDetail(ctx context.Context, req *v1.WorkflowExecutionDetailReq) (res *v1.WorkflowExecutionDetailRes, err error)
 	WorkflowOpen(ctx context.Context, req *v1.WorkflowOpenReq) (res *v1.WorkflowOpenRes, err error)
 }
+
+type IServerWorkflowsV1 interface {
+	WorkflowExportSkill(ctx context.Context, req *v1.WorkflowExportSkillReq) (res *v1.WorkflowExportSkillRes, err error)
+}

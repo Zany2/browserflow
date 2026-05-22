@@ -5,8 +5,10 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/taskrecords/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/gtime"
 )
 
 // TaskRecordBatchDelete deletes selected task records.
@@ -32,5 +34,19 @@ func (c *ControllerV1) TaskRecordBatchDelete(ctx context.Context, req *v1.TaskRe
 	if _, err = dao.TaskRecords.Ctx(ctx).WhereIn(columns.Id, ids).Delete(); err != nil {
 		return nil, err
 	}
+
+	fileColumns := dao.TaskRecordFiles.Columns()
+	now := gtime.Now()
+	if _, err = dao.TaskRecordFiles.Ctx(ctx).
+		WhereIn(fileColumns.RecordId, ids).
+		Where(fileColumns.DeletedAt + " IS NULL").
+		Data(do.TaskRecordFiles{
+			UpdatedAt: now,
+			DeletedAt: now,
+		}).
+		Update(); err != nil {
+		return nil, err
+	}
+
 	return &v1.TaskRecordBatchDeleteRes{}, nil
 }

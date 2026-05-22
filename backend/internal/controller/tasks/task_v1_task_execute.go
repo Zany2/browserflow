@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
 	"github.com/Zany2/browserflow/backend/internal/consts"
@@ -10,10 +11,13 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/rr"
+	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	"github.com/Zany2/browserflow/backend/utility/tasklock"
 	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
+	"github.com/Zany2/browserflow/backend/utility/workflowagent"
 	"github.com/Zany2/browserflow/backend/utility/workflowcache"
+	"github.com/Zany2/browserflow/backend/utility/workflowexecution"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -206,6 +210,19 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	}
 
 	websockets.Init(ctx)
+	timeout := workflowagent.NormalizeRunTimeout(req.Timeout)
+	returnData := workflowexecution.NormalizeReturnData(req.ReturnData)
+	if returnData == nil {
+		returnData = &model.WorkflowExecutionReturnData{
+			IncludeTable: true,
+			TableLimit:   100,
+		}
+	}
+	var resultCh chan model.AgentCommandResult
+	if req.WaitResult {
+		resultCh = make(chan model.AgentCommandResult, 1)
+		state.SetPendingCommand(commandID, resultCh)
+	}
 	sentCount := websockets.SendClientMessage(clientIP, &model.WSResponse{
 		Type:      model.WSMessageTypeAgentCommand,
 		ClientIP:  clientIP,
@@ -218,15 +235,13 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 			"params":       params,
 			"check_params": false,
 			"execution_id": commandID,
-			"return_data": map[string]any{
-				"variables":       []string{},
-				"include_table":   true,
-				"table_limit":     100,
-				"include_history": false,
-			},
+			"wait_result":  req.WaitResult,
+			"timeout":      timeout,
+			"return_data":  returnData,
 		},
 	})
 	if sentCount <= 0 {
+		state.RemovePendingCommand(commandID)
 		_ = tasklock.Release(ctx, clientIP, commandID)
 		_, _ = dao.TaskRecords.Ctx(ctx).
 			WherePri(recordID).
@@ -260,6 +275,38 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		Update()
 	if err != nil {
 		return nil, err
+	}
+
+	if req.WaitResult {
+		timer := time.NewTimer(time.Duration(timeout) * time.Second)
+		defer timer.Stop()
+
+		select {
+		case result := <-resultCh:
+			record, err := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
+			if err != nil {
+				return nil, err
+			}
+			recordMap, err := taskdata.BuildTaskRecordMap(ctx, record)
+			if err != nil {
+				return nil, err
+			}
+			return &v1.TaskExecuteRes{Record: recordMap, Result: &result}, nil
+		case <-timer.C:
+			state.RemovePendingCommand(commandID)
+			record, recordErr := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
+			if recordErr != nil {
+				return nil, recordErr
+			}
+			recordMap, recordErr := taskdata.BuildTaskRecordMap(ctx, record)
+			if recordErr != nil {
+				return nil, recordErr
+			}
+			return &v1.TaskExecuteRes{Record: recordMap}, nil
+		case <-ctx.Done():
+			state.RemovePendingCommand(commandID)
+			return nil, ctx.Err()
+		}
 	}
 
 	record, err := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()

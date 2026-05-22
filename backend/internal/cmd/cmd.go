@@ -73,6 +73,8 @@ var (
 					group.Group("/automa", func(group *ghttp.RouterGroup) {
 						// Automa reuses the shared workflow controller so server mode stays on PostgreSQL/Redis. Automa 复用工作流控制器，确保 Server 模式只使用 PostgreSQL/Redis。
 						group.Bind(workflows.NewV1())
+						// Server workflow extras stay off the shared /workflows route. Server 专属工作流扩展不挂到公共 /workflows 路由。
+						group.Bind(workflows.NewServerV1())
 					})
 					group.Group("/clients", func(group *ghttp.RouterGroup) {
 						// Clients manages remote client inventory and administrative actions. 客户端接口负责远程客户端列表与管理操作。

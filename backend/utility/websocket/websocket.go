@@ -303,9 +303,6 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 	}
 	state.AgentMu.Unlock()
 	workflowexecution.CompleteByCommand(in.CommandID, &result)
-	if resultCh != nil {
-		resultCh <- result
-	}
 
 	if strings.HasPrefix(in.CommandID, "task-record-") {
 		recordID := gconv.Int64(strings.TrimPrefix(in.CommandID, "task-record-"))
@@ -314,6 +311,7 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 			if len(resultData) > 0 {
 				resultJSON = string(resultData)
 			}
+			resultJSON = saveTaskRecordResultFiles(client.Ctx, recordID, client.ClientIP(), resultJSON)
 			status := resolveTaskRecordResultStatus(in.Success, resultData)
 			errorMessage := strings.TrimSpace(in.Error)
 			if errorMessage == "" && status == "failed" {
@@ -343,6 +341,10 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 				}
 			}
 		}
+	}
+
+	if resultCh != nil {
+		resultCh <- result
 	}
 
 	_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
