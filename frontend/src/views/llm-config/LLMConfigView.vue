@@ -559,9 +559,7 @@ function createEmptyForm() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: min(100%, 1600px);
   height: 100%;
-  margin: 0 auto;
   min-height: 0;
   overflow: hidden;
 }
@@ -588,12 +586,12 @@ function createEmptyForm() {
 .config-form-panel,
 .config-list-panel {
   min-width: 0;
-  padding: 16px;
   background: #ffffff;
   border: 1px solid #e4e7ed;
 }
 
 .config-form-panel {
+  padding: 16px;
   overflow-y: auto;
 }
 
@@ -602,6 +600,7 @@ function createEmptyForm() {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  padding: 16px;
 }
 
 .config-table {
@@ -685,8 +684,13 @@ function createEmptyForm() {
 .table-toolbar {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 16px;
   margin-bottom: 12px;
+}
+
+.config-list-panel > :deep(.app-pagination) {
+  flex-shrink: 0;
 }
 
 @media (max-width: 1100px) {

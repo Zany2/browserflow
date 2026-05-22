@@ -480,7 +480,7 @@ function sleep(ms) {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   height: 100%;
-  min-height: 520px;
+  min-height: 0;
   background: #ffffff;
   border: 1px solid #e4e7ed;
   overflow: hidden;

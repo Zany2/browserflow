@@ -692,12 +692,16 @@ function getCreatedTimeRange() {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e4e7ed;
 }
 
 .workflow-filters {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  flex-shrink: 0;
   gap: 12px 16px;
 }
 
@@ -771,6 +775,10 @@ function getCreatedTimeRange() {
   flex: 1;
   min-height: 0;
   width: 100%;
+}
+
+.workflow-page > :deep(.app-pagination) {
+  flex-shrink: 0;
 }
 
 .workflow-name__link {
