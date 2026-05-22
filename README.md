@@ -14,143 +14,143 @@
 </p>
 
 <p align="center">
-  简体中文 · <a href="./README_EN.md">English</a>
+  <a href="./README_zh.md">简体中文</a> · English
 </p>
 
-BrowserFlow 是一个围绕 Automa 浏览器工作流构建的自动化平台。它把原本只能在单个浏览器里手动管理和运行的工作流，扩展成可以集中管理、远程调度、定时执行、记录审计、结果回传，并且可以被大模型 Skill 调用的能力。
+BrowserFlow is an automation platform built around Automa browser workflows. It turns workflows that normally live inside one browser into managed, remotely dispatched, scheduled, audited, result-returning, and LLM-callable automation capabilities.
 
-项目支持两种运行模式：
+The project supports two runtime modes:
 
-- **Windows 模式**：面向个人、本机、单机自动化。前端、后端、受控浏览器运行在同一台 Windows 电脑上，业务数据使用本地 BoltDB。
-- **Server 模式**：面向内网服务器和多 Windows 客户端调度。服务端使用 PostgreSQL 保存业务数据，使用 Redis 维护客户端在线状态、工作流清单缓存和客户端执行锁。
+- **Windows mode**: for local personal automation. The frontend, backend, and controlled browser run on the same Windows machine. Business data is stored in a local BoltDB file.
+- **Server mode**: for intranet servers and multiple Windows execution clients. PostgreSQL stores business data, while Redis keeps client online state, workflow inventory cache, and per-client execution locks.
 
-它适合处理那些“系统没有接口、只能通过浏览器操作、流程重复、需要集中记录”的场景，例如公司内部系统、政务内网系统、专网业务系统、数据查询和报表导出流程等。
+It is useful for systems that have no stable API and must be operated through a browser, especially internal enterprise systems, government intranet systems, private network platforms, data lookup workflows, and report export workflows.
 
-## 目录
+## Contents
 
-- [核心价值](#核心价值)
-- [运行模式](#运行模式)
-- [快速开始](#快速开始)
-- [Server 模式完整流程](#server-模式完整流程)
-- [任务调度逻辑](#任务调度逻辑)
-- [Skill 调用逻辑](#skill-调用逻辑)
-- [结果回传](#结果回传)
-- [页面地图](#页面地图)
-- [配置说明](#配置说明)
-- [项目结构](#项目结构)
-- [开发命令](#开发命令)
-- [安全和部署建议](#安全和部署建议)
+- [Core Value](#core-value)
+- [Runtime Modes](#runtime-modes)
+- [Quick Start](#quick-start)
+- [Server Mode Flow](#server-mode-flow)
+- [Task Scheduling](#task-scheduling)
+- [Skill Execution](#skill-execution)
+- [Result Return](#result-return)
+- [Page Map](#page-map)
+- [Configuration](#configuration)
+- [Project Structure](#project-structure)
+- [Development Commands](#development-commands)
+- [Security And Deployment Notes](#security-and-deployment-notes)
 
-## 核心价值
+## Core Value
 
-BrowserFlow 的核心不是替代 Automa，而是把 Automa 变成一个可管理、可调度、可审计的自动化执行能力。
+BrowserFlow does not replace Automa. It turns Automa into a manageable, dispatchable, auditable execution capability.
 
-- **解决无 API 系统自动化**：很多内网系统、老系统和专网平台没有开放接口，BrowserFlow 可以通过浏览器工作流完成查询、填报、导出、巡检等操作。
-- **集中调度多台 Windows 客户端**：某些系统只能在特定电脑、特定网络、特定证书或特定浏览器环境访问，Server 模式可以把这些电脑接入为执行节点。
-- **保留执行痕迹**：任务执行会形成记录，包含触发方式、执行客户端、参数、状态、失败原因、结果 JSON 和结果文件。
-- **避免浏览器并发污染**：同一个客户端一次只执行一个 Automa 工作流，避免多个工作流同时切换标签页、改变量、抢上下文。
-- **支持定时任务**：任务可以配置 Cron 表达式，服务端把数据库任务配置同步到 GoFrame gcron。
-- **支持大模型调用**：Windows 和 Server 模式都可以导出 Automa Skill，让大模型按说明调用工作流或任务 API。
-- **内网部署友好**：Server 模式可以部署在内网，客户端只需要打开 `/client-agent` 页面并保持连接。
+- **Automate systems without APIs**: many intranet, legacy, and private network systems expose only browser pages. BrowserFlow can automate lookup, form filling, export, inspection, and reporting workflows.
+- **Centralize multiple Windows clients**: some systems can only be accessed from specific machines, networks, certificates, or browser environments. Server mode lets those machines act as execution nodes.
+- **Keep execution evidence**: every run can record trigger type, client, parameters, status, failure reason, result JSON, and result files.
+- **Avoid browser concurrency corruption**: one client runs only one Automa workflow at a time, avoiding tab switching, variable conflicts, and context pollution.
+- **Schedule tasks with Cron**: tasks can use Cron expressions and are registered into GoFrame gcron.
+- **Expose workflows to LLMs**: both Windows and Server modes can export Automa Skills so an LLM can call workflows or task APIs.
+- **Friendly to intranet deployment**: Server mode can run inside an internal network. Clients only need to keep `/client-agent` open.
 
-## 运行模式
+## Runtime Modes
 
-| 项目 | Windows 模式 | Server 模式 |
+| Area | Windows Mode | Server Mode |
 | --- | --- | --- |
-| 主要定位 | 本机个人自动化 | 内网任务调度中心 |
-| 数据存储 | BoltDB | PostgreSQL + Redis |
-| 后端位置 | Windows 本机 | 服务器 |
-| 执行端 | 后端启动的本地受控浏览器 | 多台 Windows 客户端 |
-| 执行端页面 | `/browser-agent` | `/client-agent` |
-| 工作流来源 | 当前受控浏览器里的 Automa 工作流 | 客户端同步或服务端导入 |
-| 任务调度 | 本地运行工作流 | 任务配置、Cron 调度、客户端分发 |
-| 执行记录 | 偏本地使用 | 集中记录和查询 |
-| 适合场景 | 本机工具、个人自动化、调试、LLM 本地调用 | 公司、政务、公安等内网多客户端调度 |
+| Purpose | Local personal automation | Intranet task scheduling center |
+| Storage | BoltDB | PostgreSQL + Redis |
+| Backend location | Local Windows machine | Server |
+| Executor | Local controlled browser launched by backend | Multiple Windows clients |
+| Agent page | `/browser-agent` | `/client-agent` |
+| Workflow source | Automa workflows in the controlled browser | Synced from clients or imported into server |
+| Task dispatch | Local workflow execution | Task definitions, Cron scheduling, client dispatch |
+| Execution records | Local-oriented | Centralized records and queries |
+| Best for | Local tools, personal automation, debugging, local LLM calls | Enterprise, government, public security, and other intranet deployments |
 
-### Windows 模式
+### Windows Mode
 
-Windows 模式适合把 BrowserFlow 打包成一个本地可执行程序使用。前端可以被打包进可执行文件，由后端在本机提供页面服务。
+Windows mode is designed for packaging BrowserFlow as a local executable. The frontend can be bundled into the executable and served by the local backend.
 
-典型流程：
+Typical flow:
 
-1. 后端启动本地受控浏览器。
-2. 浏览器自动打开 `/browser-agent`。
-3. Browser Agent 通过 WebSocket 连接后端。
-4. 后端通过 Browser Agent 读取当前浏览器里的 Automa 工作流。
-5. 用户可以打开、执行、导出工作流 Skill，也可以配置本地大模型并通过聊天调用能力。
+1. The backend starts a local controlled browser.
+2. The browser opens `/browser-agent` automatically.
+3. Browser Agent connects to the backend through WebSocket.
+4. The backend reads Automa workflows from the current browser through Browser Agent.
+5. The user can open, run, and export workflow Skills, or configure an LLM and chat locally.
 
-边界要求：
+Boundaries:
 
-- Windows 模式不应依赖 PostgreSQL 或 Redis。
-- Windows 模式本地业务数据只使用 `localStorage.path` 指向的 BoltDB 文件。
-- Windows 模式更适合个人使用、单机运行和工作流调试。
+- Windows mode should not depend on PostgreSQL or Redis.
+- Windows mode business data belongs only in the BoltDB file configured by `localStorage.path`.
+- Windows mode is best for personal use, local execution, and workflow debugging.
 
-### Server 模式
+### Server Mode
 
-Server 模式适合部署在内网服务器上，作为多个 Windows 客户端的任务调度中心。
+Server mode is designed for deploying BrowserFlow on an intranet server as a task scheduling center for multiple Windows clients.
 
-典型流程：
+Typical flow:
 
-1. 服务器启动 BrowserFlow 后端和前端。
-2. Windows 客户端访问站点并打开 `/client-agent`。
-3. Client Agent 生成稳定的客户端标识，通过 WebSocket 注册到服务端。
-4. 服务端记录客户端 IP、在线状态、浏览器信息、Automa 插件状态和工作流清单。
-5. 管理员从客户端同步工作流到服务端，或在服务端导入工作流文件。
-6. 管理员创建任务，绑定工作流、参数、可选客户端和可选 Cron 表达式。
-7. 任务手动触发、Cron 触发或 Skill 触发后，服务端选择客户端并下发执行命令。
-8. 客户端调用本机 Automa 执行工作流，并通过 WebSocket 回传状态和结果。
-9. 服务端写入执行记录和结果文件，供页面查询或大模型后续读取。
+1. The server starts the BrowserFlow backend and frontend.
+2. A Windows client opens `/client-agent`.
+3. Client Agent generates a stable client identity and registers through WebSocket.
+4. The server records client IP, online state, browser metadata, Automa extension state, and workflow inventory.
+5. Administrators sync workflows from clients into the server or import workflow files manually.
+6. Administrators create tasks with workflow, parameters, optional client, and optional Cron expression.
+7. Manual triggers, Cron triggers, or Skill triggers select a client and send an execution command.
+8. The client runs local Automa and returns state and result through WebSocket.
+9. The server stores execution records and result files for UI queries or later LLM access.
 
-边界要求：
+Boundaries:
 
-- Server 模式业务数据以 PostgreSQL 为准。
-- Redis 用于客户端在线状态、客户端工作流清单缓存、客户端执行锁。
-- Server 模式不应使用 BoltDB 作为任务、工作流、客户端同步和执行记录的数据源。
+- PostgreSQL is the source of truth for Server mode business data.
+- Redis stores online clients, workflow inventory cache, and client execution locks.
+- Server mode should not use BoltDB as the data source for tasks, workflows, client sync, or execution records.
 
-## 快速开始
+## Quick Start
 
-### 1. 配置运行模式
+### 1. Configure Runtime Mode
 
-编辑：
+Edit:
 
 ```text
 backend/manifest/config/config.yaml
 ```
 
-Windows 模式：
+Windows mode:
 
 ```yaml
 app:
   mode: "windows"
 ```
 
-Server 模式：
+Server mode:
 
 ```yaml
 app:
   mode: "server"
 ```
 
-### 2. 启动后端
+### 2. Start Backend
 
 ```bash
 cd backend
 go run .
 ```
 
-默认后端地址：
+Default backend URL:
 
 ```text
 http://localhost:8001
 ```
 
-接口文档：
+Swagger:
 
 ```text
 http://localhost:8001/swagger
 ```
 
-### 3. 启动前端
+### 3. Start Frontend
 
 ```bash
 cd frontend
@@ -158,160 +158,162 @@ npm install
 npm run dev
 ```
 
-默认前端地址：
+Default frontend URL:
 
 ```text
 http://localhost:5173
 ```
 
-开发环境中，Vite 会把 `/api` 请求代理到 `http://localhost:8001`。
+In development, Vite proxies `/api` requests to `http://localhost:8001`.
 
-## Server 模式完整流程
+## Server Mode Flow
 
-### 1. 客户端接入
+### 1. Client Access
 
-Windows 客户端打开：
+A Windows client opens:
 
 ```text
 http://<server-host>/client-agent
 ```
 
-Client Agent 会：
+Client Agent will:
 
-- 建立 WebSocket 连接。
-- 上报客户端标识、IP、浏览器信息和 Automa 插件状态。
-- 定期发送心跳。
-- 上报本机 Automa 工作流清单。
-- 接收 `task.execute` 命令并调用本机 Automa 执行。
+- Establish a WebSocket connection.
+- Report client identity, IP, browser metadata, and Automa extension status.
+- Send heartbeat messages.
+- Report local Automa workflow inventory.
+- Receive `task.execute` commands and invoke local Automa.
 
-### 2. 工作流管理
+### 2. Workflow Management
 
-Server 模式下工作流存储在 PostgreSQL 中。来源包括：
+Server mode stores workflows in PostgreSQL. Workflows can come from:
 
-- 从在线客户端同步 Automa 工作流。
-- 手动导入 Automa 工作流文件。
-- 对比客户端工作流和服务端工作流，判断是否已同步、是否有更新。
-- 可设置保护状态，避免服务端工作流被客户端覆盖。
-- 可导出 Server 模式 Skill，供大模型调用任务 API。
+- Syncing Automa workflows from online clients.
+- Manually importing Automa workflow files.
+- Comparing client workflows with server records to detect synced or updated items.
+- Marking workflows as protected to avoid unwanted overwrites.
+- Exporting a Server-mode Skill for LLM-driven task API calls.
 
-### 3. 任务配置
+### 3. Task Configuration
 
-任务配置包含：
+A task definition includes:
 
-- 任务名称和说明。
-- Automa 工作流 ID。
-- 可选客户端 IP 或客户端 ID。
-- 执行参数 `params`。
-- Cron 表达式。
-- 启用状态。
-- 创建后是否立即执行一次。
+- Task name and description.
+- Automa workflow ID.
+- Optional client IP or client ID.
+- Execution parameters `params`.
+- Cron expression.
+- Enabled state.
+- Whether to run once immediately after creation.
 
-如果任务没有配置客户端 IP，Server 模式执行时会自动查找在线且拥有该工作流的客户端。
+If no client IP is configured, Server mode finds an online client that owns the target workflow.
 
-### 4. 执行记录
+### 4. Execution Records
 
-每次执行都会写入 `task_records`：
+Every run writes to `task_records`:
 
-- `trigger_type`：`manual`、`cron`、`task_create`、`skill`、`system`。
-- `status`：`pending`、`queued`、`running`、`success`、`failed`。
-- `client_ip`：实际执行客户端。
-- `params_json`：本次执行参数。
-- `result_json`：执行结果。
-- `error_message`：失败原因。
-- `started_at`、`finished_at`：执行时间。
+- `trigger_type`: `manual`, `cron`, `task_create`, `skill`, `system`.
+- `status`: `pending`, `queued`, `running`, `success`, `failed`.
+- `client_ip`: actual execution client.
+- `params_json`: parameters for this run.
+- `result_json`: execution result.
+- `error_message`: failure reason.
+- `started_at`, `finished_at`: execution timestamps.
 
-表格类大结果会保存到 `task_record_files`，页面详情中可以查看和下载。
+Large table results are stored in `task_record_files` and can be viewed or downloaded from the record detail page.
 
-## 任务调度逻辑
+## Task Scheduling
 
-### 手动执行
+### Manual Execution
 
-页面或 API 调用：
+The UI or API calls:
 
 ```text
 POST /api/v1/tasks/{id}/execute
 ```
 
-后端会读取任务配置，解析参数，选择客户端，加锁，下发 WebSocket 命令，并创建执行记录。
+The backend reads the task, resolves parameters, chooses a client, acquires a lock, sends a WebSocket command, and creates an execution record.
 
-### Cron 执行
+### Cron Execution
 
-任务配置了 Cron 表达式并启用后，后台调度器会把任务注册到 GoFrame `gcron`。
+When a task is enabled and has a Cron expression, the background scheduler registers it into GoFrame `gcron`.
 
-调度同步逻辑：
+Synchronization behavior:
 
-- 程序启动时同步一次数据库任务配置到 gcron。
-- 后台每 30 秒同步一次任务配置。
-- 同步时按 `id` 游标分页读取，每批 500 条。
-- 只读取 `id` 和 `cron_expression`，避免一次性加载完整任务记录。
-- 同步结果会和当前 gcron 任务做对比，新增、删除或更新对应 job。
+- Sync once when the program starts.
+- Sync database task configuration every 30 seconds.
+- Read tasks with id-cursor pagination, 500 rows per batch.
+- Select only `id` and `cron_expression`, avoiding full task record loading.
+- Compare the desired database state with current gcron jobs, then add, remove, or update jobs.
 
-执行策略：
+Execution behavior:
 
-- 项目使用 `gcron.AddSingleton` 注册任务。
-- 同一个 cron job 上一次还没结束时，下一次命中会被跳过，不排队、不并发。
-- Cron 到点只代表触发执行，真正是否能执行还要经过客户端在线、工作流拥有关系和 Redis 锁检查。
+- Tasks are registered with `gcron.AddSingleton`.
+- If the previous run of the same cron job is still running, the next scheduled hit is skipped. It is not queued and not run concurrently.
+- A Cron hit only starts dispatch. Actual execution still checks client online state, workflow ownership, and Redis locks.
 
-### 客户端选择
+### Client Selection
 
-如果任务指定了客户端：
+If a task specifies a client:
 
-- 只调度这个客户端。
-- 客户端离线、没有该工作流或繁忙，会创建失败记录并写入原因。
+- Dispatch only to that client.
+- If the client is offline, does not own the workflow, or is busy, a failed execution record is created with a readable reason.
 
-如果任务没有指定客户端：
+If a task does not specify a client:
 
-- 服务端查询 Redis 中拥有目标工作流的在线客户端。
-- 遍历候选客户端，尝试获取客户端锁。
-- 找到第一个未繁忙客户端后下发执行。
-- 如果所有候选客户端都繁忙，会创建失败记录，原因类似：
+- The server queries Redis for online clients that own the workflow.
+- It walks through candidates and tries to acquire a client lock.
+- The first unlocked client receives the command.
+- If all candidates are busy, a failed record is created with a reason like:
 
 ```text
-已遍历调度所有在线且拥有工作流的客户端，均处于繁忙状态，任务执行失败。
+All online clients that own the workflow have been checked, but all are busy; task execution failed.
 ```
 
-### 客户端锁
+### Client Lock
 
-Server 模式使用 Redis 对每个客户端加执行锁：
+Server mode uses Redis locks per client:
 
-- 锁粒度是客户端。
-- 同一客户端同一时间只执行一个 Automa 工作流。
-- 锁包含任务 ID、执行记录 ID、工作流 ID、命令 ID。
-- 客户端心跳会续期锁。
-- 任务成功或失败后释放锁。
-- 后台兜底清理会处理长时间未完成的执行记录，避免永久锁死。
+- Lock granularity is the client.
+- One client runs only one Automa workflow at a time.
+- The lock stores task ID, record ID, workflow ID, and command ID.
+- Client heartbeat renews the lock.
+- Success or failure releases the lock.
+- A background fallback sweep handles stale records and prevents permanent deadlocks.
 
-## Skill 调用逻辑
+## Skill Execution
 
-BrowserFlow 支持导出两类 Skill。
+BrowserFlow can export two types of Skills.
 
-### Windows 模式工作流 Skill
+### Windows Workflow Skill
 
-Windows 模式下，Skill 面向当前 Browser Agent 中可用的 Automa 工作流。
+In Windows mode, the Skill targets workflows currently available in Browser Agent.
 
-调用方式：
-
-- 运行工作流：
+Endpoint:
 
 ```text
 POST /api/v1/workflows/{workflow_id}/run
 ```
 
-- 支持 `wait_result`。
-- 支持 `return_data`。
-- 适合本机大模型直接调用本机浏览器工作流。
+It supports:
 
-### Server 模式工作流 Skill
+- `wait_result`
+- `return_data`
+- local browser workflow execution
 
-Server 模式下，Skill 面向数据库中已保存的 Automa 工作流。Skill 不直接操作浏览器，而是调用任务 API。
+This is suitable for local LLM calls into local browser workflows.
 
-推荐方式：
+### Server Workflow Skill
 
-1. 为常用工作流创建可复用任务。
-2. Skill 调用任务执行接口。
-3. 使用 `trigger_type: "skill"` 方便执行记录筛选。
+In Server mode, the Skill targets workflows stored in the database. It does not directly operate a browser. Instead, it calls task APIs.
 
-执行已有任务：
+Recommended pattern:
+
+1. Create reusable tasks for frequently used workflows.
+2. Let the Skill call the task execution API.
+3. Use `trigger_type: "skill"` so records are easy to filter.
+
+Execute an existing task:
 
 ```bash
 curl -X POST 'http://localhost:8001/api/v1/tasks/{task_id}/execute' \
@@ -319,7 +321,7 @@ curl -X POST 'http://localhost:8001/api/v1/tasks/{task_id}/execute' \
   -d '{"trigger_type":"skill","client_ip":"","params":{}}'
 ```
 
-执行并等待结果：
+Execute and wait for result:
 
 ```bash
 curl -X POST 'http://localhost:8001/api/v1/tasks/{task_id}/execute' \
@@ -339,26 +341,26 @@ curl -X POST 'http://localhost:8001/api/v1/tasks/{task_id}/execute' \
   }'
 ```
 
-说明：
+Notes:
 
-- `wait_result=false`：API 在任务下发成功后返回执行记录。
-- `wait_result=true`：API 等待客户端最终回传结果，返回执行记录和 `result`。
-- HTTP 等待超时只代表当前请求不再等待，不会中断客户端真实执行。
-- 客户端最终结果仍会通过 WebSocket 写回执行记录。
+- `wait_result=false`: the API returns once the task is dispatched.
+- `wait_result=true`: the API waits for the client final `agent_result` and returns both record and result.
+- HTTP wait timeout means the HTTP request stops waiting. It does not interrupt the real client execution.
+- The final client result still writes back through WebSocket.
 
-## 结果回传
+## Result Return
 
-Automa 工作流结果分为两类。
+Automa workflow results are commonly returned in two forms.
 
-### 变量结果
+### Variable Result
 
-推荐工作流把业务结果写入变量：
+The recommended workflow output variable is:
 
 ```text
 browserflow_output
 ```
 
-Skill 调用时建议请求：
+Skill calls should request:
 
 ```json
 {
@@ -368,11 +370,11 @@ Skill 调用时建议请求：
 }
 ```
 
-这样大模型可以优先读取 `browserflow_output`，避免返回无关变量。
+This lets an LLM read `browserflow_output` first and avoids returning unrelated variables.
 
-### 表格结果
+### Table Result
 
-如果需要返回表格数据：
+For table data:
 
 ```json
 {
@@ -383,33 +385,33 @@ Skill 调用时建议请求：
 }
 ```
 
-大表格结果会被保存为文件，并记录到 `task_record_files`。执行记录详情页面可以查看关联文件并下载。
+Large table results are saved as files and recorded in `task_record_files`. The execution record detail page can display and download related files.
 
-## 页面地图
+## Page Map
 
-| 页面 | 模式 | 说明 |
+| Page | Mode | Description |
 | --- | --- | --- |
-| `/` | 通用 | 首页和运行模式入口 |
-| `/browser` | Windows | 管理本地受控浏览器实例 |
-| `/workflows` | Windows | 查看 Browser Agent 中的 Automa 工作流，支持打开、运行和导出 Skill |
-| `/llm` | Windows | 配置大模型提供商、模型、API Key 和 Base URL |
-| `/chat` | Windows | 使用已启用模型进行本地对话 |
-| `/browser-agent` | Windows | 本地浏览器执行端页面，通常由后端自动打开 |
-| `/automa` | Server | 管理服务端工作流记录，支持导入、同步、导出 Skill |
-| `/tasks` | Server | 创建和维护任务配置 |
-| `/task-records` | Server | 查看任务执行记录、结果、结果文件和失败原因 |
-| `/clients` | Server | 查看客户端在线状态、插件状态、浏览器信息和拉黑状态 |
-| `/client-agent` | Server | Windows 客户端执行端页面 |
+| `/` | Shared | Home page and runtime-mode entry |
+| `/browser` | Windows | Manage local controlled browser instances |
+| `/workflows` | Windows | View Browser Agent Automa workflows, open or run them, and export Skills |
+| `/llm` | Windows | Configure LLM providers, models, API keys, and Base URLs |
+| `/chat` | Windows | Chat with enabled local model configurations |
+| `/browser-agent` | Windows | Local browser executor page, usually opened automatically by the backend |
+| `/automa` | Server | Manage server workflow records, imports, sync, and Skill export |
+| `/tasks` | Server | Create and maintain task definitions |
+| `/task-records` | Server | View execution records, results, result files, and failure reasons |
+| `/clients` | Server | View client online state, extension state, browser metadata, and ban state |
+| `/client-agent` | Server | Windows client executor page |
 
-## 配置说明
+## Configuration
 
-主配置文件：
+Main configuration file:
 
 ```text
 backend/manifest/config/config.yaml
 ```
 
-常用配置：
+Common options:
 
 ```yaml
 server:
@@ -435,46 +437,46 @@ redis:
     pass: ""
 ```
 
-| 配置项 | 说明 |
+| Option | Description |
 | --- | --- |
-| `server.address` | 后端 HTTP 服务监听地址 |
-| `app.mode` | 运行模式，支持 `windows` 和 `server` |
-| `localStorage.path` | Windows 模式本地 BoltDB 文件路径 |
-| `frontend.url` | 后端启动受控浏览器时打开的前端地址 |
-| `database.default.link` | Server 模式 PostgreSQL 连接配置 |
-| `redis.default` | Server 模式 Redis 连接配置 |
+| `server.address` | Backend HTTP listen address |
+| `app.mode` | Runtime mode: `windows` or `server` |
+| `localStorage.path` | Local BoltDB file path for Windows mode |
+| `frontend.url` | Frontend URL opened by backend-launched controlled browsers |
+| `database.default.link` | PostgreSQL connection for Server mode |
+| `redis.default` | Redis connection for Server mode |
 
-## 环境要求
+## Requirements
 
 - Go 1.25+
-- Node.js 和 npm
-- Chrome 或 Chromium
-- Automa 浏览器扩展
-- Server 模式需要 PostgreSQL 和 Redis
+- Node.js and npm
+- Chrome or Chromium
+- Automa browser extension
+- PostgreSQL and Redis for Server mode
 
-## 项目结构
+## Project Structure
 
 ```text
 browserflow/
-|-- backend/                 GoFrame 后端服务
-|-- frontend/                Vue 3 前端应用
-|-- docs/                    项目文档和图片资源
-|-- third_party/automa/      Automa 本地源码快照和 BrowserFlow 本地改造
+|-- backend/                 GoFrame backend service
+|-- frontend/                Vue 3 frontend app
+|-- docs/                    Documentation and image assets
+|-- third_party/automa/      Local Automa source snapshot and BrowserFlow changes
 |-- go.work                  Go workspace
-|-- README.md                中文说明
-`-- README_EN.md             English README
+|-- README.md                English README
+`-- README_zh.md             Chinese README
 ```
 
-## 开发命令
+## Development Commands
 
-后端：
+Backend:
 
 ```bash
 cd backend
 go run .
 ```
 
-前端：
+Frontend:
 
 ```bash
 cd frontend
@@ -484,24 +486,24 @@ npm run lint
 npm run format
 ```
 
-数据库初始化或更新：
+Database initialization or update:
 
 ```text
 backend/sql/browserflow.sql
 ```
 
-## 安全和部署建议
+## Security And Deployment Notes
 
-BrowserFlow 可以触发真实浏览器自动化操作。Server 模式部署到公司、政务、公安等内网环境时，建议重点关注：
+BrowserFlow can trigger real browser automation. When deploying Server mode in enterprise, government, public security, or other intranet environments, pay attention to:
 
-- 使用 Nginx 或网关保护后端和前端入口。
-- 不要把 `/client-agent` 暴露到不可信网络。
-- PostgreSQL 和 Redis 只允许可信服务器访问。
-- 为 WebSocket 和管理 API 增加认证、授权、IP 白名单或反向代理访问控制。
-- 对任务参数、执行结果、结果文件做权限控制和敏感信息保护。
-- 保留任务创建、修改、执行、删除等审计日志。
-- 对重要任务配置失败告警、超时告警和客户端离线告警。
-- 对不同部门、不同业务系统、不同客户端执行节点做权限隔离。
+- Protect backend and frontend entry points with Nginx or a gateway.
+- Do not expose `/client-agent` to untrusted networks.
+- Allow PostgreSQL and Redis access only from trusted servers.
+- Add authentication, authorization, IP allowlists, or reverse-proxy access controls for WebSocket and management APIs.
+- Protect sensitive task parameters, execution results, and result files.
+- Keep audit logs for task creation, updates, execution, and deletion.
+- Add alerts for important failures, timeouts, and client offline events.
+- Isolate permissions by department, business system, and execution client where needed.
 
 ## License
 
