@@ -64,3 +64,12 @@ export function getTaskRecordDetail(id) {
     showSuccessMessage: false,
   })
 }
+
+export function deleteTaskRecords(ids = []) {
+  return request({
+    url: '/task-records/batch',
+    method: 'DELETE',
+    data: { ids },
+    showSuccessMessage: false,
+  })
+}

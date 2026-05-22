@@ -46,6 +46,9 @@
         </div>
 
         <div class="record-filter-actions">
+          <el-button type="danger" :disabled="selectedRecordIds.length === 0" @click="handleBatchDeleteRecords">
+            删除选中
+          </el-button>
           <el-button @click="resetRecordFilters">重置</el-button>
           <AppSelectionSummary :count="selectedRecordIds.length" unit="记录" />
         </div>
@@ -116,7 +119,7 @@
       </el-table>
 
       <AppPagination v-model:current-page="recordPage" v-model:page-size="recordPageSize" :page-sizes="pageSizes"
-        :total="records.length" />
+        :total="recordTotal" />
     </section>
 
     <AppDialog v-model="recordDetailVisible" title="执行记录详情" width="720px">
@@ -171,6 +174,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
+import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
@@ -179,9 +183,9 @@ import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
 import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { listClients } from '@/services/client'
-import { executeTask, getTaskRecordDetail, listTaskRecords } from '@/services/task'
+import { deleteTaskRecords, executeTask, getTaskRecordDetail, listTaskRecords } from '@/services/task'
 import { formatDate as formatBaseDate, formatJSON } from '@/utils/format'
-import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList } from '@/utils/list'
+import { DEFAULT_PAGE_SIZES, normalizeList } from '@/utils/list'
 
 const records = ref([])
 const clientIpOptions = ref([])
@@ -190,6 +194,7 @@ const clientIpLoading = ref(false)
 const recordTableRef = ref(null)
 const recordPage = ref(1)
 const recordPageSize = ref(10)
+const recordTotal = ref(0)
 const pageSizes = DEFAULT_PAGE_SIZES
 const recordDetailVisible = ref(false)
 const recordDetail = ref(null)
@@ -206,15 +211,13 @@ const recordFilters = reactive({
   status: '',
 })
 
-const pagedRecords = computed(() => {
-  const start = (recordPage.value - 1) * recordPageSize.value
-  return records.value.slice(start, start + recordPageSize.value)
-})
+const pagedRecords = computed(() => records.value)
 const {
   selectedKeys: selectedRecordIds,
   handleSelectionChange: handleRecordSelectionChange,
   restoreSelection: restoreRecordSelection,
   retainSelectionByRows: retainRecordSelectionByRows,
+  resetSelection: resetRecordSelection,
 } = usePagedTableSelection({
   rows: pagedRecords,
   getRowKey: getRecordSelectionKey,
@@ -231,16 +234,15 @@ watch(() => [recordFilters.task_name, recordFilters.workflow_name], () => {
 
 watch(() => [recordFilters.client_ip, recordFilters.execute_time_range, recordFilters.status], () => {
   clearFilterSearchTimer()
-  recordPage.value = 1
+  reloadFirstRecordPage()
+})
+
+watch(recordPage, () => {
   loadRecords()
 })
 
-watch([records, recordPageSize], () => {
-  recordPage.value = getSafePage({
-    total: records.value.length,
-    page: recordPage.value,
-    size: recordPageSize.value,
-  })
+watch(recordPageSize, () => {
+  reloadFirstRecordPage()
 })
 
 watch(pagedRecords, () => {
@@ -258,8 +260,12 @@ async function loadRecords() {
       start_time: startTime,
       end_time: endTime,
       status: recordFilters.status.trim(),
+      page_num: recordPage.value,
+      page_size: recordPageSize.value,
     })
-    records.value = sortByTimeDesc(normalizeList(data, 'records'))
+    const list = normalizeList(data, 'records')
+    records.value = sortByTimeDesc(list)
+    recordTotal.value = Number(data?.total ?? list.length)
     retainRecordSelectionByRows(records.value)
   } finally {
     loadingRecords.value = false
@@ -284,8 +290,15 @@ function handleClientIpSelectVisible(opened) {
 }
 
 function searchRecordsNow() {
+  reloadFirstRecordPage()
+}
+
+function reloadFirstRecordPage() {
+  if (recordPage.value === 1) {
+    loadRecords()
+    return
+  }
   recordPage.value = 1
-  loadRecords()
 }
 
 function getRecordSelectionKey(row) {
@@ -311,6 +324,24 @@ async function handleRetryRecord(row) {
     params: row.params || {},
   })
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已重新下发' })
+  await loadRecords()
+}
+
+async function handleBatchDeleteRecords() {
+  const ids = selectedRecordIds.value.map((id) => Number(id)).filter((id) => id > 0)
+  if (ids.length === 0) return
+
+  const confirmed = await appConfirm({
+    title: '批量删除执行记录',
+    message: `确认删除选中的 ${ids.length} 条执行记录吗？`,
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
+  await deleteTaskRecords(ids)
+  resetRecordSelection(recordTableRef)
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '已删除选中执行记录' })
   await loadRecords()
 }
 
@@ -383,32 +414,33 @@ function formatDate(value) {
 
 <style scoped lang="scss">
 .record-filters {
-  justify-content: space-between;
-}
-
-.record-filter-fields,
-.record-filter-actions {
-  display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 12px 16px;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  overflow-x: auto;
 }
 
 .record-filter-fields {
   display: grid;
-  flex: 1;
+  flex: 1 1 auto;
   grid-template-columns:
-    minmax(220px, 0.95fr)
-    minmax(280px, 1.1fr)
-    minmax(210px, 0.85fr)
-    minmax(360px, 1.35fr)
-    minmax(130px, 0.55fr);
+    minmax(150px, 0.8fr)
+    minmax(210px, 1fr)
+    minmax(160px, 0.85fr)
+    minmax(330px, 1.55fr)
+    minmax(120px, 0.55fr);
   gap: 12px 16px;
-  min-width: 0;
+  min-width: 970px;
 }
 
 .record-filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  gap: 12px;
+  min-width: max-content;
 }
 
 .filter-item {
@@ -467,25 +499,30 @@ function formatDate(value) {
 }
 
 @media (max-width: 1280px) {
+  .record-filters {
+    flex-wrap: nowrap;
+  }
+
   .record-filter-fields {
-    flex-basis: 100%;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns:
+      minmax(150px, 0.8fr)
+      minmax(210px, 1fr)
+      minmax(160px, 0.85fr)
+      minmax(330px, 1.55fr)
+      minmax(120px, 0.55fr);
+    min-width: 970px;
   }
 
   .filter-item--task,
   .filter-item--workflow,
-  .filter-item--execute-time {
-    grid-column: span 2;
-  }
-
   .filter-item--client,
+  .filter-item--execute-time,
   .filter-item--status {
-    grid-column: span 3;
+    grid-column: auto;
   }
 
   .record-filter-actions {
     justify-content: flex-end;
-    width: 100%;
   }
 }
 

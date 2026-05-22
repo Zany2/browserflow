@@ -134,6 +134,12 @@ func BuildTaskRecordMap(ctx context.Context, record gdb.Record) (*model.TaskReco
 			clientName = strings.TrimSpace(gconv.String(clientRecord[clientColumns.ClientName]))
 		}
 	}
+	startedAt := recordTime(record[columns.StartedAt])
+	finishedAt := recordTime(record[columns.FinishedAt])
+	durationMs := int64(0)
+	if startedAt != nil && finishedAt != nil {
+		durationMs = finishedAt.Time.Sub(startedAt.Time).Milliseconds()
+	}
 
 	return &model.TaskRecordResModel{
 		ID:           gconv.Int64(record[columns.Id]),
@@ -149,8 +155,9 @@ func BuildTaskRecordMap(ctx context.Context, record gdb.Record) (*model.TaskReco
 		Params:       params,
 		Result:       result,
 		ErrorMessage: strings.TrimSpace(gconv.String(record[columns.ErrorMessage])),
-		StartedAt:    recordTime(record[columns.StartedAt]),
-		FinishedAt:   recordTime(record[columns.FinishedAt]),
+		DurationMs:   durationMs,
+		StartedAt:    startedAt,
+		FinishedAt:   finishedAt,
 		CreatedAt:    recordTime(record[columns.CreatedAt]),
 		UpdatedAt:    recordTime(record[columns.UpdatedAt]),
 		DeletedAt:    recordTime(record[columns.DeletedAt]),

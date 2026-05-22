@@ -11,7 +11,7 @@ import (
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
-// TaskList returns tasks 获取任务列表
+// TaskList returns tasks.
 func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *v1.TaskListRes, err error) {
 	columns := dao.Tasks.Columns()
 	gModel := dao.Tasks.Ctx(ctx)
@@ -23,7 +23,6 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 	if workflowID := strings.TrimSpace(req.WorkflowID); workflowID != "" {
 		gModel = gModel.Where(columns.AutomaId, workflowID)
 	}
-	// Workflow name filter 工作流名称模糊检索，转换为任务表可匹配的工作流 ID
 	if workflowName := strings.TrimSpace(req.WorkflowName); workflowName != "" {
 		workflowIDs, workflowErr := taskdata.FindWorkflowIDsByName(ctx, workflowName)
 		if workflowErr != nil {
@@ -44,7 +43,6 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 	if enabled := strings.TrimSpace(req.Enabled); enabled == "true" || enabled == "false" {
 		gModel = gModel.Where(columns.Enabled, enabled == "true")
 	}
-	// Created time range filter 创建时间起止范围筛选
 	if startTime := strings.TrimSpace(req.StartTime); startTime != "" {
 		gModel = gModel.WhereGTE(columns.CreatedAt, startTime)
 	}
@@ -52,7 +50,25 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 		gModel = gModel.WhereLTE(columns.CreatedAt, endTime)
 	}
 
-	records, err := gModel.OrderDesc(columns.UpdatedAt).All()
+	total, err := gModel.Count()
+	if err != nil {
+		return nil, err
+	}
+	if total == 0 {
+		return &v1.TaskListRes{List: []*v1.TaskListResModel{}, Total: 0}, nil
+	}
+
+	pageNum := req.PageNum
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 30
+	}
+	start := (pageNum - 1) * pageSize
+
+	records, err := gModel.OrderDesc(columns.UpdatedAt).Limit(start, pageSize).All()
 	if err != nil {
 		return nil, err
 	}
@@ -94,5 +110,5 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 		list = append(list, item)
 	}
 
-	return &v1.TaskListRes{List: list, Total: len(list)}, nil
+	return &v1.TaskListRes{List: list, Total: total}, nil
 }

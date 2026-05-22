@@ -10,7 +10,7 @@ import (
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
-// TaskRecordList returns task records 获取任务记录列表
+// TaskRecordList returns task records.
 func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordListReq) (res *v1.TaskRecordListRes, err error) {
 	columns := dao.TaskRecords.Columns()
 	gModel := dao.TaskRecords.Ctx(ctx)
@@ -18,7 +18,6 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 	if taskID := strings.TrimSpace(req.TaskID); taskID != "" {
 		gModel = gModel.Where(columns.TaskId, gconv.Int64(taskID))
 	}
-	// Task name filter 任务名称模糊检索，转换为执行记录可匹配的任务 ID
 	if taskName := strings.TrimSpace(req.TaskName); taskName != "" {
 		taskIDs, taskErr := taskdata.FindTaskIDsByName(ctx, taskName)
 		if taskErr != nil {
@@ -32,7 +31,6 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 	if workflowID := strings.TrimSpace(req.WorkflowID); workflowID != "" {
 		gModel = gModel.Where(columns.WorkflowId, workflowID)
 	}
-	// Workflow name filter 工作流名称模糊检索，转换为执行记录可匹配的工作流 ID
 	if workflowName := strings.TrimSpace(req.WorkflowName); workflowName != "" {
 		workflowIDs, workflowErr := taskdata.FindWorkflowIDsByName(ctx, workflowName)
 		if workflowErr != nil {
@@ -53,7 +51,6 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 	if status := strings.TrimSpace(req.Status); status != "" {
 		gModel = gModel.Where(columns.Status, status)
 	}
-	// Execute time range filter 按开始执行时间做起止范围筛选
 	if startTime := strings.TrimSpace(req.StartTime); startTime != "" {
 		gModel = gModel.WhereGTE(columns.StartedAt, startTime)
 	}
@@ -65,7 +62,25 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 		gModel = gModel.Where("("+columns.WorkflowId+" LIKE ? OR "+columns.ClientIp+" LIKE ? OR "+columns.ErrorMessage+" LIKE ?)", likeKeyword, likeKeyword, likeKeyword)
 	}
 
-	records, err := gModel.OrderDesc(columns.CreatedAt).All()
+	total, err := gModel.Count()
+	if err != nil {
+		return nil, err
+	}
+	if total == 0 {
+		return &v1.TaskRecordListRes{List: []*v1.TaskRecordListResModel{}, Total: 0}, nil
+	}
+
+	pageNum := req.PageNum
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 30
+	}
+	start := (pageNum - 1) * pageSize
+
+	records, err := gModel.OrderDesc(columns.CreatedAt).Limit(start, pageSize).All()
 	if err != nil {
 		return nil, err
 	}
@@ -79,5 +94,5 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 		list = append(list, item)
 	}
 
-	return &v1.TaskRecordListRes{List: list, Total: len(list)}, nil
+	return &v1.TaskRecordListRes{List: list, Total: total}, nil
 }

@@ -24,6 +24,7 @@ type TaskPayload struct {
 // TaskListReq 任务列表请求
 type TaskListReq struct {
 	g.Meta `path:"/" method:"get" tags:"任务" summary:"获取任务列表"`
+	rr.CommonPageReq
 	rr.CommonTimeReq
 	Keyword      string `json:"keyword,omitempty" in:"query" dc:"关键字"`
 	WorkflowID   string `json:"workflow_id,omitempty" in:"query" dc:"工作流ID"`

@@ -13,4 +13,5 @@ import (
 type ITaskrecordsV1 interface {
 	TaskRecordList(ctx context.Context, req *v1.TaskRecordListReq) (res *v1.TaskRecordListRes, err error)
 	TaskRecordDetail(ctx context.Context, req *v1.TaskRecordDetailReq) (res *v1.TaskRecordDetailRes, err error)
+	TaskRecordBatchDelete(ctx context.Context, req *v1.TaskRecordBatchDeleteReq) (res *v1.TaskRecordBatchDeleteRes, err error)
 }

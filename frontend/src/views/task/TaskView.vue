@@ -102,7 +102,7 @@
         v-model:current-page="taskPage"
         v-model:page-size="taskPageSize"
         :page-sizes="pageSizes"
-        :total="tasks.length"
+        :total="taskTotal"
       />
     </section>
 
@@ -359,7 +359,7 @@ import {
 import { listClients } from '@/services/client'
 import { createTask, deleteTask, executeTask, listTasks, updateTask } from '@/services/task'
 import { formatDate as formatBaseDate } from '@/utils/format'
-import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList } from '@/utils/list'
+import { DEFAULT_PAGE_SIZES, normalizeList } from '@/utils/list'
 
 const tasks = ref([])
 const workflowOptions = ref([])
@@ -380,6 +380,7 @@ const executeParamItems = ref([])
 const taskStatusUpdatingIds = ref(new Set())
 const taskPage = ref(1)
 const taskPageSize = ref(10)
+const taskTotal = ref(0)
 const pageSizes = DEFAULT_PAGE_SIZES
 const clientWorkflowCheckPageSize = DEFAULT_PAGE_SIZES[0]
 const CRON_MONTH_NAMES = {
@@ -433,10 +434,7 @@ const clientSelector = reactive({
 })
 
 const taskDialogTitle = computed(() => (taskForm.id ? '编辑任务' : '新增任务'))
-const pagedTasks = computed(() => {
-  const start = (taskPage.value - 1) * taskPageSize.value
-  return tasks.value.slice(start, start + taskPageSize.value)
-})
+const pagedTasks = computed(() => tasks.value)
 const {
   selectedKeys: selectedTaskIds,
   handleSelectionChange: handleTaskSelectionChange,
@@ -497,16 +495,15 @@ watch(() => [taskFilters.keyword, taskFilters.workflow_name], () => {
 
 watch(() => [taskFilters.created_time_range, taskFilters.enabled], () => {
   clearFilterSearchTimer()
-  taskPage.value = 1
+  reloadFirstTaskPage()
+})
+
+watch(taskPage, () => {
   loadTasks()
 })
 
-watch([tasks, taskPageSize], () => {
-  taskPage.value = getSafePage({
-    total: tasks.value.length,
-    page: taskPage.value,
-    size: taskPageSize.value,
-  })
+watch(taskPageSize, () => {
+  reloadFirstTaskPage()
 })
 
 watch(pagedTasks, () => {
@@ -523,8 +520,12 @@ async function loadTasks() {
       start_time: startTime,
       end_time: endTime,
       enabled: taskFilters.enabled,
+      page_num: taskPage.value,
+      page_size: taskPageSize.value,
     })
-    tasks.value = sortByTimeDesc(normalizeList(data, 'tasks'))
+    const list = normalizeList(data, 'tasks')
+    tasks.value = sortByTimeDesc(list)
+    taskTotal.value = Number(data?.total ?? list.length)
     retainTaskSelectionByRows(tasks.value)
   } finally {
     loadingTasks.value = false
@@ -532,8 +533,15 @@ async function loadTasks() {
 }
 
 function searchTasksNow() {
+  reloadFirstTaskPage()
+}
+
+function reloadFirstTaskPage() {
+  if (taskPage.value === 1) {
+    loadTasks()
+    return
+  }
   taskPage.value = 1
-  loadTasks()
 }
 
 function getTaskSelectionKey(row) {
@@ -1046,6 +1054,7 @@ function upsertTask(task) {
     return
   }
   tasks.value = [task, ...tasks.value]
+  taskTotal.value += 1
 }
 
 function mergeSavedTask(serverTask, payload, taskId) {
