@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="./README_zh.md">简体中文</a> · English
+  English · <a href="./README_zh.md">简体中文</a>
 </p>
 
 BrowserFlow is an automation platform built around Automa browser workflows. It turns workflows that normally live inside one browser into managed, remotely dispatched, scheduled, audited, result-returning, and LLM-callable automation capabilities.
