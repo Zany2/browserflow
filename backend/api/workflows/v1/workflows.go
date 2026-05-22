@@ -252,6 +252,16 @@ type WorkflowAgentExportSkillReq struct {
 // WorkflowAgentExportSkillRes skill export response Skill 导出响应
 type WorkflowAgentExportSkillRes struct{}
 
+// WorkflowExportSkillReq exports stored workflows as Skill 导出服务端工作流为 Skill
+type WorkflowExportSkillReq struct {
+	g.Meta      `path:"/export/skill" method:"post" tags:"工作流" summary:"导出服务端工作流为 Skill"`
+	Scope       string   `json:"scope" d:"filtered" v:"in:selected,filtered,all#导出范围只能是selected、filtered或all" dc:"导出范围"`
+	WorkflowIDs []string `json:"workflow_ids" dc:"需要导出的工作流ID列表"`
+}
+
+// WorkflowExportSkillRes skill export response Skill 导出响应
+type WorkflowExportSkillRes struct{}
+
 // WorkflowRunReq 运行工作流
 type WorkflowRunReq struct {
 	g.Meta     `path:"/{id}/run" method:"post" tags:"工作流" summary:"运行工作流"`

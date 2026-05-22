@@ -17,9 +17,19 @@ func FilterWorkflows(workflows []map[string]any, scope string, workflowIDs []str
 	return filterAgentSkillWorkflows(workflows, scope, workflowIDs)
 }
 
+// FilterServerWorkflows keeps Server workflows by server id or Automa id.
+func FilterServerWorkflows(workflows []map[string]any, scope string, workflowIDs []string) []map[string]any {
+	return filterServerSkillWorkflows(workflows, scope, workflowIDs)
+}
+
 // GenerateMarkdown builds SKILL.md content. ?? SKILL.md ???
 func GenerateMarkdown(workflows []map[string]any, baseURL string, browserID string) string {
 	return generateAgentWorkflowSkillMD(workflows, baseURL, browserID)
+}
+
+// GenerateServerMarkdown builds Server-mode SKILL.md content.
+func GenerateServerMarkdown(workflows []map[string]any, baseURL string) string {
+	return generateServerWorkflowSkillMD(workflows, baseURL)
 }
 
 // ContentDisposition builds download header. ????????
@@ -54,6 +64,35 @@ func filterAgentSkillWorkflows(workflows []map[string]any, scope string, workflo
 	for _, workflow := range workflows {
 		if idSet[getAgentWorkflowID(workflow)] {
 			selected = append(selected, workflow)
+		}
+	}
+	return selected
+}
+
+// filterServerSkillWorkflows keeps workflows by Server id or Automa id.
+func filterServerSkillWorkflows(workflows []map[string]any, scope string, workflowIDs []string) []map[string]any {
+	if strings.EqualFold(strings.TrimSpace(scope), "all") {
+		return workflows
+	}
+
+	idSet := make(map[string]bool, len(workflowIDs))
+	for _, id := range workflowIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			idSet[id] = true
+		}
+	}
+	if len(idSet) == 0 {
+		return []map[string]any{}
+	}
+
+	selected := make([]map[string]any, 0, len(workflows))
+	for _, workflow := range workflows {
+		for _, id := range getServerWorkflowFilterIDs(workflow) {
+			if idSet[id] {
+				selected = append(selected, workflow)
+				break
+			}
 		}
 	}
 	return selected
@@ -235,7 +274,162 @@ func appendAgentWorkflowRunExample(sb *strings.Builder, baseURL string, workflow
 	sb.WriteString("For data-returning requests, use the sync example in the API Endpoints section and keep the same workflow ID and variables.\n\n")
 }
 
-// buildAgentSkillDescription builds frontmatter description 构建 frontmatter 描述
+// generateServerWorkflowSkillMD builds Server-mode SKILL.md content.
+func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) string {
+	var sb strings.Builder
+	firstWorkflowID := getServerWorkflowExecutionID(workflows[0])
+	firstVariables := buildAgentSkillVariableExample(extractAgentWorkflowParameters(workflows[0]))
+
+	sb.WriteString("---\n")
+	sb.WriteString("name: browserflow-server-automa-workflows\n")
+	sb.WriteString("description: " + strconv.Quote(buildServerSkillDescription(workflows)) + "\n")
+	sb.WriteString("---\n\n")
+	sb.WriteString("# BrowserFlow Server Automa Workflows\n\n")
+	sb.WriteString("## Overview\n\n")
+	sb.WriteString("This skill describes Automa workflows stored in BrowserFlow Server mode. Use the BrowserFlow task APIs to create or run server-side tasks. The server dispatches each task to an online Windows client that owns the target workflow.\n\n")
+	sb.WriteString(fmt.Sprintf("**Total Workflows Available:** %d\n\n", len(workflows)))
+	sb.WriteString(fmt.Sprintf("**Recommended Filename:** `%s`\n\n", FileName))
+	sb.WriteString(fmt.Sprintf("**API Base URL:** `%s`\n\n", baseURL))
+	sb.WriteString("## Mandatory Preflight\n\n")
+	sb.WriteString("Before running any workflow, first verify that the BrowserFlow backend is reachable and running in Server mode.\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl '%s/app/runtime'\n", baseURL))
+	sb.WriteString("```\n\n")
+	sb.WriteString("If the request fails or the mode is not `server`, ask the user to start BrowserFlow in Server mode before continuing.\n\n")
+	sb.WriteString("Then verify that at least one client is online and has the target workflow. If a task does not specify a client, BrowserFlow scans online clients that own the workflow and chooses an unlocked client.\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl '%s/clients'\n", baseURL))
+	sb.WriteString("```\n\n")
+	sb.WriteString("## Parameter Rules\n\n")
+	sb.WriteString("Before creating or executing a task, inspect the workflow's `Parameters` section. If a required parameter has no value, ask the user for it. Pass values through the task `params` object and keep parameter names exactly as listed.\n\n")
+	sb.WriteString("## Dispatch Rules\n\n")
+	sb.WriteString("- If `client_ip` is provided, BrowserFlow dispatches only to that client.\n")
+	sb.WriteString("- If `client_ip` is omitted, BrowserFlow scans online clients that own the workflow and dispatches to the first unlocked client.\n")
+	sb.WriteString("- If the target client is busy, offline, or does not own the workflow, the API creates a failed execution record with a readable reason.\n")
+	sb.WriteString("- Per-client Redis locks prevent the same client from running multiple Automa workflows concurrently.\n")
+	sb.WriteString("- Use `trigger_type: \"skill\"` when executing tasks from this skill so execution records are easy to filter.\n\n")
+	sb.WriteString("## API Endpoints\n\n")
+	sb.WriteString("### Create Task\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl -X POST '%s/tasks' \\\n", baseURL))
+	sb.WriteString("  -H 'Content-Type: application/json' \\\n")
+	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
+		"name":                  "Skill task for " + firstWorkflowID,
+		"description":           "Created by BrowserFlow exported Skill",
+		"workflow_id":           firstWorkflowID,
+		"client_ip":             "",
+		"cron_expression":       "",
+		"params":                firstVariables,
+		"enabled":               true,
+		"run_once_after_create": false,
+	}))))
+	sb.WriteString("```\n\n")
+	sb.WriteString("### Execute Existing Task\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl -X POST '%s/tasks/{task_id}/execute' \\\n", baseURL))
+	sb.WriteString("  -H 'Content-Type: application/json' \\\n")
+	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
+		"trigger_type": "skill",
+		"client_ip":    "",
+		"params":       firstVariables,
+	}))))
+	sb.WriteString("```\n\n")
+	sb.WriteString("### Query Task Records\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl '%s/task-records?workflow_id=%s&page_num=1&page_size=10'\n", baseURL, url.QueryEscape(firstWorkflowID)))
+	sb.WriteString("```\n\n")
+	sb.WriteString("## Available Workflows\n\n")
+	for index, workflow := range workflows {
+		appendServerWorkflowSkillSection(&sb, index+1, workflow, baseURL)
+	}
+	sb.WriteString("## Usage Notes\n\n")
+	sb.WriteString("- These workflows come from the BrowserFlow server database, not from the currently open browser-agent page.\n")
+	sb.WriteString("- Prefer creating reusable tasks for repeated use, then execute those task IDs from the skill.\n")
+	sb.WriteString("- Leave `client_ip` empty when any online client that owns the workflow may execute it.\n")
+	sb.WriteString("- Set `client_ip` only when the user explicitly wants a specific client.\n")
+	sb.WriteString("- A successful execute response means the server accepted and dispatched the task. Use task records to inspect final status and returned data.\n")
+	return sb.String()
+}
+
+// appendServerWorkflowSkillSection writes one Server workflow section.
+func appendServerWorkflowSkillSection(sb *strings.Builder, index int, workflow map[string]any, baseURL string) {
+	workflowID := getServerWorkflowExecutionID(workflow)
+	name := firstAgentSkillString(workflow, "name", "automa_name", "title")
+	if name == "" {
+		name = workflowID
+	}
+	if name == "" {
+		name = fmt.Sprintf("Workflow %d", index)
+	}
+
+	sb.WriteString(fmt.Sprintf("### %d. %s\n\n", index, markdownLine(name)))
+	sb.WriteString(fmt.Sprintf("- Workflow ID: `%s`\n", inlineCode(workflowID)))
+	if serverID := firstAgentSkillString(workflow, "server_id"); serverID != "" {
+		sb.WriteString(fmt.Sprintf("- Server ID: `%s`\n", inlineCode(serverID)))
+	}
+	if automaID := firstAgentSkillString(workflow, "automa_id"); automaID != "" && automaID != workflowID {
+		sb.WriteString(fmt.Sprintf("- Automa ID: `%s`\n", inlineCode(automaID)))
+	}
+	sb.WriteString(fmt.Sprintf("- Description: %s\n", markdownLine(defaultText(firstAgentSkillString(workflow, "description", "automa_description"), "-"))))
+	sb.WriteString(fmt.Sprintf("- Status: %s\n", agentWorkflowStatus(workflow)))
+	sb.WriteString(fmt.Sprintf("- Nodes: %d\n", getAgentWorkflowNodeCount(workflow)))
+	sb.WriteString(fmt.Sprintf("- Created: %s\n", markdownLine(defaultText(formatAgentSkillTime(firstAgentSkillValue(workflow, "createdAt", "created_at", "created")), "-"))))
+	sb.WriteString(fmt.Sprintf("- Updated: %s\n\n", markdownLine(defaultText(formatAgentSkillTime(firstAgentSkillValue(workflow, "updatedAt", "updated_at", "updated")), "-"))))
+
+	params := extractAgentWorkflowParameters(workflow)
+	if len(params) == 0 {
+		sb.WriteString("Parameters: none detected.\n\n")
+		appendServerWorkflowTaskExample(sb, baseURL, workflowID, nil)
+		return
+	}
+
+	sb.WriteString("Parameters:\n")
+	for _, param := range params {
+		name := firstAgentSkillString(param, "name", "key")
+		if name == "" {
+			continue
+		}
+		paramType := defaultText(firstAgentSkillString(param, "type"), "string")
+		description := defaultText(firstAgentSkillString(param, "description", "placeholder"), "-")
+		required := ""
+		if isAgentSkillParamRequired(param) {
+			required = ", required"
+		}
+		defaultValue := formatAgentSkillDefaultValue(firstAgentSkillValue(param, "defaultValue", "default", "value"))
+		if defaultValue != "" {
+			sb.WriteString(fmt.Sprintf("- `%s` (%s%s): %s Default: `%s`\n", inlineCode(name), markdownLine(paramType), required, markdownLine(description), inlineCode(defaultValue)))
+		} else {
+			sb.WriteString(fmt.Sprintf("- `%s` (%s%s): %s\n", inlineCode(name), markdownLine(paramType), required, markdownLine(description)))
+		}
+	}
+	sb.WriteString("\n")
+	appendServerWorkflowTaskExample(sb, baseURL, workflowID, buildAgentSkillVariableExample(params))
+}
+
+// appendServerWorkflowTaskExample writes a Server task creation example.
+func appendServerWorkflowTaskExample(sb *strings.Builder, baseURL string, workflowID string, variables map[string]any) {
+	if strings.TrimSpace(workflowID) == "" {
+		return
+	}
+	if variables == nil {
+		variables = map[string]any{}
+	}
+	sb.WriteString("Create task example:\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl -X POST '%s/tasks' \\\n", baseURL))
+	sb.WriteString("  -H 'Content-Type: application/json' \\\n")
+	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
+		"name":                  "Skill task for " + workflowID,
+		"workflow_id":           workflowID,
+		"client_ip":             "",
+		"cron_expression":       "",
+		"params":                variables,
+		"enabled":               true,
+		"run_once_after_create": true,
+	}))))
+	sb.WriteString("```\n\n")
+}
+
 func buildAgentSkillDescription(workflows []map[string]any) string {
 	names := make([]string, 0, len(workflows))
 	for index, workflow := range workflows {
@@ -257,6 +451,27 @@ func buildAgentSkillDescription(workflows []map[string]any) string {
 }
 
 // extractAgentWorkflowParameters reads trigger parameters 提取触发器参数
+// buildServerSkillDescription builds frontmatter description.
+func buildServerSkillDescription(workflows []map[string]any) string {
+	names := make([]string, 0, len(workflows))
+	for index, workflow := range workflows {
+		if index >= 8 {
+			break
+		}
+		name := firstAgentSkillString(workflow, "name", "automa_name", "title")
+		if name == "" {
+			name = getAgentWorkflowID(workflow)
+		}
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return "Run BrowserFlow Server-mode Automa workflows through the task scheduling API."
+	}
+	return "Run BrowserFlow Server-mode Automa workflows through the task scheduling API. Workflows include: " + strings.Join(names, ", ")
+}
+
 func extractAgentWorkflowParameters(workflow map[string]any) []map[string]any {
 	if trigger, ok := agentSkillMapValue(workflow["trigger"]); ok {
 		if params := agentSkillMapSliceValue(trigger["parameters"]); len(params) > 0 {
@@ -315,6 +530,32 @@ func buildAgentSkillVariableExample(params []map[string]any) map[string]any {
 // getAgentWorkflowID reads workflow id 读取工作流 ID
 func getAgentWorkflowID(workflow map[string]any) string {
 	return firstAgentSkillString(workflow, "id", "workflowId", "workflow_id", "automaId", "automa_id")
+}
+
+// getServerWorkflowExecutionID reads the Automa id used by Server tasks.
+func getServerWorkflowExecutionID(workflow map[string]any) string {
+	return firstAgentSkillString(workflow, "automa_id", "workflow_id", "workflowId", "automaId", "id")
+}
+
+// getServerWorkflowFilterIDs returns accepted ids for Server export selection.
+func getServerWorkflowFilterIDs(workflow map[string]any) []string {
+	ids := []string{
+		firstAgentSkillString(workflow, "server_id"),
+		firstAgentSkillString(workflow, "automa_id"),
+		firstAgentSkillString(workflow, "workflow_id", "workflowId", "automaId"),
+		firstAgentSkillString(workflow, "id"),
+	}
+	result := make([]string, 0, len(ids))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		result = append(result, id)
+	}
+	return result
 }
 
 // getAgentWorkflowNodeCount counts workflow nodes 统计工作流节点数

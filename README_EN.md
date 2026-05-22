@@ -17,106 +17,12 @@
   <a href="./README.md">简体中文</a> · English
 </p>
 
-> **A dual-mode browser automation platform.** BrowserFlow supports local Windows browser control and server-side task scheduling, integrating Automa workflows, browser/client agents, task dispatching, execution records, and LLM Skill invocation.
+BrowserFlow is a dual-mode browser automation platform. It turns Automa workflows into managed, syncable, schedulable, traceable, and LLM-callable automation capabilities.
 
-```bash
-# Start backend
-cd backend && go run .
+It supports two runtime modes:
 
-# Start frontend
-cd frontend && npm install && npm run dev
-
-# Open console
-http://localhost:5173
-```
-
-## What It Is
-
-BrowserFlow turns Automa workflows from browser-local manual automations into managed, syncable, schedulable, and LLM-callable automation capabilities.
-
-It has two runtime modes:
-
-- **Windows mode**: the backend launches a controlled browser on the local machine, opens Browser Agent, and reads or runs Automa workflows from that browser.
-- **Server mode**: the backend runs on a server as a scheduling center. Windows machines on the LAN or internet open the Client Agent page to connect, and the server manages clients, workflows, tasks, and execution records.
-
-## Core Features
-
-- **Dual runtime modes**: one frontend/backend codebase supports local `windows` mode and remote `server` scheduling mode.
-- **Automa Bridge**: communicates with the Automa extension through page events to read, import, open, and run workflows.
-- **Browser Agent**: binds to a backend-launched browser in Windows mode and receives workflow commands over WebSocket.
-- **Client Agent**: lets any Windows client connect to a server-mode deployment through a web page, receive tasks, and execute local Automa workflows.
-- **Workflow management**: supports file import, client sync, sync candidate comparison, syncability control, and backend workflow records.
-- **Task scheduling**: combines workflow, client, parameters, and optional Cron expression into executable tasks in server mode.
-- **Execution records**: stores dispatch status, client result, success/failure state, parameters, and returned data.
-- **LLM Skills**: packages workflows or tasks as LLM-callable Skills with preflight checks for backend, agent, Automa plugin, and parameters.
-- **Mode-aware routing**: the frontend disables pages that do not apply to the current backend runtime mode.
-
-## Runtime Modes
-
-| Capability | Windows Mode | Server Mode |
-| --- | --- | --- |
-| Runtime location | Local Windows machine | Backend on server, execution on Windows clients |
-| Agent page | `/browser-agent` | `/client-agent` |
-| Workflow source | Automa in the controlled browser | Synced from clients or imported into the server |
-| Execution path | Backend sends commands to a Browser Agent | Server dispatches tasks to a Client Agent |
-| Best for | Single-machine automation, local debugging, local LLM tools | Multi-client management, remote scheduling, centralized records |
-
-### Windows Mode
-
-Windows mode is designed for controlling a local browser on one machine.
-
-Available pages:
-
-- Browser
-- Workflows
-- LLM
-- Chat
-- Browser Agent
-
-Typical flow:
-
-1. The backend launches a local browser instance.
-2. The browser opens `/browser-agent` automatically.
-3. Browser Agent receives or resolves a `Browser ID` and connects to the backend over WebSocket.
-4. The backend reads Automa workflows from the current browser through Browser Agent.
-5. Users can open, run, or export workflow Skills.
-
-### Server Mode
-
-Server mode is designed for deploying the backend on a server and connecting multiple Windows clients as executors.
-
-Available pages:
-
-- Workflow Management
-- Tasks
-- Task Records
-- Clients
-- Client Agent
-
-Typical flow:
-
-1. Start the BrowserFlow backend and frontend on the server.
-2. A Windows client opens the site and visits `/client-agent`.
-3. Client Agent generates a stable `client_*` identifier and registers over WebSocket.
-4. The server records client IP, online status, browser metadata, Automa plugin status, and Automa version.
-5. The management UI syncs Automa workflows from clients into the server, or imports workflow files manually.
-6. A task is created by binding a workflow, execution client, parameters, and optional Cron expression.
-7. The server dispatches the task to an online client, and the client invokes local Automa to run it.
-8. The server updates execution records for the management UI or LLM callers.
-
-## Skill Guidelines
-
-BrowserFlow Skills should make execution preconditions explicit so an LLM does not blindly send requests.
-
-Before running a workflow or task, a Skill should check:
-
-1. **Backend reachability**: call `/api/v1/app/runtime` and verify the service is reachable and in the expected runtime mode.
-2. **Agent availability**: in Windows mode, verify the target Browser Agent; in Server mode, verify the target Client Agent or client IP is online.
-3. **Automa plugin availability**: check `automa_installed`, plugin status, or client-reported plugin metadata.
-4. **Required parameters**: if the workflow or task expects variables, the Skill must require the LLM caller to provide them.
-5. **Execution request**: Windows mode can call the workflow run API; Server mode is better modeled as task execution through the scheduling API.
-
-Current task results represent command dispatch and client-side acknowledgement. To wait until an Automa workflow fully completes, fails, or returns exported data, BrowserFlow needs deeper integration with Automa execution-state events or extension callbacks.
+- **Windows mode**: for local personal use. The backend, frontend, and controlled browser run on the same Windows machine, and business data is stored in a local BoltDB file.
+- **Server mode**: for server deployment and multi-client scheduling. The backend runs as a scheduling center, business data uses PostgreSQL, and Redis stores online state, workflow inventories, and per-client task locks.
 
 ## Quick Start
 
@@ -129,10 +35,10 @@ app:
   mode: "windows"
 ```
 
-Available modes:
+Available values:
 
-- `windows`: local desktop mode
-- `server`: server scheduling mode
+- `windows`: local personal mode, backed by BoltDB.
+- `server`: server scheduling mode, backed by PostgreSQL and Redis.
 
 ### 2. Start backend
 
@@ -167,7 +73,75 @@ Default frontend URL:
 http://localhost:5173
 ```
 
-In development, Vite proxies `/api` to `http://localhost:8001`.
+In development, Vite proxies `/api` requests to `http://localhost:8001`.
+
+## Core Features
+
+- **Dual runtime modes**: one frontend/backend codebase supports local Windows mode and server scheduling mode.
+- **Automa Bridge**: communicates with the browser extension through page events to read, import, open, and run Automa workflows.
+- **Browser Agent**: connects the backend-launched browser in Windows mode and receives local workflow commands over WebSocket.
+- **Client Agent**: lets Windows clients join a server-mode scheduling center through a web page, receive tasks, and execute local Automa workflows.
+- **Workflow management**: supports file import, client sync, sync candidate comparison, protected state, syncability state, and server-side workflow records.
+- **Task configuration**: combines workflow, client, parameters, and Cron expression into executable tasks in server mode.
+- **Task dispatching**: supports dispatching to a configured client, or scanning online clients that own the target workflow when no client is configured.
+- **Execution records**: stores dispatching, running, success, failure, timeout, parameters, return data, and failure reasons.
+- **Per-client task locks**: uses Redis in server mode to prevent one client from running multiple Automa workflows concurrently.
+- **LLM features**: supports local LLM configuration, chat, and workflow Skill export in Windows mode.
+- **Mode-aware routing**: the frontend hides or blocks pages that do not apply to the active backend runtime mode.
+
+## Runtime Boundaries
+
+| Area | Windows Mode | Server Mode |
+| --- | --- | --- |
+| Purpose | Single-machine personal use | Server scheduling center |
+| Main data source | BoltDB file configured by `localStorage.path` | PostgreSQL and Redis |
+| Backend location | Local Windows machine | Server |
+| Executor | Local controlled browser launched by the backend | Windows clients visiting `/client-agent` |
+| Agent page | `/browser-agent` | `/client-agent` |
+| Workflow source | Automa workflows in the controlled browser | Synced from clients or imported into the server |
+| Task dispatch | Local workflow execution | Server task configuration, Cron scheduling, and records |
+| Best for | Local automation, debugging, personal LLM tools | Multi-client management, remote scheduling, centralized records |
+
+### Windows Mode
+
+Windows mode is designed for packaging BrowserFlow as a local executable. The frontend can be bundled with the executable and served on the same machine.
+
+Typical flow:
+
+1. The backend launches a local controlled browser instance.
+2. The browser opens `/browser-agent` automatically.
+3. Browser Agent resolves or generates a `Browser ID` and connects to the backend over WebSocket.
+4. The backend reads Automa workflows from the current browser through Browser Agent.
+5. Users can open, run, and export workflows, or configure an LLM and chat locally.
+
+Windows mode should not depend on PostgreSQL or Redis. Local business data belongs in the BoltDB file configured by `localStorage.path`.
+
+### Server Mode
+
+Server mode is designed for deploying BrowserFlow on a server as a scheduling center for multiple Windows clients.
+
+Typical flow:
+
+1. Start the BrowserFlow backend and frontend on the server.
+2. A Windows client visits the site and opens `/client-agent`.
+3. Client Agent generates a stable `client_*` identifier and registers over WebSocket.
+4. The server records client IP, online state, browser metadata, Automa plugin state, and workflow inventory.
+5. The management UI syncs Automa workflows from clients into the server, or imports workflow files manually.
+6. A task is created by binding a workflow, client, parameters, and optional Cron expression.
+7. The server dispatches the task to an online client, and the client invokes local Automa to run it and report state and results.
+8. The server writes execution records for UI queries or LLM-driven flows.
+
+In server mode, PostgreSQL is the source of truth for business data. Redis is used for online clients, workflow inventory cache, and per-client task locks.
+
+## Server Dispatch Rules
+
+- If a task has a configured client IP, dispatch only to that client.
+- If the target client is offline, does not own the workflow, or is busy, the run creates a failed execution record with a clear reason.
+- If a task has no configured client IP, the server scans online clients that own the workflow and selects an unlocked client.
+- If all candidate clients are busy, the run creates a failed record with a reason such as: `已遍历调度所有在线且拥有工作流的客户端，均处于繁忙状态，任务执行失败`.
+- Cron expressions trigger tasks at their scheduled time points. Scheduling does not wait until the previous run finishes before counting the next interval; the per-client lock prevents concurrent execution on the same client.
+- Client task locks have a TTL fallback so disconnects, server failures, or missing callbacks do not leave permanent locks.
+- A background scanner marks stale running records as failed or timed out and releases the related client lock.
 
 ## Configuration
 
@@ -184,7 +158,7 @@ server:
   address: ":8001"
 
 app:
-  mode: "windows"
+  mode: "server"
 
 localStorage:
   path: "data/browserflow.db"
@@ -200,16 +174,17 @@ redis:
   default:
     address: HOST:6379
     db: 0
+    pass: ""
 ```
 
 | Option | Description |
 | --- | --- |
 | `server.address` | Backend HTTP listen address |
 | `app.mode` | Runtime mode, supports `windows` and `server` |
-| `localStorage.path` | Local bbolt database file path |
+| `localStorage.path` | Local BoltDB file path for Windows mode |
 | `frontend.url` | Frontend URL opened by backend-launched controlled browsers |
-| `database.default.link` | SQL storage for server-mode tasks, clients, and related records |
-| `redis.default` | Server-mode cache for online clients and workflow inventories |
+| `database.default.link` | PostgreSQL connection for server mode |
+| `redis.default` | Redis connection for server mode |
 
 ## Requirements
 
@@ -217,21 +192,22 @@ redis:
 - Node.js and npm
 - Chrome or Chromium
 - Automa extension installed and enabled in the target browser for Automa-related features
-- PostgreSQL and Redis when using server-mode client management, task scheduling, or workflow cache features
+- PostgreSQL and Redis for server mode
 
-## Key Pages
+## Page Map
 
 | Page | Mode | Description |
 | --- | --- | --- |
+| `/` | Shared | Home page and runtime-mode entry |
 | `/browser` | Windows | Manage local controlled browser instances |
-| `/workflows` | Windows | View Automa workflows from the current Browser Agent and export Skills |
+| `/workflows` | Windows | View workflows from Browser Agent, open or run them, and export Skills |
 | `/llm` | Windows | Configure LLM providers, models, API keys, and Base URLs |
 | `/chat` | Windows | Chat with enabled local model configurations |
-| `/browser-agent` | Windows | Browser executor page, usually opened automatically by the backend |
+| `/browser-agent` | Windows | Local browser executor page, usually opened automatically by the backend |
 | `/automa` | Server | Manage server workflow records, imports, and client sync |
 | `/tasks` | Server | Create and maintain task definitions |
-| `/task-records` | Server | View task execution records and results |
-| `/clients` | Server | View client online state, plugin status, browser metadata, and ban state |
+| `/task-records` | Server | View task execution records, results, and failure reasons |
+| `/clients` | Server | View client online state, plugin state, browser metadata, and ban state |
 | `/client-agent` | Server | Windows client executor page |
 
 ## Automa Bridge Events
@@ -243,23 +219,29 @@ redis:
 | `__automa-ext__add-workflow` | Extension to frontend | Returns workflow import result |
 | `automa:execute-workflow` | Frontend to extension | Triggers Automa workflow execution |
 
-If Automa is installed after a page is already open, its content script usually will not be injected into that existing page automatically. Agent pages handle this by refreshing or probing again.
+If Automa is installed after an agent page is already open, its content script usually will not be injected into the existing page automatically. Refresh the agent page or reopen the controlled browser in that case.
 
 ## Project Structure
 
 ```text
 browserflow/
-├─ backend/                  GoFrame backend service
-├─ frontend/                 Vue 3 frontend app
-├─ docs/images/              README and documentation image assets
-├─ third_party/automa/        Local Automa source snapshot, source only
-├─ third_party/browserwing/  Local BrowserWing source snapshot, not committed
-├─ go.work                   Go workspace
-├─ README.md
-└─ README_EN.md
+|-- backend/                 GoFrame backend service
+|-- frontend/                Vue 3 frontend app
+|-- docs/                    Documentation and README image assets
+|-- third_party/automa/      Local Automa source snapshot
+|-- go.work                  Go workspace
+|-- README.md                Chinese README
+`-- README_EN.md             English README
 ```
 
 ## Development Commands
+
+Backend:
+
+```bash
+cd backend
+go run .
+```
 
 Frontend:
 
@@ -271,18 +253,16 @@ npm run lint
 npm run format
 ```
 
-Backend:
+Database initialization or update:
 
-```bash
-cd backend
-go run .
+```text
+backend/sql/browserflow.sql
 ```
 
 ## Security Notes
 
-When deploying server mode on a LAN or the internet, make sure the database, Redis, backend APIs, and frontend entry are protected by a trusted network or reverse proxy. Skill calls can trigger browser automation directly, so exposing them publicly without authentication or access control is not recommended.
+When deploying server mode on a LAN or the internet, make sure PostgreSQL, Redis, backend APIs, the frontend entry, and `/client-agent` access are protected by a trusted network or reverse proxy. BrowserFlow can trigger real browser automation tasks, so exposing it publicly without authentication, authorization, and network isolation is not recommended.
 
 ## License
 
 Apache-2.0
-
