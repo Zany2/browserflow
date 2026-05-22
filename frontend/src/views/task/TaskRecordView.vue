@@ -116,7 +116,7 @@
       </el-table>
 
       <AppPagination v-model:current-page="recordPage" v-model:page-size="recordPageSize" :page-sizes="pageSizes"
-        :total="records.length" />
+        :total="recordTotal" />
     </section>
 
     <AppDialog v-model="recordDetailVisible" title="执行记录详情" width="720px">
@@ -181,7 +181,7 @@ import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { listClients } from '@/services/client'
 import { executeTask, getTaskRecordDetail, listTaskRecords } from '@/services/task'
 import { formatDate as formatBaseDate, formatJSON } from '@/utils/format'
-import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList } from '@/utils/list'
+import { DEFAULT_PAGE_SIZES, normalizeList } from '@/utils/list'
 
 const records = ref([])
 const clientIpOptions = ref([])
@@ -190,6 +190,7 @@ const clientIpLoading = ref(false)
 const recordTableRef = ref(null)
 const recordPage = ref(1)
 const recordPageSize = ref(10)
+const recordTotal = ref(0)
 const pageSizes = DEFAULT_PAGE_SIZES
 const recordDetailVisible = ref(false)
 const recordDetail = ref(null)
@@ -206,10 +207,7 @@ const recordFilters = reactive({
   status: '',
 })
 
-const pagedRecords = computed(() => {
-  const start = (recordPage.value - 1) * recordPageSize.value
-  return records.value.slice(start, start + recordPageSize.value)
-})
+const pagedRecords = computed(() => records.value)
 const {
   selectedKeys: selectedRecordIds,
   handleSelectionChange: handleRecordSelectionChange,
@@ -231,16 +229,15 @@ watch(() => [recordFilters.task_name, recordFilters.workflow_name], () => {
 
 watch(() => [recordFilters.client_ip, recordFilters.execute_time_range, recordFilters.status], () => {
   clearFilterSearchTimer()
-  recordPage.value = 1
+  reloadFirstRecordPage()
+})
+
+watch(recordPage, () => {
   loadRecords()
 })
 
-watch([records, recordPageSize], () => {
-  recordPage.value = getSafePage({
-    total: records.value.length,
-    page: recordPage.value,
-    size: recordPageSize.value,
-  })
+watch(recordPageSize, () => {
+  reloadFirstRecordPage()
 })
 
 watch(pagedRecords, () => {
@@ -258,8 +255,12 @@ async function loadRecords() {
       start_time: startTime,
       end_time: endTime,
       status: recordFilters.status.trim(),
+      page_num: recordPage.value,
+      page_size: recordPageSize.value,
     })
-    records.value = sortByTimeDesc(normalizeList(data, 'records'))
+    const list = normalizeList(data, 'records')
+    records.value = sortByTimeDesc(list)
+    recordTotal.value = Number(data?.total ?? list.length)
     retainRecordSelectionByRows(records.value)
   } finally {
     loadingRecords.value = false
@@ -284,8 +285,15 @@ function handleClientIpSelectVisible(opened) {
 }
 
 function searchRecordsNow() {
+  reloadFirstRecordPage()
+}
+
+function reloadFirstRecordPage() {
+  if (recordPage.value === 1) {
+    loadRecords()
+    return
+  }
   recordPage.value = 1
-  loadRecords()
 }
 
 function getRecordSelectionKey(row) {

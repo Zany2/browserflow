@@ -8,6 +8,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/consts"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/cronexpr"
 	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	"github.com/gogf/gf/v2/frame/g"
@@ -15,11 +16,12 @@ import (
 	"github.com/gogf/gf/v2/util/grand"
 )
 
-// TaskCreate creates task 创建任务
+// TaskCreate creates task.
 func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (res *v1.TaskCreateRes, err error) {
 	name := strings.TrimSpace(req.Name)
 	description := strings.TrimSpace(req.Description)
 	workflowID := strings.TrimSpace(req.WorkflowID)
+	cronExpression := strings.TrimSpace(req.CronExpression)
 	if name == "" {
 		name = "任务-" + grand.S(8)
 	}
@@ -30,6 +32,22 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "工作流不能为空")
 		return nil, nil
 	}
+	if err := cronexpr.Validate(cronExpression); err != nil {
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), err.Error())
+		return nil, nil
+	}
+
+	workflowColumns := dao.AutomaWorkflows.Columns()
+	workflowRecord, err := dao.AutomaWorkflows.Ctx(ctx).
+		Where(workflowColumns.AutomaId, workflowID).
+		One()
+	if err != nil {
+		return nil, err
+	}
+	if workflowRecord.IsEmpty() {
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "工作流不存在，请先同步或导入工作流")
+		return nil, nil
+	}
 
 	clientIP, err := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP)
 	if err != nil {
@@ -38,6 +56,19 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 	if consts.ResolveRuntimeMode(ctx) != consts.RuntimeModeServer && clientIP == "" {
 		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "执行客户端不能为空")
 		return nil, nil
+	}
+	if clientIP != "" {
+		clientColumns := dao.Clients.Columns()
+		clientRecord, err := dao.Clients.Ctx(ctx).
+			Where(clientColumns.ClientIp, clientIP).
+			One()
+		if err != nil {
+			return nil, err
+		}
+		if clientRecord.IsEmpty() {
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "执行客户端不存在，请先确认客户端已接入")
+			return nil, nil
+		}
 	}
 
 	paramsJSON, err := taskdata.EncodeJSONMap(req.Params)
@@ -55,7 +86,7 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 		Description:    description,
 		AutomaId:       workflowID,
 		ClientIp:       clientIP,
-		CronExpression: strings.TrimSpace(req.CronExpression),
+		CronExpression: cronExpression,
 		ParamsJson:     paramsJSON,
 		Enabled:        enabled,
 	}).InsertAndGetId()

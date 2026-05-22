@@ -10,6 +10,7 @@ import (
 	taskcontroller "github.com/Zany2/browserflow/backend/internal/controller/tasks"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/cronexpr"
 	"github.com/Zany2/browserflow/backend/utility/tasklock"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcron"
@@ -18,21 +19,21 @@ import (
 )
 
 const (
-	taskCronSyncName       = "task-cron-sync"          // taskCronSyncName scheduler sync job name 调度同步任务名称
-	taskCronSyncPattern    = "*/30 * * * * *"          // taskCronSyncPattern scheduler sync interval 调度同步间隔
-	taskRecordSweepName    = "task-record-stale-sweep" // taskRecordSweepName stale record scanner job name
-	taskRecordSweepPattern = "0 * * * * *"             // taskRecordSweepPattern stale record scanner interval
+	taskCronSyncName       = "task-cron-sync"
+	taskCronSyncPattern    = "*/30 * * * * *"
+	taskRecordSweepName    = "task-record-stale-sweep"
+	taskRecordSweepPattern = "0 * * * * *"
 )
 
 var cronScheduler = struct {
-	once  sync.Once         // once starts scheduler once 确保调度器只启动一次
-	mutex sync.Mutex        // mutex protects task registry 保护任务注册表
-	tasks map[string]string // tasks registered job expressions 已注册任务表达式
+	once  sync.Once
+	mutex sync.Mutex
+	tasks map[string]string
 }{
 	tasks: make(map[string]string),
 }
 
-// StartCronScheduler starts task cron scheduler 启动任务定时调度器
+// StartCronScheduler starts task cron scheduler.
 func StartCronScheduler(ctx context.Context) {
 	cronScheduler.once.Do(func() {
 		syncCronTasks(ctx)
@@ -55,7 +56,7 @@ func StartCronScheduler(ctx context.Context) {
 	})
 }
 
-// StopCronScheduler stops task cron scheduler 停止任务定时调度器
+// StopCronScheduler stops task cron scheduler.
 func StopCronScheduler() {
 	cronScheduler.mutex.Lock()
 	defer cronScheduler.mutex.Unlock()
@@ -68,7 +69,7 @@ func StopCronScheduler() {
 	cronScheduler.tasks = make(map[string]string)
 }
 
-// syncCronTasks syncs database cron tasks into gcron 查询数据库并同步定时任务
+// syncCronTasks syncs database cron tasks into gcron.
 func syncCronTasks(ctx context.Context) {
 	columns := dao.Tasks.Columns()
 	records, err := dao.Tasks.Ctx(ctx).
@@ -84,7 +85,7 @@ func syncCronTasks(ctx context.Context) {
 	nextTasks := make(map[string]string, len(records))
 	for _, record := range records {
 		taskID := gconv.String(record[columns.Id])
-		cronExpression := normalizeCronExpression(gconv.String(record[columns.CronExpression]))
+		cronExpression := cronexpr.Normalize(gconv.String(record[columns.CronExpression]))
 		if taskID == "" || cronExpression == "" {
 			continue
 		}
@@ -119,7 +120,7 @@ func syncCronTasks(ctx context.Context) {
 	}
 }
 
-// executeCronTask executes one due cron task 执行命中的定时任务
+// executeCronTask executes one due cron task.
 func executeCronTask(ctx context.Context, taskID string) {
 	_, err := (&taskcontroller.ControllerV1{}).TaskExecute(ctx, &v1.TaskExecuteReq{
 		ID:          taskID,
@@ -130,7 +131,7 @@ func executeCronTask(ctx context.Context, taskID string) {
 	}
 }
 
-// sweepStaleTaskRecords marks stuck queued/running task records failed 兜底清理卡死执行记录
+// sweepStaleTaskRecords marks stuck queued/running task records failed.
 func sweepStaleTaskRecords(ctx context.Context) {
 	columns := dao.TaskRecords.Columns()
 	cutoff := gtime.New(time.Now().Add(-tasklock.StaleAfter))
@@ -180,17 +181,7 @@ func sweepStaleTaskRecords(ctx context.Context) {
 	}
 }
 
-// cronTaskName builds cron job name 构建定时任务名称
+// cronTaskName builds cron job name.
 func cronTaskName(taskID string) string {
 	return "task-cron-" + taskID
-}
-
-// normalizeCronExpression adapts five-field cron to gcron 适配五字段 Cron 表达式
-func normalizeCronExpression(cronExpression string) string {
-	cronExpression = strings.TrimSpace(cronExpression)
-	parts := strings.Fields(cronExpression)
-	if len(parts) == 5 {
-		return "0 " + cronExpression
-	}
-	return cronExpression
 }

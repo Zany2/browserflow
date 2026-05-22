@@ -9,6 +9,7 @@ import (
 // TaskRecordListReq 任务记录列表请求
 type TaskRecordListReq struct {
 	g.Meta `path:"/" method:"get" tags:"任务记录" summary:"获取任务记录列表"`
+	rr.CommonPageReq
 	rr.CommonTimeReq
 	TaskID       string `json:"task_id,omitempty" in:"query" dc:"任务ID"`
 	TaskName     string `json:"task_name,omitempty" in:"query" dc:"任务名称"`
