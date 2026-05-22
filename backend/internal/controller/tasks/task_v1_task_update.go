@@ -8,8 +8,9 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/consts"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/taskdata"
-	"github.com/gogf/gf/v2/errors/gerror"
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/gogf/gf/v2/util/grand"
 )
@@ -26,7 +27,8 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		description = "任务说明-" + grand.S(8)
 	}
 	if workflowID == "" {
-		return nil, gerror.New("工作流不能为空")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "工作流不能为空")
+		return nil, nil
 	}
 
 	taskID := gconv.Int64(req.ID)
@@ -37,7 +39,8 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		return nil, err
 	}
 	if record.IsEmpty() {
-		return nil, gerror.New("任务不存在")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "任务不存在")
+		return nil, nil
 	}
 
 	clientIP, err := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP)
@@ -45,7 +48,8 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		return nil, err
 	}
 	if consts.ResolveRuntimeMode(ctx) != consts.RuntimeModeServer && clientIP == "" {
-		return nil, gerror.New("执行客户端不能为空")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "执行客户端不能为空")
+		return nil, nil
 	}
 
 	paramsJSON, err := taskdata.EncodeJSONMap(req.Params)

@@ -11,6 +11,9 @@ const WORKFLOW_INVENTORY_INTERVAL_MS = 60000
 const AUTOMA_VERSION_PROBE_INTERVAL_MS = 30000
 const WORKFLOW_INVENTORY_REFRESH_COMMAND = 'automa.workflow.inventory.refresh'
 const AUTOMA_WORKFLOW_RESULT_EVENT = '__browserflow_automa_workflow_result__'
+const WORKFLOW_RUN_COMMANDS = new Set(['automa.workflow.run', 'task.execute', 'task.run'])
+const TASK_LOCK_STORAGE_KEY = 'browserflow_client_task_lock'
+const TASK_LOCK_TTL_MS = 10 * 60 * 1000
 
 // createAgentSocket creates websocket channel 创建客户端 websocket 通道
 export function createAgentSocket({
@@ -61,6 +64,7 @@ export function createAgentSocket({
   let workflowResultCommandIds = new Map()
   // workflowCommandPayloads keeps command context for final result logs 保存命令上下文用于最终结果展示
   let workflowCommandPayloads = new Map()
+  let activeExecutionId = ''
 
   const getCurrentAutomaInstalled = () => Boolean(getAutomaInstalled?.() || lastKnownAutomaInstalled)
 
@@ -188,11 +192,13 @@ export function createAgentSocket({
   // sendHeartbeat reports liveness only 上报在线心跳
   const sendHeartbeat = () => {
     if (!enableHeartbeat) return
+    renewLocalTaskLock(activeExecutionId)
     sendJSON({
       type: 'heartbeat',
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
       client_ip: currentClientIp,
+      execution_id: activeExecutionId || undefined,
       client_time: Date.now(),
     })
   }
@@ -207,26 +213,66 @@ export function createAgentSocket({
 
   // trackWorkflowCommand remembers async workflow command id 记录异步工作流命令标识
   const trackWorkflowCommand = (payload) => {
-    if (payload?.command !== 'automa.workflow.run') return
+    if (!WORKFLOW_RUN_COMMANDS.has(payload?.command)) return
 
     const commandId = String(payload.command_id || '').trim()
     const data = payload.payload || {}
     const waitResult = Boolean(data.wait_result ?? data.waitResult ?? false)
-    const executionId = String(data.execution_id || data.executionId || '').trim()
+    const executionId = resolveWorkflowExecutionId(data, commandId)
 
     if (!commandId || !executionId || waitResult) return
-    workflowResultCommandIds.set(executionId, commandId)
+    workflowResultCommandIds.set(executionId, {
+      command: payload.command,
+      commandId,
+    })
     workflowCommandPayloads.set(executionId, data)
   }
 
   // untrackWorkflowCommand removes failed async workflow mapping 清理失败的异步工作流映射
   const untrackWorkflowCommand = (payload) => {
     const data = payload?.payload || {}
-    const executionId = String(data.execution_id || data.executionId || '').trim()
+    const executionId = resolveWorkflowExecutionId(data, String(payload?.command_id || '').trim())
     if (executionId) {
       workflowResultCommandIds.delete(executionId)
       workflowCommandPayloads.delete(executionId)
     }
+  }
+
+  // ensureLocalTaskLock prevents overlapping workflow runs in one client page 本地租约防止客户端并发执行
+  const ensureLocalTaskLock = (payload) => {
+    if (!WORKFLOW_RUN_COMMANDS.has(payload?.command)) return
+
+    cleanupExpiredLocalTaskLock()
+    const data = payload.payload || {}
+    const executionId = resolveWorkflowExecutionId(data, String(payload.command_id || '').trim())
+    if (!executionId) return
+
+    const currentLock = readLocalTaskLock()
+    if (currentLock && currentLock.execution_id !== executionId && Number(currentLock.expires_at || 0) > Date.now()) {
+      throw new Error(`客户端正在执行其他任务，请稍后重试（执行标识：${currentLock.execution_id}）`)
+    }
+
+    writeLocalTaskLock({
+      execution_id: executionId,
+      command_id: String(payload.command_id || '').trim(),
+      command: payload.command,
+      task_id: data.task_id || data.taskId || '',
+      task_name: data.task_name || data.taskName || '',
+      workflow_id: data.workflow_id || data.workflowId || data.id || '',
+      started_at: currentLock?.started_at || Date.now(),
+      last_heartbeat_at: Date.now(),
+      expires_at: Date.now() + TASK_LOCK_TTL_MS,
+    })
+    activeExecutionId = executionId
+  }
+
+  const clearFinishedLocalTaskLock = (payload, data) => {
+    const executionId = resolveWorkflowExecutionId(payload?.payload || {}, String(payload?.command_id || '').trim())
+    if (!executionId) return
+    const status = String(data?.status || '').toLowerCase()
+    if (['queued', 'submitted', 'pending', 'running'].includes(status)) return
+    clearLocalTaskLock(executionId)
+    if (activeExecutionId === executionId) activeExecutionId = ''
   }
 
   // handleWorkflowResultEvent forwards async final result 回传异步工作流最终结果
@@ -235,15 +281,17 @@ export function createAgentSocket({
     const executionId = String(
       detail.execution_id || detail.executionId || detail.request_id || detail.requestId || '',
     ).trim()
-    const commandId = workflowResultCommandIds.get(executionId)
-    if (!commandId) return
+    const commandContext = workflowResultCommandIds.get(executionId)
+    if (!commandContext) return
 
     workflowResultCommandIds.delete(executionId)
     const commandPayload = workflowCommandPayloads.get(executionId) || {}
     workflowCommandPayloads.delete(executionId)
+    clearLocalTaskLock(executionId)
+    if (activeExecutionId === executionId) activeExecutionId = ''
     const success = detail.ok !== false && detail.status !== 'error'
     onCommandResult?.({
-      command: 'automa.workflow.run',
+      command: commandContext.command,
       payload: commandPayload,
       result: detail,
       success,
@@ -252,7 +300,7 @@ export function createAgentSocket({
     })
     sendResult({
       type: 'agent_result',
-      command_id: commandId,
+      command_id: commandContext.commandId,
       success,
       data: detail,
       error: success ? undefined : String(detail.message || detail.error || '').trim(),
@@ -359,6 +407,26 @@ export function createAgentSocket({
 
     if (payload.type !== 'agent_command') return
 
+    try {
+      ensureLocalTaskLock(payload)
+    } catch (error) {
+      onCommandResult?.({
+        command: payload.command,
+        payload: payload.payload || {},
+        result: null,
+        success: false,
+        error: error.message,
+        async: false,
+      })
+      sendResult({
+        type: 'agent_result',
+        command_id: payload.command_id,
+        success: false,
+        error: error.message,
+      })
+      return
+    }
+
     trackWorkflowCommand(payload)
 
     try {
@@ -380,8 +448,10 @@ export function createAgentSocket({
         success: true,
         data,
       })
+      clearFinishedLocalTaskLock(payload, data)
     } catch (error) {
       untrackWorkflowCommand(payload)
+      clearLocalTaskLock(resolveWorkflowExecutionId(payload?.payload || {}, String(payload?.command_id || '').trim()))
       onCommandResult?.({
         command: payload.command,
         payload: payload.payload || {},
@@ -508,6 +578,7 @@ export function createAgentSocket({
     })
   }
 
+  cleanupExpiredLocalTaskLock()
   window.addEventListener(AUTOMA_WORKFLOW_RESULT_EVENT, handleWorkflowResultEvent)
 
   connect()
@@ -517,10 +588,63 @@ export function createAgentSocket({
     window.removeEventListener(AUTOMA_WORKFLOW_RESULT_EVENT, handleWorkflowResultEvent)
     workflowResultCommandIds.clear()
     workflowCommandPayloads.clear()
+    activeExecutionId = ''
     if (reconnectTimer) window.clearTimeout(reconnectTimer)
     if (automaRefreshTimer) window.clearTimeout(automaRefreshTimer)
     clearSocketTimers()
     socket?.close()
+  }
+}
+
+// resolveWorkflowExecutionId returns the bridge execution id 解析工作流桥接执行标识
+function resolveWorkflowExecutionId(data = {}, fallbackId = '') {
+  return String(data.execution_id || data.executionId || data.task_id || data.taskId || fallbackId || '').trim()
+}
+
+function readLocalTaskLock() {
+  try {
+    const rawValue = window.localStorage.getItem(TASK_LOCK_STORAGE_KEY)
+    return rawValue ? JSON.parse(rawValue) : null
+  } catch {
+    return null
+  }
+}
+
+function writeLocalTaskLock(lock) {
+  try {
+    window.localStorage.setItem(TASK_LOCK_STORAGE_KEY, JSON.stringify(lock))
+  } catch {
+    // localStorage may be unavailable in restricted browser contexts.
+  }
+}
+
+function cleanupExpiredLocalTaskLock() {
+  const currentLock = readLocalTaskLock()
+  if (currentLock && Number(currentLock.expires_at || 0) <= Date.now()) {
+    clearLocalTaskLock(currentLock.execution_id)
+  }
+}
+
+function renewLocalTaskLock(executionId) {
+  if (!executionId) return
+  const currentLock = readLocalTaskLock()
+  if (!currentLock || currentLock.execution_id !== executionId) return
+  writeLocalTaskLock({
+    ...currentLock,
+    last_heartbeat_at: Date.now(),
+    expires_at: Date.now() + TASK_LOCK_TTL_MS,
+  })
+}
+
+function clearLocalTaskLock(executionId = '') {
+  try {
+    if (executionId) {
+      const currentLock = readLocalTaskLock()
+      if (currentLock && currentLock.execution_id && currentLock.execution_id !== executionId) return
+    }
+    window.localStorage.removeItem(TASK_LOCK_STORAGE_KEY)
+  } catch {
+    // Ignore storage cleanup failures.
   }
 }
 

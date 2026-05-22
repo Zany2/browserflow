@@ -7,6 +7,8 @@ import (
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/utility/taskdata"
+	"github.com/gogf/gf/v2/os/gtime"
+	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // TaskList returns tasks 获取任务列表
@@ -55,12 +57,40 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 		return nil, err
 	}
 
+	lastExecutedMap := make(map[int64]*gtime.Time, len(records))
+	taskIDs := make([]int64, 0, len(records))
+	for _, record := range records {
+		taskID := gconv.Int64(record[columns.Id])
+		if taskID > 0 {
+			taskIDs = append(taskIDs, taskID)
+		}
+	}
+	if len(taskIDs) > 0 {
+		recordColumns := dao.TaskRecords.Columns()
+		latestRecords, err := dao.TaskRecords.Ctx(ctx).
+			Fields(recordColumns.TaskId, "MAX(COALESCE("+recordColumns.StartedAt+", "+recordColumns.CreatedAt+")) AS last_executed_at").
+			WhereIn(recordColumns.TaskId, taskIDs).
+			Group(recordColumns.TaskId).
+			All()
+		if err != nil {
+			return nil, err
+		}
+		for _, record := range latestRecords {
+			taskID := gconv.Int64(record[recordColumns.TaskId])
+			lastExecutedAt := gconv.Time(record["last_executed_at"])
+			if taskID > 0 && !lastExecutedAt.IsZero() {
+				lastExecutedMap[taskID] = gtime.NewFromTime(lastExecutedAt)
+			}
+		}
+	}
+
 	list := make([]*v1.TaskListResModel, 0, len(records))
 	for _, record := range records {
 		item, mapErr := taskdata.BuildTaskMap(ctx, record)
 		if mapErr != nil {
 			return nil, mapErr
 		}
+		item.LastExecutedAt = lastExecutedMap[gconv.Int64(record[columns.Id])]
 		list = append(list, item)
 	}
 

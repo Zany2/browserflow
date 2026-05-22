@@ -67,11 +67,6 @@
             {{ getScheduleText(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="参数" min-width="180" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getTaskParamCount(row) }}
-          </template>
-        </el-table-column>
         <el-table-column label="状态" width="86" align="center" class-name="quick-edit-column">
           <template #default="{ row }">
             <div class="quick-edit-cell">
@@ -87,6 +82,11 @@
         <el-table-column label="创建时间" width="170" class-name="nowrap-column">
           <template #default="{ row }">
             {{ formatDate(row.created_at || row.createdAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="最近执行时间" width="170" class-name="nowrap-column">
+          <template #default="{ row }">
+            {{ formatDate(row.last_executed_at || row.lastExecutedAt) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" align="center">
@@ -382,6 +382,38 @@ const taskPage = ref(1)
 const taskPageSize = ref(10)
 const pageSizes = DEFAULT_PAGE_SIZES
 const clientWorkflowCheckPageSize = DEFAULT_PAGE_SIZES[0]
+const CRON_MONTH_NAMES = {
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+}
+const CRON_WEEK_NAMES = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+}
+const CRON_PREDEFINED_PATTERNS = new Set([
+  '@yearly',
+  '@annually',
+  '@monthly',
+  '@weekly',
+  '@daily',
+  '@midnight',
+  '@hourly',
+])
 const autoParamItems = ref([])
 const paramEntries = ref([createEmptyParamEntry()])
 const {
@@ -811,6 +843,15 @@ function buildTaskPayload() {
   const params = buildParamObject()
   if (params === null) return null
 
+  const cronExpression = taskForm.cron_expression.trim()
+  if (!isValidCronExpression(cronExpression)) {
+    appMessage({
+      type: APP_MESSAGE_TYPE.warning,
+      message: 'Cron 表达式格式不正确，请填写 5 段或 6 段表达式，例如 */10 * * * * 或 0 */10 * * * *',
+    })
+    return null
+  }
+
   return {
     name: taskForm.name.trim(),
     description: taskForm.description.trim(),
@@ -819,11 +860,69 @@ function buildTaskPayload() {
     client_id: taskForm.client_id.trim(),
     client_name: taskForm.client_name.trim(),
     client_ip: taskForm.client_ip.trim(),
-    cron_expression: taskForm.cron_expression.trim(),
+    cron_expression: cronExpression,
     run_once_after_create: false,
     params,
     enabled: taskForm.enabled,
   }
+}
+
+function isValidCronExpression(expression) {
+  const cronExpression = String(expression || '').trim()
+  if (!cronExpression) return true
+  if (CRON_PREDEFINED_PATTERNS.has(cronExpression.toLowerCase())) return true
+  if (/^@every\s+\d+(ns|us|µs|ms|s|m|h)$/i.test(cronExpression)) return true
+
+  const parts = cronExpression.split(/\s+/)
+  if (parts.length !== 5 && parts.length !== 6) return false
+
+  const normalizedParts = parts.length === 5 ? ['0', ...parts] : parts
+  const ranges = [
+    { min: 0, max: 59, names: null, allowQuestion: false },
+    { min: 0, max: 59, names: null, allowQuestion: false },
+    { min: 0, max: 23, names: null, allowQuestion: false },
+    { min: 1, max: 31, names: null, allowQuestion: true },
+    { min: 1, max: 12, names: CRON_MONTH_NAMES, allowQuestion: false },
+    { min: 0, max: 6, names: CRON_WEEK_NAMES, allowQuestion: true },
+  ]
+
+  return normalizedParts.every((part, index) => isValidCronPart(part, ranges[index]))
+}
+
+function isValidCronPart(part, range) {
+  if (!part) return false
+  if (part === '*') return true
+  if (range.allowQuestion && part === '?') return true
+
+  return part.split(',').every((item) => isValidCronListItem(item, range))
+}
+
+function isValidCronListItem(item, range) {
+  if (!item) return false
+  const [base, step] = item.split('/')
+  if (item.split('/').length > 2) return false
+  if (step !== undefined && (!/^\d+$/.test(step) || Number(step) <= 0)) return false
+  if (base === '*') return true
+  if (range.allowQuestion && base === '?') return true
+  if (base.includes('-')) {
+    const [start, end] = base.split('-')
+    if (!start || !end || base.split('-').length !== 2) return false
+    const startValue = parseCronPartValue(start, range)
+    const endValue = parseCronPartValue(end, range)
+    return startValue !== null && endValue !== null && startValue <= endValue
+  }
+
+  return parseCronPartValue(base, range) !== null
+}
+
+function parseCronPartValue(value, range) {
+  const text = String(value || '').trim()
+  const namedValue = range.names?.[text.toLowerCase()]
+  if (namedValue !== undefined) return namedValue
+  if (!/^\d+$/.test(text)) return null
+
+  const numberValue = Number(text)
+  return numberValue >= range.min && numberValue <= range.max ? numberValue : null
 }
 
 function buildTaskPayloadFromRow(row, overrides = {}) {
@@ -1176,10 +1275,6 @@ function getClientOptionLabel(row) {
 function getTaskClientIp(row) {
   const client = findClientById(row?.client_id)
   return row?.client_ip || (client ? getClientIp(client) : '') || '自动匹配'
-}
-
-function getTaskParamCount(row) {
-  return Object.keys(row?.params || {}).length
 }
 
 function getScheduleText(row) {

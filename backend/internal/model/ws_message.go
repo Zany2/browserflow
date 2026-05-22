@@ -81,6 +81,8 @@ type WSRequest struct {
 	Hostname string `json:"hostname,omitempty"`
 	// CommandID command id 命令标识
 	CommandID string `json:"command_id,omitempty"`
+	// ExecutionID workflow execution id 工作流执行标识
+	ExecutionID string `json:"execution_id,omitempty"`
 	// Data result data 结果数据
 	Data map[string]any `json:"data,omitempty"`
 	// Workflows client workflow list 客户端工作流列表

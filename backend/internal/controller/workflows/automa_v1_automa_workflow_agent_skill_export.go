@@ -12,6 +12,10 @@ import (
 
 // WorkflowAgentExportSkill exports agent workflows as SKILL.md 导出执行端工作流为 SKILL.md
 func (c *ControllerV1) WorkflowAgentExportSkill(ctx context.Context, req *v1.WorkflowAgentExportSkillReq) (res *v1.WorkflowAgentExportSkillRes, err error) {
+	if !requireWindowsMode(ctx) {
+		return nil, nil
+	}
+
 	browserID, workflows, err := workflowagent.RequestWorkflowList(ctx, req.BrowserID)
 	if err != nil {
 		// Business guard 业务前置条件不满足时返回可读提示

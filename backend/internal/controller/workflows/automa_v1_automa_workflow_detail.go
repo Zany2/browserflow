@@ -11,9 +11,9 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
-	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -36,7 +36,8 @@ func (c *ControllerV1) WorkflowDetail(ctx context.Context, req *v1.WorkflowDetai
 			}
 		}
 		if item.Id <= 0 {
-			return nil, gerror.New("automa workflow not found")
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "工作流不存在")
+			return nil, nil
 		}
 		record = &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
 		if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {

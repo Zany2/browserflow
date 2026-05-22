@@ -98,6 +98,12 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 	sourceIP := strings.TrimSpace(req.SourceIP)
 	automaID := strings.TrimSpace(req.AutomaID)
 	mode := strings.TrimSpace(req.Mode)
+	if !serverMode {
+		if req.Refresh || sourceIP != "" || mode == "workflow" {
+			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
+		}
+		mode = "client"
+	}
 	if serverMode && sourceIP != "" && !workflowcache.IsClientOnline(ctx, sourceIP) {
 		return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 	}
@@ -118,23 +124,25 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 	}
 
 	var cacheItems []workflowcache.WorkflowItem
-	if sourceIP != "" {
-		cacheItems, err = workflowcache.ListClientWorkflows(ctx, sourceIP)
-	} else if mode == "workflow" {
-		if automaID != "" {
-			cacheItems, err = workflowcache.ListWorkflowClients(ctx, automaID)
-		} else {
-			clientIPs, listErr := workflowcache.ListOnlineClients(ctx)
-			if listErr != nil {
-				return nil, listErr
-			}
-			cacheItems = make([]workflowcache.WorkflowItem, 0)
-			for _, clientIP := range clientIPs {
-				items, listErr := workflowcache.ListClientWorkflows(ctx, clientIP)
+	if serverMode {
+		if sourceIP != "" {
+			cacheItems, err = workflowcache.ListClientWorkflows(ctx, sourceIP)
+		} else if mode == "workflow" {
+			if automaID != "" {
+				cacheItems, err = workflowcache.ListWorkflowClients(ctx, automaID)
+			} else {
+				clientIPs, listErr := workflowcache.ListOnlineClients(ctx)
 				if listErr != nil {
 					return nil, listErr
 				}
-				cacheItems = append(cacheItems, items...)
+				cacheItems = make([]workflowcache.WorkflowItem, 0)
+				for _, clientIP := range clientIPs {
+					items, listErr := workflowcache.ListClientWorkflows(ctx, clientIP)
+					if listErr != nil {
+						return nil, listErr
+					}
+					cacheItems = append(cacheItems, items...)
+				}
 			}
 		}
 	}
@@ -158,7 +166,26 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 			}
 			itemAutomaID := strings.TrimSpace(item.AutomaId)
 			serverRecord := serverRecords[itemAutomaID]
-			synced, hasUpdate, status := resolveWorkflowSyncState(serverRecord, item.UpdatedAtAutoma, item.ContentHash)
+			synced := false
+			hasUpdate := true
+			status := "not_synced"
+			if serverRecord != nil {
+				status = "has_update"
+				serverContentHash := strings.TrimSpace(serverRecord.ContentHash)
+				clientContentHash := strings.TrimSpace(item.ContentHash)
+				if serverContentHash != "" && clientContentHash != "" && serverContentHash == clientContentHash {
+					synced = true
+					hasUpdate = false
+					status = "synced"
+				} else if item.UpdatedAtAutoma > 0 && serverRecord.UpdatedAtAutoma > 0 {
+					if item.UpdatedAtAutoma > serverRecord.UpdatedAtAutoma {
+						status = "client_newer"
+					} else if item.UpdatedAtAutoma < serverRecord.UpdatedAtAutoma {
+						hasUpdate = false
+						status = "server_newer"
+					}
+				}
+			}
 			if serverRecord != nil {
 				serverAutomaName := strings.TrimSpace(serverRecord.AutomaName)
 				if serverAutomaName == "" {
@@ -286,7 +313,26 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		}
 		itemContentHash := strings.TrimSpace(contentHash)
 		serverRecord := serverRecords[itemAutomaID]
-		synced, hasUpdate, status := resolveWorkflowSyncState(serverRecord, gconv.Int64(item["updatedAt"]), itemContentHash)
+		synced := false
+		hasUpdate := true
+		status := "not_synced"
+		if serverRecord != nil {
+			status = "has_update"
+			serverContentHash := strings.TrimSpace(serverRecord.ContentHash)
+			clientUpdatedAt := gconv.Int64(item["updatedAt"])
+			if serverContentHash != "" && itemContentHash != "" && serverContentHash == itemContentHash {
+				synced = true
+				hasUpdate = false
+				status = "synced"
+			} else if clientUpdatedAt > 0 && serverRecord.UpdatedAtAutoma > 0 {
+				if clientUpdatedAt > serverRecord.UpdatedAtAutoma {
+					status = "client_newer"
+				} else if clientUpdatedAt < serverRecord.UpdatedAtAutoma {
+					hasUpdate = false
+					status = "server_newer"
+				}
+			}
+		}
 		if serverRecord != nil {
 			serverAutomaName := strings.TrimSpace(serverRecord.AutomaName)
 			if serverAutomaName == "" {
@@ -327,29 +373,4 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		end = total
 	}
 	return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}, nil
-}
-
-// resolveWorkflowSyncState compares content hash first, then updatedAt. 优先用内容哈希判断一致，再用更新时间判断新旧。
-func resolveWorkflowSyncState(serverRecord *model.AutomaWorkflowRecord, clientUpdatedAt int64, clientContentHash string) (synced bool, hasUpdate bool, status string) {
-	if serverRecord == nil {
-		return false, true, "not_synced"
-	}
-
-	serverContentHash := strings.TrimSpace(serverRecord.ContentHash)
-	clientContentHash = strings.TrimSpace(clientContentHash)
-	if serverContentHash != "" && clientContentHash != "" && serverContentHash == clientContentHash {
-		return true, false, "synced"
-	}
-
-	serverUpdatedAt := serverRecord.UpdatedAtAutoma
-	if clientUpdatedAt > 0 && serverUpdatedAt > 0 {
-		if clientUpdatedAt > serverUpdatedAt {
-			return false, true, "client_newer"
-		}
-		if clientUpdatedAt < serverUpdatedAt {
-			return false, false, "server_newer"
-		}
-	}
-
-	return false, true, "has_update"
 }

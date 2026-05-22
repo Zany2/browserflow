@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -17,12 +18,12 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
 	"github.com/Zany2/browserflow/backend/utility/workflowcache"
 	"github.com/Zany2/browserflow/backend/utility/workflowhash"
-	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -63,8 +64,13 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 			}
 		}
 		if sourceIP != "" && len(selectedIDs) > 0 {
-			if serverMode && !workflowcache.IsClientOnline(ctx, sourceIP) {
-				return nil, gerror.Newf("客户端 %s 不在线或 WebSocket 未连接", sourceIP)
+			if !serverMode {
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "Windows mode does not read Server client workflow cache")
+				return nil, nil
+			}
+			if !workflowcache.IsClientOnline(ctx, sourceIP) {
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("客户端 %s 不在线或 WebSocket 未连接", sourceIP))
+				return nil, nil
 			}
 			cachedWorkflows := make([]localmodel.JSONMap, 0, len(selectedIDs))
 			for _, workflowID := range selectedIDs {
@@ -73,7 +79,8 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 					return nil, loadErr
 				}
 				if !ok {
-					return nil, gerror.Newf("瀹㈡埛绔伐浣滄祦缂撳瓨涓嶅瓨鍦細%s", workflowID)
+					rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("客户端工作流缓存不存在：%s", workflowID))
+					return nil, nil
 				}
 				var workflow localmodel.JSONMap
 				payloadBytes, loadErr := json.Marshal(payload)
@@ -168,11 +175,13 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 	for index, item := range req.WorkflowJsonDataList {
 		bytes, err := json.Marshal(item)
 		if err != nil {
-			return nil, gerror.Wrapf(err, "第%d个工作流规范化失败", index+1)
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("第%d个工作流规范化失败", index+1))
+			return nil, nil
 		}
 		var payload map[string]any
 		if err = json.Unmarshal(bytes, &payload); err != nil {
-			return nil, gerror.Wrapf(err, "第%d个工作流规范化失败", index+1)
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("第%d个工作流规范化失败", index+1))
+			return nil, nil
 		}
 		rawBytes, err := json.Marshal(payload)
 		if err != nil {

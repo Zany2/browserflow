@@ -37,6 +37,8 @@ type TaskResModel struct {
 	Enabled bool `json:"enabled" dc:"是否启用"`
 	// CreatedAt created time 创建时间
 	CreatedAt *gtime.Time `json:"created_at" dc:"创建时间"`
+	// LastExecutedAt latest execution time 最近执行时间
+	LastExecutedAt *gtime.Time `json:"last_executed_at" dc:"最近执行时间"`
 	// UpdatedAt updated time 更新时间
 	UpdatedAt *gtime.Time `json:"updated_at" dc:"更新时间"`
 	// DeletedAt deleted time 删除时间
