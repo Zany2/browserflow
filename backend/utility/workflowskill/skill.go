@@ -308,6 +308,11 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("- If the target client is busy, offline, or does not own the workflow, the API creates a failed execution record with a readable reason.\n")
 	sb.WriteString("- Per-client Redis locks prevent the same client from running multiple Automa workflows concurrently.\n")
 	sb.WriteString("- Use `trigger_type: \"skill\"` when executing tasks from this skill so execution records are easy to filter.\n\n")
+	sb.WriteString("## Execution Mode Rules\n\n")
+	sb.WriteString("- Use asynchronous execution when the user only asks to start, trigger, submit, launch, run, or execute a task and does not ask for returned data or final completion. Set `wait_result` to `false`.\n")
+	sb.WriteString("- Use synchronous waiting when the user asks to get, query, search, extract, collect, return, fetch, read, wait for completion, or confirm final success/failure. Set `wait_result` to `true`, set a reasonable `timeout`, and request returned data if needed.\n")
+	sb.WriteString("- For variable results, request `return_data.variables: [\"browserflow_output\"]` and read `result.data.variables.browserflow_output` first. If it is missing, report that the workflow completed but did not provide a BrowserFlow output variable.\n")
+	sb.WriteString("- For table results, set `return_data.include_table` to `true`. BrowserFlow stores larger table payloads as task record files and returns the execution record for follow-up inspection.\n\n")
 	sb.WriteString("## API Endpoints\n\n")
 	sb.WriteString("### Create Task\n\n")
 	sb.WriteString("```bash\n")
@@ -332,6 +337,24 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 		"trigger_type": "skill",
 		"client_ip":    "",
 		"params":       firstVariables,
+	}))))
+	sb.WriteString("```\n\n")
+	sb.WriteString("### Execute Existing Task And Wait For Result\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl -X POST '%s/tasks/{task_id}/execute' \\\n", baseURL))
+	sb.WriteString("  -H 'Content-Type: application/json' \\\n")
+	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
+		"trigger_type": "skill",
+		"client_ip":    "",
+		"params":       firstVariables,
+		"wait_result":  true,
+		"timeout":      300,
+		"return_data": map[string]any{
+			"variables":       []string{"browserflow_output"},
+			"include_table":   true,
+			"table_limit":     100,
+			"include_history": false,
+		},
 	}))))
 	sb.WriteString("```\n\n")
 	sb.WriteString("### Query Task Records\n\n")

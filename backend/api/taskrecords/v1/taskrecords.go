@@ -21,7 +21,7 @@ type TaskRecordListReq struct {
 	Keyword      string `json:"keyword,omitempty" in:"query" dc:"关键字"`
 }
 
-// TaskRecordListResModel task record list item 任务记录列表项
+// TaskRecordListResModel 任务记录列表项
 type TaskRecordListResModel = model.TaskRecordResModel
 
 // TaskRecordListRes 任务记录列表响应
@@ -38,8 +38,18 @@ type TaskRecordDetailReq struct {
 
 // TaskRecordDetailRes 任务记录详情响应
 type TaskRecordDetailRes struct {
-	Record *TaskRecordListResModel `json:"record,omitempty" dc:"任务记录详情"`
+	Record *TaskRecordListResModel         `json:"record,omitempty" dc:"任务记录详情"`
+	Files  []*model.TaskRecordFileResModel `json:"files,omitempty" dc:"执行结果文件"`
 }
+
+// TaskRecordFileDownloadReq downloads one task record result file.
+type TaskRecordFileDownloadReq struct {
+	g.Meta `path:"/files/{id}/download" method:"get" tags:"任务记录" summary:"下载任务记录结果文件"`
+	ID     string `json:"id" in:"path" dc:"结果文件ID"`
+}
+
+// TaskRecordFileDownloadRes download response.
+type TaskRecordFileDownloadRes struct{}
 
 // TaskRecordBatchDeleteReq batch deletes task records.
 type TaskRecordBatchDeleteReq struct {

@@ -108,12 +108,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="110" align="center">
+        <el-table-column label="操作" width="150" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click="openRecordDetail(row)">详情</el-button>
             <el-button link type="success" :disabled="!row.task_id" @click="handleRetryRecord(row)">
               重试
             </el-button>
+            <el-button link type="danger" @click="handleDeleteRecord(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -159,6 +160,37 @@
         </div>
 
         <div class="detail-block">
+          <h3>结果文件</h3>
+          <el-table :data="recordDetailFiles" border size="small" empty-text="暂无结果文件">
+            <el-table-column prop="file_name" label="文件名" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="file_type" label="类型" width="110" />
+            <el-table-column label="行数" width="90" align="right">
+              <template #default="{ row }">
+                {{ formatNumber(row.row_count) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="大小" width="100" align="right">
+              <template #default="{ row }">
+                {{ formatFileSize(row.file_size) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="创建时间" width="160">
+              <template #default="{ row }">
+                {{ formatDate(row.created_at) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+            <el-table-column label="操作" width="80" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" :disabled="!row.id" @click="downloadRecordFile(row)">
+                  下载
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <div class="detail-block">
           <h3>原始记录</h3>
           <pre class="detail-json">{{ formatJSON(recordDetail) }}</pre>
         </div>
@@ -183,7 +215,13 @@ import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
 import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { listClients } from '@/services/client'
-import { deleteTaskRecords, executeTask, getTaskRecordDetail, listTaskRecords } from '@/services/task'
+import {
+  deleteTaskRecords,
+  executeTask,
+  getTaskRecordDetail,
+  getTaskRecordFileDownloadUrl,
+  listTaskRecords,
+} from '@/services/task'
 import { formatDate as formatBaseDate, formatJSON } from '@/utils/format'
 import { DEFAULT_PAGE_SIZES, normalizeList } from '@/utils/list'
 
@@ -198,6 +236,7 @@ const recordTotal = ref(0)
 const pageSizes = DEFAULT_PAGE_SIZES
 const recordDetailVisible = ref(false)
 const recordDetail = ref(null)
+const recordDetailFiles = ref([])
 const {
   run: scheduleFilterSearch,
   cancel: clearFilterSearchTimer,
@@ -308,11 +347,18 @@ function getRecordSelectionKey(row) {
 
 async function openRecordDetail(row) {
   recordDetail.value = row
+  recordDetailFiles.value = []
   recordDetailVisible.value = true
   if (!row.id) return
 
   const data = await getTaskRecordDetail(row.id)
   recordDetail.value = data.record || row
+  recordDetailFiles.value = Array.isArray(data.files) ? data.files : []
+}
+
+function downloadRecordFile(row) {
+  if (!row?.id) return
+  window.open(getTaskRecordFileDownloadUrl(row.id), '_blank', 'noopener')
 }
 
 async function handleRetryRecord(row) {
@@ -342,6 +388,23 @@ async function handleBatchDeleteRecords() {
   await deleteTaskRecords(ids)
   resetRecordSelection(recordTableRef)
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '已删除选中执行记录' })
+  await loadRecords()
+}
+
+async function handleDeleteRecord(row) {
+  const id = Number(row?.id || 0)
+  if (id <= 0) return
+
+  const confirmed = await appConfirm({
+    title: '删除执行记录',
+    message: '确认删除这条执行记录吗？',
+    type: APP_CONFIRM_TYPE.danger,
+    confirmText: '删除',
+  })
+  if (!confirmed) return
+
+  await deleteTaskRecords([id])
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '执行记录已删除' })
   await loadRecords()
 }
 
@@ -405,6 +468,19 @@ function formatDuration(value) {
   if (duration <= 0) return ''
   if (duration < 1000) return `${duration}ms`
   return `${(duration / 1000).toFixed(duration >= 10000 ? 0 : 1)}s`
+}
+
+function formatFileSize(value) {
+  const size = Number(value) || 0
+  if (size <= 0) return ''
+  if (size < 1024) return `${size}B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)}KB`
+  return `${(size / 1024 / 1024).toFixed(1)}MB`
+}
+
+function formatNumber(value) {
+  const numberValue = Number(value) || 0
+  return numberValue > 0 ? String(numberValue) : ''
 }
 
 function formatDate(value) {

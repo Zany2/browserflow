@@ -90,11 +90,14 @@ type TaskDeleteRes struct {
 // TaskExecuteReq 执行任务请求
 type TaskExecuteReq struct {
 	g.Meta      `path:"/{id}/execute" method:"post" tags:"任务" summary:"执行任务"`
-	ID          string        `json:"id" in:"path" dc:"任务ID"`
-	ClientID    string        `json:"client_id,omitempty" dc:"客户端ID"`
-	ClientIP    string        `json:"client_ip,omitempty" dc:"客户端IP"`
-	TriggerType string        `json:"trigger_type,omitempty" dc:"触发类型"`
-	Params      model.JSONMap `json:"params,omitempty" dc:"执行参数"`
+	ID          string                             `json:"id" in:"path" dc:"任务ID"`
+	ClientID    string                             `json:"client_id,omitempty" dc:"客户端ID"`
+	ClientIP    string                             `json:"client_ip,omitempty" dc:"客户端IP"`
+	TriggerType string                             `json:"trigger_type,omitempty" dc:"触发类型"`
+	Params      model.JSONMap                      `json:"params,omitempty" dc:"执行参数"`
+	WaitResult  bool                               `json:"wait_result" d:"false" dc:"是否等待执行完成"`
+	Timeout     int                                `json:"timeout" d:"300" dc:"等待超时秒数"`
+	ReturnData  *model.WorkflowExecutionReturnData `json:"return_data" dc:"回传数据配置"`
 }
 
 // TaskExecuteRes 执行任务响应

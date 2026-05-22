@@ -23,6 +23,7 @@ const (
 	taskCronSyncPattern    = "*/30 * * * * *"
 	taskRecordSweepName    = "task-record-stale-sweep"
 	taskRecordSweepPattern = "0 * * * * *"
+	taskCronSyncBatchSize  = 500
 )
 
 var cronScheduler = struct {
@@ -42,17 +43,17 @@ func StartCronScheduler(ctx context.Context) {
 		if _, err := gcron.AddSingleton(ctx, taskCronSyncPattern, func(ctx context.Context) {
 			syncCronTasks(ctx)
 		}, taskCronSyncName); err != nil {
-			g.Log().Line().Errorf(ctx, "启动任务定时调度同步器失败: %+v", err)
+			g.Log().Line().Errorf(ctx, "start task cron sync failed: %+v", err)
 			return
 		}
 		if _, err := gcron.AddSingleton(ctx, taskRecordSweepPattern, func(ctx context.Context) {
 			sweepStaleTaskRecords(ctx)
 		}, taskRecordSweepName); err != nil {
-			g.Log().Line().Errorf(ctx, "启动任务执行记录兜底清理器失败: %+v", err)
+			g.Log().Line().Errorf(ctx, "start stale task record sweep failed: %+v", err)
 			return
 		}
 
-		g.Log().Line().Info(ctx, "任务定时调度器已启动")
+		g.Log().Line().Info(ctx, "task cron scheduler started")
 	})
 }
 
@@ -71,25 +72,10 @@ func StopCronScheduler() {
 
 // syncCronTasks syncs database cron tasks into gcron.
 func syncCronTasks(ctx context.Context) {
-	columns := dao.Tasks.Columns()
-	records, err := dao.Tasks.Ctx(ctx).
-		Where(columns.Enabled, true).
-		Where(columns.CronExpression+" IS NOT NULL").
-		Where(columns.CronExpression+" <> ?", "").
-		All()
+	nextTasks, err := loadCronTaskMap(ctx)
 	if err != nil {
-		g.Log().Line().Errorf(ctx, "查询定时任务失败: %+v", err)
+		g.Log().Line().Errorf(ctx, "query cron tasks failed: %+v", err)
 		return
-	}
-
-	nextTasks := make(map[string]string, len(records))
-	for _, record := range records {
-		taskID := gconv.String(record[columns.Id])
-		cronExpression := cronexpr.Normalize(gconv.String(record[columns.CronExpression]))
-		if taskID == "" || cronExpression == "" {
-			continue
-		}
-		nextTasks[cronTaskName(taskID)] = cronExpression
 	}
 
 	cronScheduler.mutex.Lock()
@@ -112,11 +98,48 @@ func syncCronTasks(ctx context.Context) {
 		if _, err := gcron.AddSingleton(ctx, cronExpression, func(ctx context.Context) {
 			executeCronTask(ctx, jobTaskID)
 		}, jobName); err != nil {
-			g.Log().Line().Warningf(ctx, "注册任务定时调度失败: task_id=%s cron=%s err=%+v", taskID, cronExpression, err)
+			g.Log().Line().Warningf(ctx, "register cron task failed: task_id=%s cron=%s err=%+v", taskID, cronExpression, err)
 			continue
 		}
 		cronScheduler.tasks[jobName] = cronExpression
-		g.Log().Line().Infof(ctx, "已注册任务定时调度: task_id=%s cron=%s", taskID, cronExpression)
+		g.Log().Line().Infof(ctx, "registered cron task: task_id=%s cron=%s", taskID, cronExpression)
+	}
+}
+
+func loadCronTaskMap(ctx context.Context) (map[string]string, error) {
+	columns := dao.Tasks.Columns()
+	result := make(map[string]string)
+	lastID := int64(0)
+
+	for {
+		records, err := dao.Tasks.Ctx(ctx).
+			Fields(columns.Id, columns.CronExpression).
+			Where(columns.Enabled, true).
+			Where(columns.CronExpression+" IS NOT NULL").
+			Where(columns.CronExpression+" <> ?", "").
+			WhereGT(columns.Id, lastID).
+			OrderAsc(columns.Id).
+			Limit(taskCronSyncBatchSize).
+			All()
+		if err != nil {
+			return nil, err
+		}
+		if len(records) == 0 {
+			return result, nil
+		}
+
+		for _, record := range records {
+			lastID = gconv.Int64(record[columns.Id])
+			taskID := gconv.String(record[columns.Id])
+			cronExpression := cronexpr.Normalize(gconv.String(record[columns.CronExpression]))
+			if taskID == "" || cronExpression == "" {
+				continue
+			}
+			result[cronTaskName(taskID)] = cronExpression
+		}
+		if len(records) < taskCronSyncBatchSize {
+			return result, nil
+		}
 	}
 }
 
@@ -127,7 +150,7 @@ func executeCronTask(ctx context.Context, taskID string) {
 		TriggerType: "cron",
 	})
 	if err != nil {
-		g.Log().Line().Warningf(ctx, "执行定时任务失败: task_id=%s err=%+v", taskID, err)
+		g.Log().Line().Warningf(ctx, "execute cron task failed: task_id=%s err=%+v", taskID, err)
 	}
 }
 
@@ -141,7 +164,7 @@ func sweepStaleTaskRecords(ctx context.Context) {
 		Limit(100).
 		All()
 	if err != nil {
-		g.Log().Line().Warningf(ctx, "扫描卡死任务记录失败: %+v", err)
+		g.Log().Line().Warningf(ctx, "scan stale task records failed: %+v", err)
 		return
 	}
 
@@ -155,7 +178,7 @@ func sweepStaleTaskRecords(ctx context.Context) {
 		commandID := "task-record-" + gconv.String(recordID)
 		lockInfo, hasLock, lockErr := tasklock.Get(ctx, clientIP)
 		if lockErr != nil {
-			g.Log().Line().Warningf(ctx, "读取客户端任务锁失败: record_id=%d client_ip=%s err=%+v", recordID, clientIP, lockErr)
+			g.Log().Line().Warningf(ctx, "read client task lock failed: record_id=%d client_ip=%s err=%+v", recordID, clientIP, lockErr)
 			continue
 		}
 		if hasLock && lockInfo.CommandID == commandID {
@@ -167,16 +190,16 @@ func sweepStaleTaskRecords(ctx context.Context) {
 			WhereIn(columns.Status, []string{"queued", "running"}).
 			Data(do.TaskRecords{
 				Status:       "failed",
-				ErrorMessage: "客户端执行超时，已自动结束",
+				ErrorMessage: "client task execution timed out and was automatically ended",
 				FinishedAt:   gtime.Now(),
 			}).
 			Update()
 		if err != nil {
-			g.Log().Line().Warningf(ctx, "标记卡死任务记录失败: record_id=%d err=%+v", recordID, err)
+			g.Log().Line().Warningf(ctx, "mark stale task record failed: record_id=%d err=%+v", recordID, err)
 			continue
 		}
 		if err = tasklock.Release(ctx, clientIP, commandID); err != nil {
-			g.Log().Line().Warningf(ctx, "释放卡死任务锁失败: record_id=%d client_ip=%s err=%+v", recordID, clientIP, err)
+			g.Log().Line().Warningf(ctx, "release stale task lock failed: record_id=%d client_ip=%s err=%+v", recordID, clientIP, err)
 		}
 	}
 }
