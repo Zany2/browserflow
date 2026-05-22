@@ -40,3 +40,12 @@ type TaskRecordDetailReq struct {
 type TaskRecordDetailRes struct {
 	Record *TaskRecordListResModel `json:"record,omitempty" dc:"任务记录详情"`
 }
+
+// TaskRecordBatchDeleteReq batch deletes task records.
+type TaskRecordBatchDeleteReq struct {
+	g.Meta `path:"/batch" method:"delete" tags:"任务记录" summary:"批量删除任务记录"`
+	IDs    []int64 `json:"ids" v:"required#请选择需要删除的任务记录" dc:"任务记录ID列表"`
+}
+
+// TaskRecordBatchDeleteRes batch delete response.
+type TaskRecordBatchDeleteRes struct{}
