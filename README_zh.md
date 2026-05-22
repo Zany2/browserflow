@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  简体中文 · <a href="./README.md">English</a>
+  <a href="./README.md">English</a> · 简体中文
 </p>
 
 BrowserFlow 是一个围绕 Automa 浏览器工作流构建的自动化平台。它把原本只能在单个浏览器里手动管理和运行的工作流，扩展成可以集中管理、远程调度、定时执行、记录审计、结果回传，并且可以被大模型 Skill 调用的能力。
