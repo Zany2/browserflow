@@ -164,14 +164,18 @@ class WorkflowManager {
     if (!requestId || !sourceTabId) return;
 
     const returnData = options.browserFlowReturnData || {};
-    const variables = {};
+    let variables = {};
     const variableNames = Array.isArray(returnData.variables)
       ? returnData.variables
       : [];
-    variableNames.forEach((name) => {
-      if (!name) return;
-      variables[name] = engine.referenceData?.variables?.[name];
-    });
+    if (variableNames.length > 0) {
+      variableNames.forEach((name) => {
+        if (!name) return;
+        variables[name] = engine.referenceData?.variables?.[name];
+      });
+    } else {
+      variables = { ...(engine.referenceData?.variables || {}) };
+    }
 
     const data = {
       variables,

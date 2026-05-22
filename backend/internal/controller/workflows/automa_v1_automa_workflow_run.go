@@ -8,18 +8,25 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
 	"github.com/Zany2/browserflow/backend/utility/workflowagent"
 	"github.com/Zany2/browserflow/backend/utility/workflowexecution"
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/guid"
 )
 
 // WorkflowRun runs workflow through browser agent 运行工作流
 func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) (res *v1.WorkflowRunRes, err error) {
+	if !requireWindowsMode(ctx) {
+		return nil, nil
+	}
+
 	agent, browserID, err := workflowagent.ResolveRunAgent(req.BrowserID)
 	if err != nil {
-		return nil, err
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), workflowagent.FormatWorkflowListError(err))
+		return nil, nil
 	}
 
 	commandID := "cmd_" + guid.S()
@@ -63,7 +70,8 @@ func (c *ControllerV1) WorkflowRun(ctx context.Context, req *v1.WorkflowRunReq) 
 		state.RemovePendingCommand(commandID)
 		state.AgentMu.Unlock()
 		workflowexecution.MarkTimeout(executionID, "browser agent is offline")
-		return nil, errors.New("browser agent is offline")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), workflowagent.FormatWorkflowListError(errors.New("browser agent is offline")))
+		return nil, nil
 	}
 
 	if !req.WaitResult {

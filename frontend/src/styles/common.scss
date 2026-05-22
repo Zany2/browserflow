@@ -6,6 +6,58 @@
   text-align: center;
 }
 
+// Server list page 服务器模式列表页统一外壳
+.server-list-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.server-list-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.server-list-actions__inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.server-list-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e4e7ed;
+}
+
+.server-list-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.server-list-table {
+  flex: 1;
+  min-height: 0;
+}
+
 // Adaptive table 自适应表格，默认单行省略，完整内容由列 tooltip/title 展示
 .adaptive-table {
   width: 100%;
@@ -55,7 +107,8 @@
   min-width: auto;
 }
 
-.adaptive-table .switch-column .cell {
+.adaptive-table .switch-column .cell,
+.adaptive-table .quick-edit-column .cell {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -65,13 +118,17 @@
 
 .adaptive-table .switch-column .cell *,
 .adaptive-table .switch-column .el-switch,
-.adaptive-table .switch-column .el-switch * {
+.adaptive-table .switch-column .el-switch *,
+.adaptive-table .quick-edit-column .cell *,
+.adaptive-table .quick-edit-column .el-switch,
+.adaptive-table .quick-edit-column .el-switch * {
   overflow: visible;
   text-overflow: clip;
   white-space: nowrap;
 }
 
-.adaptive-table .switch-column .el-switch {
+.adaptive-table .switch-column .el-switch,
+.adaptive-table .quick-edit-switch {
   flex: 0 0 auto;
   width: 40px;
   min-width: 40px;
@@ -80,22 +137,75 @@
   line-height: 20px;
 }
 
-.adaptive-table .switch-column .el-switch__core {
+.adaptive-table .switch-column .el-switch__core,
+.adaptive-table .quick-edit-switch .el-switch__core {
   width: 40px;
   min-width: 40px;
   max-width: 40px;
   height: 20px;
 }
 
-.adaptive-table .switch-column .el-switch__core .el-switch__inner {
+.adaptive-table .switch-column .el-switch__core .el-switch__inner,
+.adaptive-table .quick-edit-switch .el-switch__core .el-switch__inner {
   height: 16px;
 }
 
-.adaptive-table .switch-column .el-switch__core .el-switch__action {
+.adaptive-table .switch-column .el-switch__core .el-switch__action,
+.adaptive-table .quick-edit-switch .el-switch__core .el-switch__action {
   width: 16px;
   min-width: 16px;
   max-width: 16px;
   height: 16px;
+}
+
+.adaptive-table .quick-edit-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+  line-height: 1;
+}
+
+.adaptive-table .quick-edit-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 64px;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 22px;
+  white-space: nowrap;
+  border-radius: 4px;
+}
+
+.adaptive-table .quick-edit-badge {
+  color: #67c23a;
+  background: #f0f9eb;
+  border: 1px solid #b3e19d;
+}
+
+.adaptive-table .quick-edit-button {
+  color: #409eff;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.adaptive-table .quick-edit-button:hover:not(:disabled) {
+  color: #337ecc;
+  background: #ecf5ff;
+  border-color: #b3d8ff;
+}
+
+.adaptive-table .quick-edit-button:disabled {
+  color: #a8abb2;
+  cursor: default;
 }
 
 .adaptive-table .el-button + .el-button {

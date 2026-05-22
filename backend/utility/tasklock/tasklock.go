@@ -1,0 +1,128 @@
+package tasklock
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"time"
+
+	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/util/gconv"
+)
+
+const (
+	// LeaseTTL is longer than the client heartbeat interval and short enough to self-heal stale locks.
+	LeaseTTL = 10 * time.Minute
+	// StaleAfter gives the timeout scanner a small buffer after the Redis lease can expire.
+	StaleAfter = LeaseTTL + 2*time.Minute
+)
+
+// LockInfo describes one client execution lease.
+type LockInfo struct {
+	ClientIP   string `json:"client_ip"`
+	TaskID     int64  `json:"task_id"`
+	RecordID   int64  `json:"record_id"`
+	WorkflowID string `json:"workflow_id"`
+	CommandID  string `json:"command_id"`
+	AcquiredAt int64  `json:"acquired_at"`
+}
+
+// Acquire creates a per-client task lease.
+func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
+	info.ClientIP = strings.TrimSpace(info.ClientIP)
+	info.WorkflowID = strings.TrimSpace(info.WorkflowID)
+	info.CommandID = strings.TrimSpace(info.CommandID)
+	if info.ClientIP == "" || info.CommandID == "" {
+		return false, nil, nil
+	}
+	if info.AcquiredAt <= 0 {
+		info.AcquiredAt = time.Now().UnixMilli()
+	}
+
+	body, err := json.Marshal(info)
+	if err != nil {
+		return false, nil, err
+	}
+	result, err := g.Redis().Do(ctx, "SET", clientLockKey(info.ClientIP), string(body), "NX", "EX", int(LeaseTTL.Seconds()))
+	if err != nil {
+		return false, nil, err
+	}
+	if strings.EqualFold(strings.TrimSpace(result.String()), "OK") {
+		return true, &info, nil
+	}
+
+	current, ok, err := Get(ctx, info.ClientIP)
+	if err != nil {
+		return false, nil, err
+	}
+	if !ok {
+		return false, nil, nil
+	}
+	return false, &current, nil
+}
+
+// Renew extends a lease only when the command still owns it.
+func Renew(ctx context.Context, clientIP string, commandID string) (bool, error) {
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return false, nil
+	}
+	result, err := g.Redis().Do(ctx, "EVAL", `
+local value = redis.call("GET", KEYS[1])
+if not value then return 0 end
+local ok, data = pcall(cjson.decode, value)
+if ok and data["command_id"] == ARGV[1] then
+	return redis.call("EXPIRE", KEYS[1], ARGV[2])
+end
+return 0
+`, 1, clientLockKey(clientIP), commandID, int(LeaseTTL.Seconds()))
+	if err != nil {
+		return false, err
+	}
+	return result.Int() > 0, nil
+}
+
+// Release deletes a lease only when the command still owns it.
+func Release(ctx context.Context, clientIP string, commandID string) error {
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return nil
+	}
+	_, err := g.Redis().Do(ctx, "EVAL", `
+local value = redis.call("GET", KEYS[1])
+if not value then return 0 end
+local ok, data = pcall(cjson.decode, value)
+if ok and data["command_id"] == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+end
+return 0
+`, 1, clientLockKey(clientIP), commandID)
+	return err
+}
+
+// Get returns the active client lease.
+func Get(ctx context.Context, clientIP string) (LockInfo, bool, error) {
+	result, err := g.Redis().Do(ctx, "GET", clientLockKey(clientIP))
+	if err != nil {
+		return LockInfo{}, false, err
+	}
+	text := strings.TrimSpace(result.String())
+	if text == "" {
+		return LockInfo{}, false, nil
+	}
+
+	var info LockInfo
+	if err = json.Unmarshal([]byte(text), &info); err != nil {
+		return LockInfo{}, false, err
+	}
+	return info, true, nil
+}
+
+// RecordIDFromCommand extracts task record id from a task-record command id.
+func RecordIDFromCommand(commandID string) int64 {
+	return gconv.Int64(strings.TrimPrefix(strings.TrimSpace(commandID), "task-record-"))
+}
+
+func clientLockKey(clientIP string) string {
+	return "browserflow:client:task-lock:" + strings.TrimSpace(clientIP)
+}

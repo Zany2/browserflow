@@ -18,11 +18,11 @@
         </div>
 
         <el-form label-width="132px">
-          <el-form-item label="数据库自定义名称">
+          <el-form-item label="自定义工作流名称">
             <el-input v-model="workflow.name" clearable placeholder="可选；留空时使用 JSON 中的工作流名称" />
           </el-form-item>
 
-          <el-form-item label="数据库自定义描述">
+          <el-form-item label="自定义工作流描述">
             <el-input v-model="workflow.description" clearable type="textarea" :rows="2" placeholder="可选；留空时使用 JSON 中的工作流描述" />
           </el-form-item>
 

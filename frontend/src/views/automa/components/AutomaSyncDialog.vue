@@ -55,7 +55,7 @@
             >
               <div class="workflow-option">
                 <span>
-                  <em>数据库自定义名称</em>
+                  <em>自定义工作流名称</em>
                   {{ workflow.name || '' }}
                 </span>
                 <small>
@@ -95,13 +95,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="自定义名称" min-width="108" show-overflow-tooltip>
+        <el-table-column label="自定义工作流名称" min-width="108" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.server_name || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="自定义描述" min-width="118" show-overflow-tooltip>
+        <el-table-column label="自定义工作流描述" min-width="118" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.server_description || '' }}</span>
           </template>

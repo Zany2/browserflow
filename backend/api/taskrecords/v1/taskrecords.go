@@ -11,6 +11,7 @@ type TaskRecordListReq struct {
 	g.Meta `path:"/" method:"get" tags:"任务记录" summary:"获取任务记录列表"`
 	rr.CommonTimeReq
 	TaskID       string `json:"task_id,omitempty" in:"query" dc:"任务ID"`
+	TaskName     string `json:"task_name,omitempty" in:"query" dc:"任务名称"`
 	WorkflowID   string `json:"workflow_id,omitempty" in:"query" dc:"工作流ID"`
 	WorkflowName string `json:"workflow_name,omitempty" in:"query" dc:"工作流名称"`
 	ClientID     string `json:"client_id,omitempty" in:"query" dc:"客户端ID"`

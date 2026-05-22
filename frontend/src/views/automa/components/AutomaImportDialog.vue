@@ -21,7 +21,7 @@
       </el-icon>
       <div class="el-upload__text">拖拽 ZIP 文件到这里，或点击选择文件</div>
       <template #tip>
-        <div class="el-upload__tip">ZIP 导入不填写数据库自定义名称/描述；系统会从 Automa JSON 解析工作流名称/描述并作为初始显示值</div>
+        <div class="el-upload__tip">ZIP 导入不填写自定义工作流名称/描述；系统会从 Automa JSON 解析工作流名称/描述并作为初始显示值</div>
       </template>
     </el-upload>
   </AppDialog>

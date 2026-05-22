@@ -72,6 +72,12 @@ func FailedJsonWithCodeAndMessageExitAll(r *ghttp.Request, code int, message str
 	r.ExitAll()
 }
 
+// FailedJsonWithMessageAndDataExitAll write failed message and data response and exit 写入带消息和数据的失败响应并退出
+func FailedJsonWithMessageAndDataExitAll(r *ghttp.Request, message string, data interface{}) {
+	Json(r, consts.CodeServerError, message, data)
+	r.ExitAll()
+}
+
 // Success build success response 构建成功响应
 func Success() *CommonRes {
 	return &CommonRes{

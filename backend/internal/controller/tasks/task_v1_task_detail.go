@@ -5,8 +5,9 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/taskdata"
-	"github.com/gogf/gf/v2/errors/gerror"
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
@@ -19,7 +20,8 @@ func (c *ControllerV1) TaskDetail(ctx context.Context, req *v1.TaskDetailReq) (r
 		return nil, err
 	}
 	if record.IsEmpty() {
-		return nil, gerror.New("任务不存在")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "任务不存在")
+		return nil, nil
 	}
 
 	task, err := taskdata.BuildTaskMap(ctx, record)

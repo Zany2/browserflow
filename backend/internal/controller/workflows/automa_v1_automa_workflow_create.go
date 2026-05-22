@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -17,10 +18,10 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/Zany2/browserflow/backend/utility/workflowhash"
-	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -29,7 +30,8 @@ import (
 // WorkflowCreate creates or updates local workflow records 新增或更新本地工作流
 func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreateReq) (res *v1.WorkflowCreateRes, err error) {
 	if len(req.WorkflowFiles) == 0 {
-		return nil, gerror.New("工作流列表不能为空")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "工作流列表不能为空")
+		return nil, nil
 	}
 	serverMode := consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer
 	var db *storage.BoltDB
@@ -56,14 +58,16 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 	var metas []v1.WorkflowCreateMeta
 	if workflowMetas := strings.TrimSpace(req.WorkflowMetas); workflowMetas != "" {
 		if err = json.Unmarshal([]byte(workflowMetas), &metas); err != nil {
-			return nil, gerror.Wrap(err, "工作流元数据解析失败")
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "工作流元数据解析失败")
+			return nil, nil
 		}
 	}
 
 	stats := v1.WorkflowMutationStats{Submitted: len(req.WorkflowFiles)}
 	for index, workflowFile := range req.WorkflowFiles {
 		if workflowFile == nil {
-			return nil, gerror.Newf("第%d个工作流文件不能为空", index+1)
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("第%d个工作流文件不能为空", index+1))
+			return nil, nil
 		}
 		file, err := workflowFile.Open()
 		if err != nil {
@@ -76,7 +80,8 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 		}
 		var payload map[string]any
 		if err = json.Unmarshal(rawJSONBytes, &payload); err != nil {
-			return nil, gerror.Wrapf(err, "第%d个工作流 JSON 格式不正确", index+1)
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("第%d个工作流 JSON 格式不正确", index+1))
+			return nil, nil
 		}
 
 		meta := v1.WorkflowCreateMeta{Source: 1}

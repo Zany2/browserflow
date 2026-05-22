@@ -13,6 +13,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/state"
+	"github.com/Zany2/browserflow/backend/utility/tasklock"
 	"github.com/Zany2/browserflow/backend/utility/workflowcache"
 	"github.com/Zany2/browserflow/backend/utility/workflowexecution"
 	"github.com/gogf/gf/v2/frame/g"
@@ -194,6 +195,11 @@ func (ws *WsHandlerFunc) handleHeartbeat(client *Client, in *model.WSRequest) {
 	now := time.Now()
 	client.markHeartbeat(in.ClientTime, now)
 	workflowcache.TouchClient(client.Ctx, client.ClientIP())
+	if commandID := resolveExecutionCommandID(in); commandID != "" {
+		if _, err := tasklock.Renew(client.Ctx, client.ClientIP(), commandID); err != nil {
+			g.Log().Line().Warningf(client.Ctx, "刷新客户端任务锁失败：client_ip=%s command_id=%s err=%+v", client.ClientIP(), commandID, err)
+		}
+	}
 
 	// Refresh client online state 刷新客户端在线状态
 	if err := updateClientLastSeen(client, in); err != nil {
@@ -308,21 +314,33 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 			if len(resultData) > 0 {
 				resultJSON = string(resultData)
 			}
-			status := "success"
-			if !in.Success {
-				status = "failed"
+			status := resolveTaskRecordResultStatus(in.Success, resultData)
+			errorMessage := strings.TrimSpace(in.Error)
+			if errorMessage == "" && status == "failed" {
+				errorMessage = resolveTaskRecordResultMessage(resultData)
+			}
+			updateData := do.TaskRecords{
+				Status:       status,
+				ResultJson:   resultJSON,
+				ErrorMessage: errorMessage,
+			}
+			if status == "running" {
+				updateData.StartedAt = gtime.Now()
+			}
+			if status == "success" || status == "failed" {
+				updateData.FinishedAt = gtime.Now()
 			}
 			_, err := dao.TaskRecords.Ctx(client.Ctx).
 				WherePri(recordID).
-				Data(do.TaskRecords{
-					Status:       status,
-					ResultJson:   resultJSON,
-					ErrorMessage: strings.TrimSpace(in.Error),
-					FinishedAt:   gtime.Now(),
-				}).
+				Data(updateData).
 				Update()
 			if err != nil {
 				g.Log().Line().Errorf(client.Ctx, "更新任务执行记录失败：record_id=%d err=%+v", recordID, err)
+			}
+			if status == "success" || status == "failed" {
+				if err := tasklock.Release(client.Ctx, client.ClientIP(), in.CommandID); err != nil {
+					g.Log().Line().Warningf(client.Ctx, "释放客户端任务锁失败：client_ip=%s command_id=%s err=%+v", client.ClientIP(), in.CommandID, err)
+				}
 			}
 		}
 	}
@@ -334,6 +352,67 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 		ClientIP:  client.ClientIP(),
 		CommandID: in.CommandID,
 	})
+}
+
+// resolveExecutionCommandID returns current task command id from heartbeat payload 解析心跳中的当前执行命令
+func resolveExecutionCommandID(in *model.WSRequest) string {
+	if in == nil {
+		return ""
+	}
+	for _, value := range []string{in.ExecutionID, in.CommandID} {
+		value = strings.TrimSpace(value)
+		if strings.HasPrefix(value, "task-record-") {
+			return value
+		}
+	}
+	if len(in.Data) > 0 {
+		for _, key := range []string{"execution_id", "executionId", "command_id", "commandId"} {
+			value := strings.TrimSpace(gconv.String(in.Data[key]))
+			if strings.HasPrefix(value, "task-record-") {
+				return value
+			}
+		}
+	}
+	return ""
+}
+
+// resolveTaskRecordResultStatus maps agent result to task status 映射执行端结果为任务状态
+func resolveTaskRecordResultStatus(success bool, resultData []byte) string {
+	if !success {
+		return "failed"
+	}
+
+	var data map[string]any
+	if len(resultData) > 0 && json.Unmarshal(resultData, &data) == nil {
+		status := strings.ToLower(strings.TrimSpace(gconv.String(data["status"])))
+		switch status {
+		case "error", "failed", "fail", "timeout", "stopped", "cancelled", "canceled":
+			return "failed"
+		case "queued", "submitted", "pending", "running":
+			return "running"
+		case "success", "finished", "done", "completed":
+			return "success"
+		}
+		if okValue, ok := data["ok"].(bool); ok && !okValue {
+			return "failed"
+		}
+	}
+
+	return "success"
+}
+
+// resolveTaskRecordResultMessage extracts readable failure message 提取失败提示
+func resolveTaskRecordResultMessage(resultData []byte) string {
+	var data map[string]any
+	if len(resultData) == 0 || json.Unmarshal(resultData, &data) != nil {
+		return ""
+	}
+	for _, key := range []string{"message", "error", "error_message", "errorMessage"} {
+		if value := strings.TrimSpace(gconv.String(data[key])); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // handleWorkflowInventory caches client workflow inventory 缓存客户端工作流清单

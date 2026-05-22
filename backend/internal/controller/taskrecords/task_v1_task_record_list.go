@@ -18,6 +18,17 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 	if taskID := strings.TrimSpace(req.TaskID); taskID != "" {
 		gModel = gModel.Where(columns.TaskId, gconv.Int64(taskID))
 	}
+	// Task name filter 任务名称模糊检索，转换为执行记录可匹配的任务 ID
+	if taskName := strings.TrimSpace(req.TaskName); taskName != "" {
+		taskIDs, taskErr := taskdata.FindTaskIDsByName(ctx, taskName)
+		if taskErr != nil {
+			return nil, taskErr
+		}
+		if len(taskIDs) == 0 {
+			return &v1.TaskRecordListRes{List: []*v1.TaskRecordListResModel{}, Total: 0}, nil
+		}
+		gModel = gModel.WhereIn(columns.TaskId, taskIDs)
+	}
 	if workflowID := strings.TrimSpace(req.WorkflowID); workflowID != "" {
 		gModel = gModel.Where(columns.WorkflowId, workflowID)
 	}

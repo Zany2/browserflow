@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,10 +19,10 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/Zany2/browserflow/backend/utility/workflowhash"
-	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -30,10 +31,12 @@ import (
 // WorkflowImportFiles imports workflows from zip 导入 ZIP 中的工作流
 func (c *ControllerV1) WorkflowImportFiles(ctx context.Context, req *v1.WorkflowImportFilesReq) (res *v1.WorkflowImportFilesRes, err error) {
 	if req.File == nil {
-		return nil, gerror.New("ZIP压缩文件不能为空")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "ZIP压缩文件不能为空")
+		return nil, nil
 	}
 	if !strings.EqualFold(filepath.Ext(req.File.Filename), ".zip") {
-		return nil, gerror.New("只能上传ZIP压缩文件")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "只能上传ZIP压缩文件")
+		return nil, nil
 	}
 	serverMode := consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer
 	var db *storage.BoltDB
@@ -65,19 +68,23 @@ func (c *ControllerV1) WorkflowImportFiles(ctx context.Context, req *v1.Workflow
 
 	zipReader, err := zip.NewReader(uploadedFile, req.File.Size)
 	if err != nil {
-		return nil, gerror.Wrap(err, "ZIP压缩文件格式不正确")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "ZIP压缩文件格式不正确")
+		return nil, nil
 	}
 
 	stats := v1.WorkflowMutationStats{}
 	for index, zipFile := range zipReader.File {
 		if zipFile.FileInfo().IsDir() {
-			return nil, gerror.Newf("第%d个文件不能是目录", index+1)
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("第%d个文件不能是目录", index+1))
+			return nil, nil
 		}
 		if strings.Contains(zipFile.Name, "/") || strings.Contains(zipFile.Name, "\\") {
-			return nil, gerror.Newf("第%d个文件不能在子目录中", index+1)
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("第%d个文件不能在子目录中", index+1))
+			return nil, nil
 		}
 		if !strings.EqualFold(filepath.Ext(zipFile.Name), ".json") {
-			return nil, gerror.Newf("第%d个文件不是JSON工作流文件", index+1)
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("第%d个文件不是JSON工作流文件", index+1))
+			return nil, nil
 		}
 		workflowFile, err := zipFile.Open()
 		if err != nil {
@@ -90,7 +97,8 @@ func (c *ControllerV1) WorkflowImportFiles(ctx context.Context, req *v1.Workflow
 		}
 		var payload map[string]any
 		if err = json.Unmarshal(rawJSONBytes, &payload); err != nil {
-			return nil, gerror.Wrapf(err, "第%d个工作流 JSON 格式不正确", index+1)
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("第%d个工作流 JSON 格式不正确", index+1))
+			return nil, nil
 		}
 		stats.Submitted++
 		rawBytes, err := json.Marshal(payload)

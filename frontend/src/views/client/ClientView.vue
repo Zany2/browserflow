@@ -1,11 +1,11 @@
 <template>
-  <section class="client-page">
-    <header class="page-actions">
+  <section class="client-page server-list-page">
+    <header class="page-actions server-list-actions">
       <el-button type="primary" :icon="RefreshRight" @click="loadClients">刷新</el-button>
     </header>
 
-    <section class="client-panel">
-      <div class="client-filters">
+    <section class="client-panel server-list-panel">
+      <div class="client-filters server-list-filters">
         <div class="filter-item filter-item--keyword">
           <span class="filter-label">关键词</span>
           <el-input v-model="keywordFilter" clearable placeholder="客户端 IP、客户端名称" />
@@ -33,7 +33,7 @@
         <AppSelectionSummary :count="selectedClientIds.length" unit="客户端" />
       </div>
 
-      <el-table ref="clientTableRef" v-loading="loading" class="client-table adaptive-table" :data="pagedClients" border height="100%"
+      <el-table ref="clientTableRef" v-loading="loading" class="client-table server-list-table adaptive-table" :data="pagedClients" border height="100%"
         :row-key="getClientId" empty-text="暂无客户端" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
         <el-table-column label="客户端 IP" width="118" show-overflow-tooltip>
@@ -571,39 +571,6 @@ async function copyDetailValue(value) {
 </script>
 
 <style scoped lang="scss">
-.client-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.page-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.client-panel {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-}
-
-.client-filters {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
 .filter-item {
   display: flex;
   align-items: center;
@@ -621,11 +588,6 @@ async function copyDetailValue(value) {
 .filter-label {
   flex-shrink: 0;
   color: #606266;
-}
-
-.client-table {
-  flex: 1;
-  min-height: 0;
 }
 
 :deep(.client-table .cell),

@@ -4,18 +4,24 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
 	taskcontroller "github.com/Zany2/browserflow/backend/internal/controller/tasks"
 	"github.com/Zany2/browserflow/backend/internal/dao"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/utility/tasklock"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcron"
+	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
 const (
-	taskCronSyncName    = "task-cron-sync" // taskCronSyncName scheduler sync job name 调度同步任务名称
-	taskCronSyncPattern = "*/30 * * * * *" // taskCronSyncPattern scheduler sync interval 调度同步间隔
+	taskCronSyncName       = "task-cron-sync"          // taskCronSyncName scheduler sync job name 调度同步任务名称
+	taskCronSyncPattern    = "*/30 * * * * *"          // taskCronSyncPattern scheduler sync interval 调度同步间隔
+	taskRecordSweepName    = "task-record-stale-sweep" // taskRecordSweepName stale record scanner job name
+	taskRecordSweepPattern = "0 * * * * *"             // taskRecordSweepPattern stale record scanner interval
 )
 
 var cronScheduler = struct {
@@ -30,11 +36,18 @@ var cronScheduler = struct {
 func StartCronScheduler(ctx context.Context) {
 	cronScheduler.once.Do(func() {
 		syncCronTasks(ctx)
+		sweepStaleTaskRecords(ctx)
 
 		if _, err := gcron.AddSingleton(ctx, taskCronSyncPattern, func(ctx context.Context) {
 			syncCronTasks(ctx)
 		}, taskCronSyncName); err != nil {
 			g.Log().Line().Errorf(ctx, "启动任务定时调度同步器失败: %+v", err)
+			return
+		}
+		if _, err := gcron.AddSingleton(ctx, taskRecordSweepPattern, func(ctx context.Context) {
+			sweepStaleTaskRecords(ctx)
+		}, taskRecordSweepName); err != nil {
+			g.Log().Line().Errorf(ctx, "启动任务执行记录兜底清理器失败: %+v", err)
 			return
 		}
 
@@ -51,6 +64,7 @@ func StopCronScheduler() {
 		gcron.Remove(jobName)
 	}
 	gcron.Remove(taskCronSyncName)
+	gcron.Remove(taskRecordSweepName)
 	cronScheduler.tasks = make(map[string]string)
 }
 
@@ -101,6 +115,7 @@ func syncCronTasks(ctx context.Context) {
 			continue
 		}
 		cronScheduler.tasks[jobName] = cronExpression
+		g.Log().Line().Infof(ctx, "已注册任务定时调度: task_id=%s cron=%s", taskID, cronExpression)
 	}
 }
 
@@ -115,12 +130,62 @@ func executeCronTask(ctx context.Context, taskID string) {
 	}
 }
 
+// sweepStaleTaskRecords marks stuck queued/running task records failed 兜底清理卡死执行记录
+func sweepStaleTaskRecords(ctx context.Context) {
+	columns := dao.TaskRecords.Columns()
+	cutoff := gtime.New(time.Now().Add(-tasklock.StaleAfter))
+	records, err := dao.TaskRecords.Ctx(ctx).
+		WhereIn(columns.Status, []string{"queued", "running"}).
+		WhereLT(columns.StartedAt, cutoff).
+		Limit(100).
+		All()
+	if err != nil {
+		g.Log().Line().Warningf(ctx, "扫描卡死任务记录失败: %+v", err)
+		return
+	}
+
+	for _, record := range records {
+		recordID := gconv.Int64(record[columns.Id])
+		clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
+		if recordID <= 0 {
+			continue
+		}
+
+		commandID := "task-record-" + gconv.String(recordID)
+		lockInfo, hasLock, lockErr := tasklock.Get(ctx, clientIP)
+		if lockErr != nil {
+			g.Log().Line().Warningf(ctx, "读取客户端任务锁失败: record_id=%d client_ip=%s err=%+v", recordID, clientIP, lockErr)
+			continue
+		}
+		if hasLock && lockInfo.CommandID == commandID {
+			continue
+		}
+
+		_, err = dao.TaskRecords.Ctx(ctx).
+			WherePri(recordID).
+			WhereIn(columns.Status, []string{"queued", "running"}).
+			Data(do.TaskRecords{
+				Status:       "failed",
+				ErrorMessage: "客户端执行超时，已自动结束",
+				FinishedAt:   gtime.Now(),
+			}).
+			Update()
+		if err != nil {
+			g.Log().Line().Warningf(ctx, "标记卡死任务记录失败: record_id=%d err=%+v", recordID, err)
+			continue
+		}
+		if err = tasklock.Release(ctx, clientIP, commandID); err != nil {
+			g.Log().Line().Warningf(ctx, "释放卡死任务锁失败: record_id=%d client_ip=%s err=%+v", recordID, clientIP, err)
+		}
+	}
+}
+
 // cronTaskName builds cron job name 构建定时任务名称
 func cronTaskName(taskID string) string {
 	return "task-cron-" + taskID
 }
 
-// normalizeCronExpression adapts five-field cron to gcron 适配五段式 Cron 表达式
+// normalizeCronExpression adapts five-field cron to gcron 适配五字段 Cron 表达式
 func normalizeCronExpression(cronExpression string) string {
 	cronExpression = strings.TrimSpace(cronExpression)
 	parts := strings.Fields(cronExpression)
