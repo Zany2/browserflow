@@ -42,6 +42,10 @@ type ClientIdentity struct {
 	ConnectionID string
 	// ClientIP unique client identity 客户端唯一标识
 	ClientIP string
+	// MachineID physical machine id 物理机器标识
+	MachineID string
+	// NodeID execution node id 执行节点标识
+	NodeID string
 	// RequireHeartbeat read timeout guard 是否要求心跳保活
 	RequireHeartbeat bool
 }
@@ -52,6 +56,10 @@ type ClientSnapshot struct {
 	ConnectionID string `json:"connection_id"`
 	// ClientIP unique client identity 客户端唯一标识
 	ClientIP string `json:"client_ip"`
+	// MachineID physical machine id 物理机器标识
+	MachineID string `json:"machine_id"`
+	// NodeID execution node id 执行节点标识
+	NodeID string `json:"node_id"`
 	// ConnectedAt connected time 建连时间
 	ConnectedAt time.Time `json:"connected_at"`
 	// LastActiveTime last active time 最近活跃时间
@@ -314,6 +322,8 @@ func (m *WebSocketManager) RegisterClientWithIdentity(ctx context.Context, ident
 		Ctx:              ctx,
 		connectionID:     connectionID,
 		clientIP:         identity.ClientIP,
+		machineID:        identity.MachineID,
+		nodeID:           identity.NodeID,
 		connectedAt:      time.Now(),
 		conn:             conn,
 		manager:          m,
@@ -500,6 +510,8 @@ func buildSnapshot(client *Client) *ClientSnapshot {
 	return &ClientSnapshot{
 		ConnectionID:        client.connectionID,
 		ClientIP:            client.clientIP,
+		MachineID:           client.MachineID(),
+		NodeID:              client.NodeID(),
 		ConnectedAt:         client.connectedAt,
 		LastActiveTime:      client.LastActiveTime(),
 		LastHeartbeatTime:   client.LastHeartbeatTime(),

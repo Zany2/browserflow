@@ -2,14 +2,11 @@ package clients
 
 import (
 	"context"
-	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
-	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/clientops"
 	"github.com/gogf/gf/v2/os/gtime"
-	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // ClientOffline forces one client offline 强制单个客户端下线
@@ -24,11 +21,8 @@ func (c *ControllerV1) ClientOffline(ctx context.Context, req *v1.ClientOfflineR
 	}
 
 	// Close websocket and mark offline 关闭 WebSocket 并标记离线
-	columns := dao.Clients.Columns()
-	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
-	closed := clientops.CloseConnection(ctx, clientIP)
-	_, err = dao.Clients.Ctx(ctx).
-		Where(columns.ClientIp, clientIP).
+	closed := clientops.CloseConnection(ctx, clientops.TargetConnectionID(record))
+	_, err = clientops.ScopedModel(ctx, record).
 		Data(do.Clients{
 			Status:         "offline",
 			DisconnectedAt: gtime.Now(),

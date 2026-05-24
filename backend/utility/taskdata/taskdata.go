@@ -25,6 +25,8 @@ func BuildTaskMap(ctx context.Context, record gdb.Record) (*model.TaskResModel, 
 	columns := dao.Tasks.Columns()
 	workflowID := strings.TrimSpace(gconv.String(record[columns.AutomaId]))
 	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
+	machineID := strings.TrimSpace(gconv.String(record[columns.MachineId]))
+	nodeID := strings.TrimSpace(gconv.String(record[columns.NodeId]))
 	params, err := decodeJSONMap(strings.TrimSpace(gconv.String(record[columns.ParamsJson])))
 	if err != nil {
 		return nil, err
@@ -44,15 +46,29 @@ func BuildTaskMap(ctx context.Context, record gdb.Record) (*model.TaskResModel, 
 
 	clientID := ""
 	clientName := ""
-	if clientIP != "" {
+	nodeName := ""
+	if nodeID != "" || clientIP != "" {
 		clientColumns := dao.Clients.Columns()
-		clientRecord, err := dao.Clients.Ctx(ctx).Where(clientColumns.ClientIp, clientIP).One()
+		clientModel := dao.Clients.Ctx(ctx)
+		if nodeID != "" {
+			clientModel = clientModel.Where(clientColumns.NodeId, nodeID)
+		} else {
+			clientModel = clientModel.Where(clientColumns.ClientIp, clientIP)
+		}
+		clientRecord, err := clientModel.One()
 		if err != nil {
 			return nil, err
 		}
 		if !clientRecord.IsEmpty() {
 			clientID = strings.TrimSpace(gconv.String(clientRecord[clientColumns.ClientId]))
 			clientName = strings.TrimSpace(gconv.String(clientRecord[clientColumns.ClientName]))
+			nodeName = strings.TrimSpace(gconv.String(clientRecord[clientColumns.NodeName]))
+			if machineID == "" {
+				machineID = strings.TrimSpace(gconv.String(clientRecord[clientColumns.MachineId]))
+			}
+			if nodeID == "" {
+				nodeID = strings.TrimSpace(gconv.String(clientRecord[clientColumns.NodeId]))
+			}
 		}
 	}
 
@@ -66,6 +82,12 @@ func BuildTaskMap(ctx context.Context, record gdb.Record) (*model.TaskResModel, 
 		ClientID:       clientID,
 		ClientName:     clientName,
 		ClientIP:       clientIP,
+		MachineID:      machineID,
+		NodeID:         nodeID,
+		NodeName:       nodeName,
+		TargetGroupID:  gconv.Int64(record[columns.TargetGroupId]),
+		DispatchMode:   strings.TrimSpace(gconv.String(record[columns.DispatchMode])),
+		QueuePolicy:    strings.TrimSpace(gconv.String(record[columns.QueuePolicy])),
 		CronExpression: strings.TrimSpace(gconv.String(record[columns.CronExpression])),
 		Params:         params,
 		Enabled:        gconv.Bool(record[columns.Enabled]),
@@ -85,6 +107,9 @@ func BuildTaskRecordMap(ctx context.Context, record gdb.Record) (*model.TaskReco
 	taskID := gconv.Int64(record[columns.TaskId])
 	workflowID := strings.TrimSpace(gconv.String(record[columns.WorkflowId]))
 	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
+	machineID := strings.TrimSpace(gconv.String(record[columns.MachineId]))
+	nodeID := strings.TrimSpace(gconv.String(record[columns.NodeId]))
+	nodeName := strings.TrimSpace(gconv.String(record[columns.NodeName]))
 	params, err := decodeJSONMap(strings.TrimSpace(gconv.String(record[columns.ParamsJson])))
 	if err != nil {
 		return nil, err
@@ -123,15 +148,30 @@ func BuildTaskRecordMap(ctx context.Context, record gdb.Record) (*model.TaskReco
 
 	clientID := ""
 	clientName := ""
-	if clientIP != "" {
+	if nodeID != "" || clientIP != "" {
 		clientColumns := dao.Clients.Columns()
-		clientRecord, err := dao.Clients.Ctx(ctx).Where(clientColumns.ClientIp, clientIP).One()
+		clientModel := dao.Clients.Ctx(ctx)
+		if nodeID != "" {
+			clientModel = clientModel.Where(clientColumns.NodeId, nodeID)
+		} else {
+			clientModel = clientModel.Where(clientColumns.ClientIp, clientIP)
+		}
+		clientRecord, err := clientModel.One()
 		if err != nil {
 			return nil, err
 		}
 		if !clientRecord.IsEmpty() {
 			clientID = strings.TrimSpace(gconv.String(clientRecord[clientColumns.ClientId]))
 			clientName = strings.TrimSpace(gconv.String(clientRecord[clientColumns.ClientName]))
+			if machineID == "" {
+				machineID = strings.TrimSpace(gconv.String(clientRecord[clientColumns.MachineId]))
+			}
+			if nodeID == "" {
+				nodeID = strings.TrimSpace(gconv.String(clientRecord[clientColumns.NodeId]))
+			}
+			if nodeName == "" {
+				nodeName = strings.TrimSpace(gconv.String(clientRecord[clientColumns.NodeName]))
+			}
 		}
 	}
 	startedAt := recordTime(record[columns.StartedAt])
@@ -150,6 +190,9 @@ func BuildTaskRecordMap(ctx context.Context, record gdb.Record) (*model.TaskReco
 		ClientID:          clientID,
 		ClientName:        clientName,
 		ClientIP:          clientIP,
+		MachineID:         machineID,
+		NodeID:            nodeID,
+		NodeName:          nodeName,
 		ExecutionID:       strings.TrimSpace(gconv.String(record[columns.ExecutionId])),
 		AutomaExecutionID: strings.TrimSpace(gconv.String(record[columns.AutomaExecutionId])),
 		TriggerType:       strings.TrimSpace(gconv.String(record[columns.TriggerType])),
@@ -193,6 +236,48 @@ func ResolveClientIP(ctx context.Context, clientID string, clientIP string) (str
 		return "", err
 	}
 	return strings.TrimSpace(gconv.String(record[columns.ClientIp])), nil
+}
+
+// ResolveClientTarget finds a client target from request data 按请求数据解析执行目标
+func ResolveClientTarget(ctx context.Context, clientID string, clientIP string, nodeID string) (clientIPValue string, machineIDValue string, nodeIDValue string, nodeNameValue string, err error) {
+	clientID = strings.TrimSpace(clientID)
+	clientIP = strings.TrimSpace(clientIP)
+	nodeID = strings.TrimSpace(nodeID)
+	columns := dao.Clients.Columns()
+
+	if nodeID != "" {
+		record, queryErr := dao.Clients.Ctx(ctx).Where(columns.NodeId, nodeID).One()
+		if queryErr != nil {
+			err = queryErr
+			return
+		}
+		if record.IsEmpty() {
+			nodeIDValue = nodeID
+			clientIPValue = clientIP
+			return
+		}
+		clientIPValue = strings.TrimSpace(gconv.String(record[columns.ClientIp]))
+		machineIDValue = strings.TrimSpace(gconv.String(record[columns.MachineId]))
+		nodeIDValue = strings.TrimSpace(gconv.String(record[columns.NodeId]))
+		nodeNameValue = strings.TrimSpace(gconv.String(record[columns.NodeName]))
+		return
+	}
+
+	clientIPValue, err = ResolveClientIP(ctx, clientID, clientIP)
+	if err != nil || clientIPValue == "" {
+		return
+	}
+	record, queryErr := dao.Clients.Ctx(ctx).Where(columns.ClientIp, clientIPValue).One()
+	if queryErr != nil {
+		err = queryErr
+		return
+	}
+	if !record.IsEmpty() {
+		machineIDValue = strings.TrimSpace(gconv.String(record[columns.MachineId]))
+		nodeIDValue = strings.TrimSpace(gconv.String(record[columns.NodeId]))
+		nodeNameValue = strings.TrimSpace(gconv.String(record[columns.NodeName]))
+	}
+	return
 }
 
 // decodeJSONMap parses json object text for API models 解析 JSON 对象文本

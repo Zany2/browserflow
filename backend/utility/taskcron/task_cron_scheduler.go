@@ -171,14 +171,15 @@ func sweepStaleTaskRecords(ctx context.Context) {
 	for _, record := range records {
 		recordID := gconv.Int64(record[columns.Id])
 		clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
+		nodeID := strings.TrimSpace(gconv.String(record[columns.NodeId]))
 		if recordID <= 0 {
 			continue
 		}
 
 		commandID := "task-record-" + gconv.String(recordID)
-		lockInfo, hasLock, lockErr := tasklock.Get(ctx, clientIP)
+		lockInfo, hasLock, lockErr := tasklock.GetNode(ctx, nodeID, clientIP)
 		if lockErr != nil {
-			g.Log().Line().Warningf(ctx, "read client task lock failed: record_id=%d client_ip=%s err=%+v", recordID, clientIP, lockErr)
+			g.Log().Line().Warningf(ctx, "read client task lock failed: record_id=%d node_id=%s client_ip=%s err=%+v", recordID, nodeID, clientIP, lockErr)
 			continue
 		}
 		if hasLock && lockInfo.CommandID == commandID {
@@ -198,8 +199,8 @@ func sweepStaleTaskRecords(ctx context.Context) {
 			g.Log().Line().Warningf(ctx, "mark stale task record failed: record_id=%d err=%+v", recordID, err)
 			continue
 		}
-		if err = tasklock.Release(ctx, clientIP, commandID); err != nil {
-			g.Log().Line().Warningf(ctx, "release stale task lock failed: record_id=%d client_ip=%s err=%+v", recordID, clientIP, err)
+		if err = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID); err != nil {
+			g.Log().Line().Warningf(ctx, "release stale task lock failed: record_id=%d node_id=%s client_ip=%s err=%+v", recordID, nodeID, clientIP, err)
 		}
 	}
 }

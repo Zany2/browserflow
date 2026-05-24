@@ -5,11 +5,9 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
-	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/clientops"
 	"github.com/gogf/gf/v2/os/gtime"
-	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // ClientBatchBan bans clients in batch 批量拉黑客户端
@@ -18,7 +16,6 @@ func (c *ControllerV1) ClientBatchBan(ctx context.Context, req *v1.ClientBatchBa
 	stats := v1.ClientBatchActionRes{
 		Total: len(req.IDs),
 	}
-	columns := dao.Clients.Columns()
 	reason := strings.TrimSpace(req.Reason)
 
 	for _, id := range req.IDs {
@@ -33,10 +30,10 @@ func (c *ControllerV1) ClientBatchBan(ctx context.Context, req *v1.ClientBatchBa
 		}
 
 		// Persist ban state 保存拉黑状态
-		clientID := strings.TrimSpace(gconv.String(record[columns.ClientId]))
-		clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
-		if _, err = dao.Clients.Ctx(ctx).
-			Where(columns.ClientIp, clientIP).
+		clientID := clientops.ClientIDFromRecord(record)
+		clientIP := clientops.ClientIPFromRecord(record)
+		nodeID := clientops.NodeIDFromRecord(record)
+		if _, err = clientops.ScopedModel(ctx, record).
 			Data(do.Clients{
 				IsBanned:       true,
 				BanReason:      reason,
@@ -48,7 +45,7 @@ func (c *ControllerV1) ClientBatchBan(ctx context.Context, req *v1.ClientBatchBa
 		}
 
 		stats.Success++
-		stats.Notified += clientops.NotifyBanned(ctx, clientIP, clientID, reason)
+		stats.Notified += clientops.NotifyBanned(ctx, clientops.TargetConnectionID(record), clientIP, nodeID, clientID, reason)
 	}
 
 	return &v1.ClientBatchBanRes{

@@ -17,6 +17,8 @@ type TaskRecordListReq struct {
 	WorkflowName string `json:"workflow_name,omitempty" in:"query" dc:"工作流名称"`
 	ClientID     string `json:"client_id,omitempty" in:"query" dc:"客户端ID"`
 	ClientIP     string `json:"client_ip,omitempty" in:"query" dc:"客户端IP"`
+	MachineID    string `json:"machine_id,omitempty" in:"query" dc:"机器ID"`
+	NodeID       string `json:"node_id,omitempty" in:"query" dc:"执行节点ID"`
 	Status       string `json:"status,omitempty" in:"query" dc:"任务记录状态"`
 	Keyword      string `json:"keyword,omitempty" in:"query" dc:"关键字"`
 }

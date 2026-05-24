@@ -15,6 +15,11 @@ type TaskPayload struct {
 	ClientID           string        `json:"client_id,omitempty" dc:"客户端ID"`
 	ClientName         string        `json:"client_name,omitempty" dc:"客户端名称"`
 	ClientIP           string        `json:"client_ip,omitempty" dc:"客户端IP"`
+	MachineID          string        `json:"machine_id,omitempty" dc:"机器ID"`
+	NodeID             string        `json:"node_id,omitempty" dc:"执行节点ID"`
+	TargetGroupID      int64         `json:"target_group_id,omitempty" dc:"目标节点分组ID"`
+	DispatchMode       string        `json:"dispatch_mode,omitempty" dc:"调度模式"`
+	QueuePolicy        string        `json:"queue_policy,omitempty" dc:"繁忙策略"`
 	CronExpression     string        `json:"cron_expression,omitempty" dc:"Cron 表达式"`
 	RunOnceAfterCreate *bool         `json:"run_once_after_create,omitempty" dc:"创建后是否立即运行一次"`
 	Params             model.JSONMap `json:"params,omitempty" dc:"任务参数"`
@@ -30,6 +35,8 @@ type TaskListReq struct {
 	WorkflowID   string `json:"workflow_id,omitempty" in:"query" dc:"工作流ID"`
 	WorkflowName string `json:"workflow_name,omitempty" in:"query" dc:"工作流名称"`
 	ClientID     string `json:"client_id,omitempty" in:"query" dc:"客户端ID"`
+	MachineID    string `json:"machine_id,omitempty" in:"query" dc:"机器ID"`
+	NodeID       string `json:"node_id,omitempty" in:"query" dc:"执行节点ID"`
 	Enabled      string `json:"enabled,omitempty" in:"query" dc:"启用状态"`
 }
 
@@ -93,6 +100,8 @@ type TaskExecuteReq struct {
 	ID          string                             `json:"id" in:"path" dc:"任务ID"`
 	ClientID    string                             `json:"client_id,omitempty" dc:"客户端ID"`
 	ClientIP    string                             `json:"client_ip,omitempty" dc:"客户端IP"`
+	MachineID   string                             `json:"machine_id,omitempty" dc:"机器ID"`
+	NodeID      string                             `json:"node_id,omitempty" dc:"执行节点ID"`
 	TriggerType string                             `json:"trigger_type,omitempty" dc:"触发类型"`
 	Params      model.JSONMap                      `json:"params,omitempty" dc:"执行参数"`
 	WaitResult  bool                               `json:"wait_result" d:"false" dc:"是否等待执行完成"`

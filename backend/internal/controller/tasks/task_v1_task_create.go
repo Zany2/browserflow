@@ -49,19 +49,26 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 		return nil, nil
 	}
 
-	clientIP, err := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP)
+	clientIP, machineID, nodeID, _, err := taskdata.ResolveClientTarget(ctx, req.ClientID, req.ClientIP, req.NodeID)
 	if err != nil {
 		return nil, err
+	}
+	if machineID == "" {
+		machineID = strings.TrimSpace(req.MachineID)
 	}
 	if consts.ResolveRuntimeMode(ctx) != consts.RuntimeModeServer && clientIP == "" {
 		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "执行客户端不能为空")
 		return nil, nil
 	}
-	if clientIP != "" {
+	if clientIP != "" || nodeID != "" {
 		clientColumns := dao.Clients.Columns()
-		clientRecord, err := dao.Clients.Ctx(ctx).
-			Where(clientColumns.ClientIp, clientIP).
-			One()
+		clientModel := dao.Clients.Ctx(ctx)
+		if nodeID != "" {
+			clientModel = clientModel.Where(clientColumns.NodeId, nodeID)
+		} else {
+			clientModel = clientModel.Where(clientColumns.ClientIp, clientIP)
+		}
+		clientRecord, err := clientModel.One()
 		if err != nil {
 			return nil, err
 		}
@@ -86,6 +93,11 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 		Description:    description,
 		AutomaId:       workflowID,
 		ClientIp:       clientIP,
+		MachineId:      machineID,
+		NodeId:         nodeID,
+		TargetGroupId:  req.TargetGroupID,
+		DispatchMode:   normalizeDispatchMode(req.DispatchMode, machineID, nodeID, req.TargetGroupID, clientIP),
+		QueuePolicy:    normalizeQueuePolicy(req.QueuePolicy),
 		CronExpression: cronExpression,
 		ParamsJson:     paramsJSON,
 		Enabled:        enabled,
@@ -106,6 +118,8 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 		_, _ = c.TaskExecute(ctx, &v1.TaskExecuteReq{
 			ID:          gconv.String(taskID),
 			ClientIP:    clientIP,
+			MachineID:   machineID,
+			NodeID:      nodeID,
 			TriggerType: "task_create",
 			Params:      req.Params,
 		})

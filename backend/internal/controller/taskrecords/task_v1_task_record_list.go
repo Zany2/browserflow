@@ -48,6 +48,12 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 	} else if clientID := strings.TrimSpace(req.ClientID); clientID != "" {
 		gModel = gModel.Where(columns.ClientIp, clientID)
 	}
+	if machineID := strings.TrimSpace(req.MachineID); machineID != "" {
+		gModel = gModel.Where(columns.MachineId, machineID)
+	}
+	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
+		gModel = gModel.Where(columns.NodeId, nodeID)
+	}
 	if status := strings.TrimSpace(req.Status); status != "" {
 		gModel = gModel.Where(columns.Status, status)
 	}

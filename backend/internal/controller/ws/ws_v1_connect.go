@@ -30,6 +30,12 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 	if consts.ResolveRuntimeMode(ctx) != consts.RuntimeModeServer {
 		// Desktop connections need unique ids because one machine opens multiple sockets. 桌面端同一机器会建立多条连接
 		identity = websockets.BuildConnectionIdentity("conn_"+guid.S(), clientIP, false)
+	} else {
+		machineID := request.Get("machine_id").String()
+		nodeID := request.Get("node_id").String()
+		if nodeID != "" {
+			identity = websockets.BuildNodeIdentity(clientIP, machineID, nodeID)
+		}
 	}
 	websockets.WsManage.RegisterClientWithIdentity(context.WithoutCancel(ctx), identity, conn)
 	request.ExitAll()

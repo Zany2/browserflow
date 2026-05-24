@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <section class="task-record-page server-list-page">
     <header class="page-actions server-list-actions">
       <el-button type="primary" :icon="RefreshRight" @click="loadRecords">刷新</el-button>
@@ -19,8 +19,14 @@
 
           <div class="filter-item filter-item--client">
             <span class="filter-label">客户端 IP</span>
-            <el-select v-model="recordFilters.client_ip" clearable filterable placeholder="选择或检索客户端 IP"
-              :loading="clientIpLoading" @visible-change="handleClientIpSelectVisible">
+            <el-select
+              v-model="recordFilters.client_ip"
+              clearable
+              filterable
+              placeholder="选择或检索客户端 IP"
+              :loading="clientIpLoading"
+              @visible-change="handleClientIpSelectVisible"
+            >
               <el-option label="全部" value="" />
               <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
             </el-select>
@@ -54,90 +60,83 @@
         </div>
       </div>
 
-      <el-table ref="recordTableRef" v-loading="loadingRecords" class="record-table server-list-table adaptive-table" :data="pagedRecords"
-        border height="100%" :row-key="getRecordSelectionKey" empty-text="暂无执行记录"
-        @selection-change="handleRecordSelectionChange">
+      <el-table
+        ref="recordTableRef"
+        v-loading="loadingRecords"
+        class="record-table server-list-table adaptive-table"
+        :data="pagedRecords"
+        border
+        height="100%"
+        :row-key="getRecordSelectionKey"
+        empty-text="暂无执行记录"
+        @selection-change="handleRecordSelectionChange"
+      >
         <el-table-column type="selection" width="40" reserve-selection />
         <el-table-column label="任务名称" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.task_name || '' }}
-          </template>
+          <template #default="{ row }">{{ row.task_name || '' }}</template>
         </el-table-column>
-
         <el-table-column label="自定义工作流名称" min-width="170" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.workflow_name || '' }}
-          </template>
+          <template #default="{ row }">{{ row.workflow_name || '' }}</template>
         </el-table-column>
-
         <el-table-column label="客户端 IP" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.client_ip || '' }}
-          </template>
+          <template #default="{ row }">{{ row.client_ip || '' }}</template>
         </el-table-column>
-
-        <el-table-column label="触发方式" width="80" align="center">
-          <template #default="{ row }">
-            {{ getTriggerText(row.trigger_type) }}
-          </template>
+        <el-table-column label="执行节点" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ getRecordNodeText(row) }}</template>
         </el-table-column>
-
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column label="触发方式" width="90" align="center">
+          <template #default="{ row }">{{ getTriggerText(row.trigger_type) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="getRecordStatusTag(row.status)" effect="plain">
               {{ row.status_text || getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-
-        <el-table-column label="执行耗时" width="90" align="center">
-          <template #default="{ row }">
-            {{ formatDuration(row.duration_ms) }}
-          </template>
+        <el-table-column label="执行耗时" width="100" align="center">
+          <template #default="{ row }">{{ formatDuration(row.duration_ms) }}</template>
         </el-table-column>
-
         <el-table-column label="执行时间" width="160" class-name="nowrap-column">
-          <template #default="{ row }">
-            {{ formatDate(row.started_at || row.created_at || row.startedAt || row.createdAt) }}
-          </template>
+          <template #default="{ row }">{{ formatDate(row.started_at || row.created_at || row.startedAt || row.createdAt) }}</template>
         </el-table-column>
-
         <el-table-column label="错误信息" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.error_message || '' }}
-          </template>
+          <template #default="{ row }">{{ row.error_message || '' }}</template>
         </el-table-column>
-
         <el-table-column label="操作" width="150" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click="openRecordDetail(row)">详情</el-button>
-            <el-button link type="success" :disabled="!row.task_id" @click="handleRetryRecord(row)">
-              重试
-            </el-button>
+            <el-button link type="success" :disabled="!row.task_id" @click="handleRetryRecord(row)">重试</el-button>
             <el-button link type="danger" @click="handleDeleteRecord(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <AppPagination v-model:current-page="recordPage" v-model:page-size="recordPageSize" :page-sizes="pageSizes"
-        :total="recordTotal" />
+      <AppPagination
+        v-model:current-page="recordPage"
+        v-model:page-size="recordPageSize"
+        :page-sizes="pageSizes"
+        :total="recordTotal"
+      />
     </section>
 
-    <AppDialog v-model="recordDetailVisible" title="执行记录详情" width="min(1040px, calc(100vw - 32px))"
-      class="record-detail-dialog">
+    <AppDialog
+      v-model="recordDetailVisible"
+      title="执行记录详情"
+      width="min(1040px, calc(100vw - 32px))"
+      class="record-detail-dialog"
+    >
       <div v-if="recordDetail" class="detail-form">
         <el-descriptions border :column="2" class="detail-descriptions">
           <el-descriptions-item label="记录 ID">{{ recordDetail.id || '' }}</el-descriptions-item>
-          <el-descriptions-item label="任务">{{ recordDetail.task_name || recordDetail.task_id || ''
-          }}</el-descriptions-item>
-          <el-descriptions-item label="自定义工作流名称">{{ recordDetail.workflow_name || recordDetail.workflow_id || ''
-          }}</el-descriptions-item>
-          <el-descriptions-item label="客户端">{{ recordDetail.client_name || recordDetail.client_id || ''
-          }}</el-descriptions-item>
+          <el-descriptions-item label="任务">{{ recordDetail.task_name || recordDetail.task_id || '' }}</el-descriptions-item>
+          <el-descriptions-item label="自定义工作流名称">{{ recordDetail.workflow_name || recordDetail.workflow_id || '' }}</el-descriptions-item>
+          <el-descriptions-item label="客户端">{{ recordDetail.client_name || recordDetail.client_id || '' }}</el-descriptions-item>
           <el-descriptions-item label="客户端 IP">{{ recordDetail.client_ip || '' }}</el-descriptions-item>
+          <el-descriptions-item label="执行节点">{{ getRecordNodeText(recordDetail) }}</el-descriptions-item>
+          <el-descriptions-item label="机器 ID">{{ recordDetail.machine_id || '' }}</el-descriptions-item>
           <el-descriptions-item label="触发方式">{{ getTriggerText(recordDetail.trigger_type) }}</el-descriptions-item>
-          <el-descriptions-item label="状态">{{ recordDetail.status_text || getStatusText(recordDetail.status)
-          }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ recordDetail.status_text || getStatusText(recordDetail.status) }}</el-descriptions-item>
           <el-descriptions-item label="执行耗时">{{ formatDuration(recordDetail.duration_ms) }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatDate(recordDetail.created_at) }}</el-descriptions-item>
           <el-descriptions-item label="开始时间">{{ formatDate(recordDetail.started_at) }}</el-descriptions-item>
@@ -166,26 +165,18 @@
             <el-table-column prop="file_name" label="文件名" min-width="160" show-overflow-tooltip />
             <el-table-column prop="file_type" label="类型" width="110" />
             <el-table-column label="行数" width="90" align="right">
-              <template #default="{ row }">
-                {{ formatNumber(row.row_count) }}
-              </template>
+              <template #default="{ row }">{{ formatNumber(row.row_count) }}</template>
             </el-table-column>
             <el-table-column label="大小" width="100" align="right">
-              <template #default="{ row }">
-                {{ formatFileSize(row.file_size) }}
-              </template>
+              <template #default="{ row }">{{ formatFileSize(row.file_size) }}</template>
             </el-table-column>
             <el-table-column label="创建时间" width="160">
-              <template #default="{ row }">
-                {{ formatDate(row.created_at) }}
-              </template>
+              <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
             </el-table-column>
             <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
             <el-table-column label="操作" width="80" align="center">
               <template #default="{ row }">
-                <el-button link type="primary" :disabled="!row.id" @click="downloadRecordFile(row)">
-                  下载
-                </el-button>
+                <el-button link type="primary" :disabled="!row.id" @click="downloadRecordFile(row)">下载</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -203,7 +194,6 @@
     </AppDialog>
   </section>
 </template>
-
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
@@ -342,7 +332,7 @@ function reloadFirstRecordPage() {
 }
 
 function getRecordSelectionKey(row) {
-  // Selection key 使用执行记录 ID 保持跨分页多选状态
+  // Selection key 浣跨敤鎵ц璁板綍 ID 淇濇寔璺ㄥ垎椤靛閫夌姸鎬?
   return String(row?.id || '').trim()
 }
 
@@ -368,9 +358,11 @@ async function handleRetryRecord(row) {
   await executeTask(row.task_id, {
     client_id: row.client_id || '',
     client_ip: row.client_ip || '',
+    machine_id: row.machine_id || '',
+    node_id: row.node_id || '',
     params: row.params || {},
   })
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已重新下发' })
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '浠诲姟宸查噸鏂颁笅鍙? })
   await loadRecords()
 }
 
@@ -379,16 +371,16 @@ async function handleBatchDeleteRecords() {
   if (ids.length === 0) return
 
   const confirmed = await appConfirm({
-    title: '批量删除执行记录',
-    message: `确认删除选中的 ${ids.length} 条执行记录吗？`,
+    title: '鎵归噺鍒犻櫎鎵ц璁板綍',
+    message: `纭鍒犻櫎閫変腑鐨?${ids.length} 鏉℃墽琛岃褰曞悧锛焋,
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '删除',
+    confirmText: '鍒犻櫎',
   })
   if (!confirmed) return
 
   await deleteTaskRecords(ids)
   resetRecordSelection(recordTableRef)
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '已删除选中执行记录' })
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '宸插垹闄ら€変腑鎵ц璁板綍' })
   await loadRecords()
 }
 
@@ -397,15 +389,15 @@ async function handleDeleteRecord(row) {
   if (id <= 0) return
 
   const confirmed = await appConfirm({
-    title: '删除执行记录',
-    message: '确认删除这条执行记录吗？',
+    title: '鍒犻櫎鎵ц璁板綍',
+    message: '纭鍒犻櫎杩欐潯鎵ц璁板綍鍚楋紵',
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '删除',
+    confirmText: '鍒犻櫎',
   })
   if (!confirmed) return
 
   await deleteTaskRecords([id])
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '执行记录已删除' })
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '鎵ц璁板綍宸插垹闄? })
   await loadRecords()
 }
 
@@ -428,6 +420,10 @@ function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
 }
 
+function getRecordNodeText(row) {
+  return [row?.node_name || row?.nodeName, row?.node_id || row?.nodeId].filter(Boolean).join(' / ')
+}
+
 function getRecordStatusTag(status) {
   if (status === 'success' || status === 'done') return 'success'
   if (status === 'failed' || status === 'error') return 'danger'
@@ -437,21 +433,21 @@ function getRecordStatusTag(status) {
 }
 
 function getStatusText(status) {
-  if (status === 'pending') return '待执行'
-  if (status === 'queued') return '已下发'
-  if (status === 'running') return '执行中'
-  if (status === 'success' || status === 'done') return '成功'
-  if (status === 'failed' || status === 'error') return '失败'
-  if (status === 'cancelled') return '已取消'
+  if (status === 'pending') return '寰呮墽琛?
+  if (status === 'queued') return '宸蹭笅鍙?
+  if (status === 'running') return '鎵ц涓?
+  if (status === 'success' || status === 'done') return '鎴愬姛'
+  if (status === 'failed' || status === 'error') return '澶辫触'
+  if (status === 'cancelled') return '宸插彇娑?
   return status || ''
 }
 
 function getTriggerText(triggerType) {
-  if (triggerType === 'cron') return '定时'
-  if (triggerType === 'task_create') return '创建即执行'
-  if (triggerType === 'skill') return 'Skill触发'
-  if (triggerType === 'system') return '系统'
-  return '手动'
+  if (triggerType === 'cron') return '瀹氭椂'
+  if (triggerType === 'task_create') return '鍒涘缓鍗虫墽琛?
+  if (triggerType === 'skill') return 'Skill瑙﹀彂'
+  if (triggerType === 'system') return '绯荤粺'
+  return '鎵嬪姩'
 }
 
 function formatDuration(value) {

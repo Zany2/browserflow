@@ -17,24 +17,24 @@ import (
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
-// queryClientRecord queries client by client ip or primary id 按客户端 IP 或主键查询客户端
+// QueryRecord queries a client by node id, client ip, or primary id.
 func QueryRecord(ctx context.Context, id string) (gdb.Record, error) {
-	// Normalize query id 规范化查询标识
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, nil
 	}
 
-	// Query by client ip first 优先按客户端 IP 查询
 	columns := dao.Clients.Columns()
-	record, err := dao.Clients.Ctx(ctx).
-		Where(columns.ClientIp, id).
-		One()
+	record, err := dao.Clients.Ctx(ctx).Where(columns.NodeId, id).One()
 	if err != nil || !record.IsEmpty() {
 		return record, err
 	}
 
-	// Query by primary id when numeric 数字标识再按主键查询
+	record, err = dao.Clients.Ctx(ctx).Where(columns.ClientIp, id).One()
+	if err != nil || !record.IsEmpty() {
+		return record, err
+	}
+
 	primaryID := gconv.Int64(id)
 	if primaryID <= 0 {
 		return record, nil
@@ -42,7 +42,55 @@ func QueryRecord(ctx context.Context, id string) (gdb.Record, error) {
 	return dao.Clients.Ctx(ctx).WherePri(primaryID).One()
 }
 
-// clientRecordToEntity converts a database record to API detail model 数据记录转换为客户端详情模型
+// ScopedModel scopes updates to one client node. 优先按节点限定单个客户端
+func ScopedModel(ctx context.Context, record gdb.Record) *gdb.Model {
+	columns := dao.Clients.Columns()
+	model := dao.Clients.Ctx(ctx)
+	if record.IsEmpty() {
+		return model.Where(columns.Id, 0)
+	}
+	if nodeID := NodeIDFromRecord(record); nodeID != "" {
+		return model.Where(columns.NodeId, nodeID)
+	}
+	if primaryID := gconv.Int64(record[columns.Id]); primaryID > 0 {
+		return model.WherePri(primaryID)
+	}
+	return model.Where(columns.ClientIp, ClientIPFromRecord(record))
+}
+
+// TargetConnectionID returns websocket identity for one client node.
+func TargetConnectionID(record gdb.Record) string {
+	if nodeID := NodeIDFromRecord(record); nodeID != "" {
+		return nodeID
+	}
+	return ClientIPFromRecord(record)
+}
+
+// ClientIPFromRecord returns display client ip.
+func ClientIPFromRecord(record gdb.Record) string {
+	if record.IsEmpty() {
+		return ""
+	}
+	return strings.TrimSpace(gconv.String(record[dao.Clients.Columns().ClientIp]))
+}
+
+// ClientIDFromRecord returns legacy client id.
+func ClientIDFromRecord(record gdb.Record) string {
+	if record.IsEmpty() {
+		return ""
+	}
+	return strings.TrimSpace(gconv.String(record[dao.Clients.Columns().ClientId]))
+}
+
+// NodeIDFromRecord returns execution node id.
+func NodeIDFromRecord(record gdb.Record) string {
+	if record.IsEmpty() {
+		return ""
+	}
+	return strings.TrimSpace(gconv.String(record[dao.Clients.Columns().NodeId]))
+}
+
+// RecordToEntity converts a database record to API detail model.
 func RecordToEntity(record gdb.Record) (*entity.Clients, error) {
 	if record.IsEmpty() {
 		return nil, nil
@@ -54,23 +102,20 @@ func RecordToEntity(record gdb.Record) (*entity.Clients, error) {
 	return client, nil
 }
 
-// queryBannedClientRecord queries ban state by request ip 按请求 IP 查询拉黑状态
+// QueryBannedRecord queries ban state by request ip.
 func QueryBannedRecord(ctx context.Context, clientIP string) (gdb.Record, error) {
-	// Normalize input 规范化查询条件
 	clientIP = strings.TrimSpace(clientIP)
-	columns := dao.Clients.Columns()
-
-	// Query by client ip 按当前请求 IP 检查
 	if clientIP == "" {
 		return nil, nil
 	}
+	columns := dao.Clients.Columns()
 	return dao.Clients.Ctx(ctx).
 		Where(columns.ClientIp, clientIP).
 		Where(columns.IsBanned, true).
 		One()
 }
 
-// getRequestClientIP reads real client ip from request 从请求中读取客户端 IP
+// RequestIP reads real client ip from request.
 func RequestIP(ctx context.Context) string {
 	request := g.RequestFromCtx(ctx)
 	if request == nil {
@@ -79,19 +124,21 @@ func RequestIP(ctx context.Context) string {
 	return strings.TrimSpace(request.GetClientIp())
 }
 
-// notifyClientBanned tells connected client to stop reconnecting 通知已连接客户端停止重连
-func NotifyBanned(ctx context.Context, clientIP string, clientID string, reason string) int {
+// NotifyBanned tells connected node to stop reconnecting.
+func NotifyBanned(ctx context.Context, connectionID string, clientIP string, nodeID string, clientID string, reason string) int {
+	connectionID = strings.TrimSpace(connectionID)
 	clientIP = strings.TrimSpace(clientIP)
-	if clientIP == "" {
+	nodeID = strings.TrimSpace(nodeID)
+	if connectionID == "" {
 		return 0
 	}
 
-	// Ensure websocket manager exists 确保 WebSocket 管理器已初始化
 	websockets.Init(ctx)
-	return websockets.SendClientMessage(clientIP, &model.WSResponse{
+	return websockets.SendNodeMessage(nodeID, clientIP, &model.WSResponse{
 		Type:     model.WSMessageTypeClientBanned,
 		ClientID: strings.TrimSpace(clientID),
 		ClientIP: clientIP,
+		NodeID:   nodeID,
 		Message:  "客户端已被拉黑，将持续检测，解除拉黑后自动重连",
 		Error:    strings.TrimSpace(reason),
 		Data: map[string]any{
@@ -101,14 +148,13 @@ func NotifyBanned(ctx context.Context, clientIP string, clientID string, reason 
 	})
 }
 
-// closeClientConnection closes current websocket connection 关闭当前 WebSocket 连接
-func CloseConnection(ctx context.Context, clientIP string) int {
-	clientIP = strings.TrimSpace(clientIP)
-	if clientIP == "" {
+// CloseConnection closes current websocket connection.
+func CloseConnection(ctx context.Context, connectionID string) int {
+	connectionID = strings.TrimSpace(connectionID)
+	if connectionID == "" {
 		return 0
 	}
 
-	// Ensure websocket manager exists 确保 WebSocket 管理器已初始化
 	websockets.Init(ctx)
-	return websockets.WsManage.CloseClientConnections(clientIP)
+	return websockets.WsManage.CloseClientConnections(connectionID)
 }

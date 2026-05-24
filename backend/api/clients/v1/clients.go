@@ -7,10 +7,12 @@ import (
 
 // ClientListReq 客户端列表请求
 type ClientListReq struct {
-	g.Meta  `path:"/" method:"get" tags:"客户端" summary:"获取客户端列表"`
-	Status  string `json:"status,omitempty" in:"query" dc:"客户端状态"`
-	IP      string `json:"ip,omitempty" in:"query" dc:"客户端IP"`
-	Keyword string `json:"keyword,omitempty" in:"query" dc:"关键字"`
+	g.Meta    `path:"/" method:"get" tags:"客户端" summary:"获取客户端列表"`
+	Status    string `json:"status,omitempty" in:"query" dc:"客户端状态"`
+	IP        string `json:"ip,omitempty" in:"query" dc:"客户端IP"`
+	MachineID string `json:"machine_id,omitempty" in:"query" dc:"机器ID"`
+	NodeID    string `json:"node_id,omitempty" in:"query" dc:"执行节点ID"`
+	Keyword   string `json:"keyword,omitempty" in:"query" dc:"关键字"`
 }
 
 // ClientListResModel client list item 客户端列表项

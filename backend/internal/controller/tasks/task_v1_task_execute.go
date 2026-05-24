@@ -49,13 +49,21 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	}
 
 	workflowID := strings.TrimSpace(gconv.String(taskRecord[taskColumns.AutomaId]))
-	clientIP, err := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP)
+	clientIP, machineID, nodeID, nodeName, err := taskdata.ResolveClientTarget(ctx, req.ClientID, req.ClientIP, req.NodeID)
 	if err != nil {
 		return nil, err
 	}
 	storedClientIP := strings.TrimSpace(gconv.String(taskRecord[taskColumns.ClientIp]))
+	storedMachineID := strings.TrimSpace(gconv.String(taskRecord[taskColumns.MachineId]))
+	storedNodeID := strings.TrimSpace(gconv.String(taskRecord[taskColumns.NodeId]))
 	if clientIP == "" {
 		clientIP = storedClientIP
+	}
+	if machineID == "" {
+		machineID = firstNonEmpty(req.MachineID, storedMachineID)
+	}
+	if nodeID == "" {
+		nodeID = storedNodeID
 	}
 
 	params := req.Params
@@ -73,7 +81,7 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 
 	triggerType := taskdata.NormalizeTriggerType(req.TriggerType)
 	serverMode := consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer
-	autoDispatch := serverMode && storedClientIP == "" && strings.TrimSpace(req.ClientIP) == "" && strings.TrimSpace(req.ClientID) == ""
+	autoDispatch := serverMode && storedClientIP == "" && storedNodeID == "" && strings.TrimSpace(req.ClientIP) == "" && strings.TrimSpace(req.ClientID) == "" && strings.TrimSpace(req.NodeID) == ""
 	failedResponse := func(recordID int64, message string) (*v1.TaskExecuteRes, error) {
 		record, recordErr := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
 		if recordErr != nil {
@@ -94,6 +102,9 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 			TaskId:       taskID,
 			WorkflowId:   workflowID,
 			ClientIp:     clientIP,
+			MachineId:    machineID,
+			NodeId:       nodeID,
+			NodeName:     nodeName,
 			TriggerType:  triggerType,
 			Status:       "failed",
 			ParamsJson:   paramsJSON,
@@ -124,9 +135,17 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		return failedResponse(failedRecordID, message)
 	}
 	dispatchMessage := ""
-	candidateClientIPs := make([]string, 0, 1)
+	type dispatchTarget struct {
+		ClientIP  string
+		MachineID string
+		NodeID    string
+		NodeName  string
+	}
+	candidateTargets := make([]dispatchTarget, 0, 1)
 	workflowID = strings.TrimSpace(workflowID)
 	clientIP = strings.TrimSpace(clientIP)
+	nodeID = strings.TrimSpace(nodeID)
+	targetIdentity := firstNonEmpty(nodeID, clientIP)
 
 	if workflowID == "" {
 		dispatchMessage = "工作流不能为空"
@@ -134,17 +153,17 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		if clientIP == "" {
 			dispatchMessage = "执行客户端不能为空"
 		} else {
-			candidateClientIPs = append(candidateClientIPs, clientIP)
+			candidateTargets = append(candidateTargets, dispatchTarget{ClientIP: clientIP, MachineID: machineID, NodeID: nodeID, NodeName: nodeName})
 		}
-	} else if clientIP != "" {
-		if !workflowcache.IsClientOnline(ctx, clientIP) {
+	} else if targetIdentity != "" {
+		if !workflowcache.IsClientOnline(ctx, targetIdentity) {
 			dispatchMessage = "客户端不在线或 WebSocket 未连接"
-		} else if _, ok, cacheErr := workflowcache.GetClientWorkflow(ctx, clientIP, workflowID); cacheErr != nil {
+		} else if _, ok, cacheErr := workflowcache.GetClientWorkflow(ctx, targetIdentity, workflowID); cacheErr != nil {
 			dispatchMessage = cacheErr.Error()
 		} else if !ok {
 			dispatchMessage = "客户端没有该工作流"
 		} else {
-			candidateClientIPs = append(candidateClientIPs, clientIP)
+			candidateTargets = append(candidateTargets, dispatchTarget{ClientIP: clientIP, MachineID: machineID, NodeID: nodeID, NodeName: nodeName})
 		}
 	} else {
 		items, listErr := workflowcache.ListWorkflowClients(ctx, workflowID)
@@ -155,8 +174,14 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		} else {
 			for _, item := range items {
 				itemClientIP := strings.TrimSpace(item.SourceIp)
-				if itemClientIP != "" {
-					candidateClientIPs = append(candidateClientIPs, itemClientIP)
+				itemNodeID := strings.TrimSpace(item.NodeId)
+				if itemNodeID != "" || itemClientIP != "" {
+					candidateTargets = append(candidateTargets, dispatchTarget{
+						ClientIP:  itemClientIP,
+						MachineID: strings.TrimSpace(item.MachineId),
+						NodeID:    itemNodeID,
+						NodeName:  strings.TrimSpace(item.NodeName),
+					})
 				}
 			}
 		}
@@ -169,6 +194,9 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		TaskId:      taskID,
 		WorkflowId:  workflowID,
 		ClientIp:    clientIP,
+		MachineId:   machineID,
+		NodeId:      nodeID,
+		NodeName:    nodeName,
 		TriggerType: triggerType,
 		Status:      "pending",
 		ParamsJson:  paramsJSON,
@@ -197,13 +225,18 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	var resultCh chan model.AgentCommandResult
 	locked := false
 	sendFailed := false
-	for _, candidateClientIP := range candidateClientIPs {
-		candidateClientIP = strings.TrimSpace(candidateClientIP)
-		if candidateClientIP == "" {
+	for _, target := range candidateTargets {
+		target.ClientIP = strings.TrimSpace(target.ClientIP)
+		target.MachineID = strings.TrimSpace(target.MachineID)
+		target.NodeID = strings.TrimSpace(target.NodeID)
+		target.NodeName = strings.TrimSpace(target.NodeName)
+		if target.ClientIP == "" && target.NodeID == "" {
 			continue
 		}
 		ok, _, lockErr := tasklock.Acquire(ctx, tasklock.LockInfo{
-			ClientIP:   candidateClientIP,
+			ClientIP:   target.ClientIP,
+			MachineID:  target.MachineID,
+			NodeID:     target.NodeID,
 			TaskID:     taskID,
 			RecordID:   recordID,
 			WorkflowID: workflowID,
@@ -216,12 +249,21 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 			continue
 		}
 
-		clientIP = candidateClientIP
+		clientIP = target.ClientIP
+		machineID = target.MachineID
+		nodeID = target.NodeID
+		nodeName = target.NodeName
 		if _, err = dao.TaskRecords.Ctx(ctx).
 			WherePri(recordID).
-			Data(do.TaskRecords{ClientIp: clientIP}).
+			Data(do.TaskRecords{
+				ClientIp:  clientIP,
+				MachineId: machineID,
+				NodeId:    nodeID,
+				NodeName:  nodeName,
+				CommandId: commandID,
+			}).
 			Update(); err != nil {
-			_ = tasklock.Release(ctx, clientIP, commandID)
+			_ = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID)
 			return nil, err
 		}
 
@@ -229,9 +271,12 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 			resultCh = make(chan model.AgentCommandResult, 1)
 			state.SetPendingCommand(commandID, resultCh)
 		}
-		sentCount := websockets.SendClientMessage(clientIP, &model.WSResponse{
+		sentCount := websockets.SendNodeMessage(nodeID, clientIP, &model.WSResponse{
 			Type:      model.WSMessageTypeAgentCommand,
 			ClientIP:  clientIP,
+			MachineID: machineID,
+			NodeID:    nodeID,
+			NodeName:  nodeName,
 			CommandID: commandID,
 			Command:   "task.execute",
 			Payload: map[string]any{
@@ -249,9 +294,9 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		if sentCount <= 0 {
 			sendFailed = true
 			state.RemovePendingCommand(commandID)
-			_ = tasklock.Release(ctx, clientIP, commandID)
+			_ = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID)
 			if serverMode {
-				_ = workflowcache.ClearClient(ctx, clientIP)
+				_ = workflowcache.ClearNode(ctx, firstNonEmpty(nodeID, clientIP))
 			}
 			if autoDispatch {
 				continue
@@ -327,4 +372,13 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		return nil, err
 	}
 	return &v1.TaskExecuteRes{Record: recordMap}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }

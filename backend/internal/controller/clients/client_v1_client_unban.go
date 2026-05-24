@@ -2,13 +2,10 @@ package clients
 
 import (
 	"context"
-	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
-	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/clientops"
-	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // ClientUnban removes client ban 解除客户端拉黑
@@ -23,10 +20,7 @@ func (c *ControllerV1) ClientUnban(ctx context.Context, req *v1.ClientUnbanReq) 
 	}
 
 	// Clear ban state 清除拉黑状态
-	columns := dao.Clients.Columns()
-	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
-	_, err = dao.Clients.Ctx(ctx).
-		Where(columns.ClientIp, clientIP).
+	_, err = clientops.ScopedModel(ctx, record).
 		Data(do.Clients{
 			IsBanned:  false,
 			BanReason: "",

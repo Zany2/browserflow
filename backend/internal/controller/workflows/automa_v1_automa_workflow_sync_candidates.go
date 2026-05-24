@@ -152,7 +152,8 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 			if clientIP == "" || !workflowcache.IsClientOnline(ctx, clientIP) {
 				continue
 			}
-			if keyword != "" && !strings.Contains(strings.ToLower(clientIP), keyword) {
+			node := getOnlineNodeSnapshot(ctx, clientIP)
+			if keyword != "" && !strings.Contains(strings.ToLower(strings.Join([]string{clientIP, node.ClientIP, node.MachineID, node.NodeID, node.NodeName}, " ")), keyword) {
 				continue
 			}
 
@@ -166,7 +167,10 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 				AutomaId:          automaID,
 				WorkflowId:        automaID,
 				Source:            "客户端同步",
-				SourceIp:          clientIP,
+				SourceIp:          firstNonEmpty(node.ClientIP, clientIP),
+				MachineId:         node.MachineID,
+				NodeId:            firstNonEmpty(node.NodeID, clientIP),
+				NodeName:          node.NodeName,
 				IsProtected:       serverRecord.IsProtected,
 				Synced:            false,
 				HasUpdate:         false,
@@ -215,6 +219,10 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 				candidate.Description = item.Description
 				candidate.AutomaName = item.Name
 				candidate.AutomaDescription = item.Description
+				candidate.SourceIp = item.SourceIp
+				candidate.MachineId = item.MachineId
+				candidate.NodeId = item.NodeId
+				candidate.NodeName = item.NodeName
 				candidate.AutomaVersion = item.AutomaVersion
 				candidate.ExtVersion = item.ExtVersion
 				candidate.CreatedAtAutoma = item.CreatedAtAutoma
@@ -262,14 +270,15 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 	if cacheItems != nil {
 		candidates := make([]v1.WorkflowSyncCandidatesResModel, 0, len(cacheItems))
 		for _, item := range cacheItems {
-			if !workflowcache.IsClientOnline(ctx, item.SourceIp) {
+			itemIdentity := firstNonEmpty(item.NodeId, item.SourceIp)
+			if !workflowcache.IsClientOnline(ctx, itemIdentity) {
 				continue
 			}
 			if automaID != "" && item.AutomaId != automaID {
 				continue
 			}
 			if keyword != "" {
-				text := strings.ToLower(strings.Join([]string{item.AutomaId, item.Name, item.Description, item.SourceIp}, " "))
+				text := strings.ToLower(strings.Join([]string{item.AutomaId, item.Name, item.Description, item.SourceIp, item.MachineId, item.NodeId, item.NodeName}, " "))
 				if !strings.Contains(text, keyword) {
 					continue
 				}
@@ -312,10 +321,12 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 				if !serverRecord.UpdatedAt.IsZero() {
 					candidate.ServerUpdatedAt = gtime.NewFromTime(serverRecord.UpdatedAt)
 				}
+				fillCandidateNode(&candidate, item, itemIdentity)
 				candidates = append(candidates, candidate)
 				continue
 			}
 			candidate := v1.WorkflowSyncCandidatesResModel{Id: item.AutomaId, AutomaId: item.AutomaId, WorkflowId: item.WorkflowId, Name: item.Name, Description: item.Description, AutomaName: item.Name, AutomaDescription: item.Description, Source: "客户端同步", SourceIp: item.SourceIp, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, ContentHash: item.ContentHash, Synced: synced, HasUpdate: hasUpdate, SyncStatus: status, Online: workflowcache.IsClientOnline(ctx, item.SourceIp)}
+			fillCandidateNode(&candidate, item, itemIdentity)
 			candidates = append(candidates, candidate)
 		}
 		total := len(candidates)
@@ -483,4 +494,32 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		end = total
 	}
 	return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}, nil
+}
+
+func getOnlineNodeSnapshot(ctx context.Context, identity string) workflowcache.OnlineNode {
+	node, ok, err := workflowcache.GetOnlineNode(ctx, identity)
+	if err != nil || !ok {
+		return workflowcache.OnlineNode{NodeID: strings.TrimSpace(identity)}
+	}
+	return node
+}
+
+func fillCandidateNode(candidate *v1.WorkflowSyncCandidatesResModel, item workflowcache.WorkflowItem, identity string) {
+	if candidate == nil {
+		return
+	}
+	candidate.SourceIp = item.SourceIp
+	candidate.MachineId = item.MachineId
+	candidate.NodeId = firstNonEmpty(item.NodeId, identity)
+	candidate.NodeName = item.NodeName
+	candidate.Online = true
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }

@@ -28,13 +28,25 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 	if clientIP := strings.TrimSpace(req.IP); clientIP != "" {
 		gModel = gModel.Where(columns.ClientIp, clientIP)
 	}
+	if machineID := strings.TrimSpace(req.MachineID); machineID != "" {
+		gModel = gModel.Where(columns.MachineId, machineID)
+	}
+	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
+		gModel = gModel.Where(columns.NodeId, nodeID)
+	}
 
 	// Apply keyword filter 应用关键词筛选
 	if keyword := strings.TrimSpace(req.Keyword); keyword != "" {
 		likeKeyword := "%" + keyword + "%"
 		gModel = gModel.Where(
 			"("+columns.ClientName+" LIKE ? OR "+
-				columns.ClientIp+" LIKE ?)",
+				columns.ClientIp+" LIKE ? OR "+
+				columns.MachineId+" LIKE ? OR "+
+				columns.NodeId+" LIKE ? OR "+
+				columns.NodeName+" LIKE ?)",
+			likeKeyword,
+			likeKeyword,
+			likeKeyword,
 			likeKeyword,
 			likeKeyword,
 		)
@@ -48,7 +60,7 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 	if strings.TrimSpace(req.Status) == "online" {
 		onlineClients := make([]entity.Clients, 0, len(clients))
 		for _, client := range clients {
-			if workflowcache.IsClientOnline(ctx, client.ClientIp) {
+			if workflowcache.IsClientOnline(ctx, firstNonEmpty(client.NodeId, client.ClientIp)) {
 				onlineClients = append(onlineClients, client)
 			}
 		}
@@ -59,4 +71,13 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 		List:  clients,
 		Total: len(clients),
 	}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }

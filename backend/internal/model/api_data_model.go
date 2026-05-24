@@ -20,6 +20,12 @@ type TaskResModel struct {
 	ClientID       string      `json:"client_id" dc:"客户端ID"`
 	ClientName     string      `json:"client_name" dc:"客户端名称"`
 	ClientIP       string      `json:"client_ip" dc:"客户端IP"`
+	MachineID      string      `json:"machine_id" dc:"机器ID"`
+	NodeID         string      `json:"node_id" dc:"执行节点ID"`
+	NodeName       string      `json:"node_name" dc:"执行节点名称"`
+	TargetGroupID  int64       `json:"target_group_id" dc:"目标节点分组ID"`
+	DispatchMode   string      `json:"dispatch_mode" dc:"调度模式"`
+	QueuePolicy    string      `json:"queue_policy" dc:"繁忙策略"`
 	CronExpression string      `json:"cron_expression" dc:"Cron表达式"`
 	Params         JSONMap     `json:"params" dc:"任务参数"`
 	Enabled        bool        `json:"enabled" dc:"是否启用"`
@@ -39,6 +45,9 @@ type TaskRecordResModel struct {
 	ClientID          string      `json:"client_id" dc:"客户端ID"`
 	ClientName        string      `json:"client_name" dc:"客户端名称"`
 	ClientIP          string      `json:"client_ip" dc:"客户端IP"`
+	MachineID         string      `json:"machine_id" dc:"机器ID"`
+	NodeID            string      `json:"node_id" dc:"执行节点ID"`
+	NodeName          string      `json:"node_name" dc:"执行节点名称"`
 	ExecutionID       string      `json:"execution_id" dc:"后端本次执行标识"`
 	AutomaExecutionID string      `json:"automa_execution_id" dc:"Automa客户端侧执行实例ID"`
 	TriggerType       string      `json:"trigger_type" dc:"触发类型"`

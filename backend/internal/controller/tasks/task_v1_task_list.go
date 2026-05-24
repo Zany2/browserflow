@@ -40,6 +40,12 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 	} else if clientID := strings.TrimSpace(req.ClientID); clientID != "" {
 		gModel = gModel.Where(columns.ClientIp, clientID)
 	}
+	if machineID := strings.TrimSpace(req.MachineID); machineID != "" {
+		gModel = gModel.Where(columns.MachineId, machineID)
+	}
+	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
+		gModel = gModel.Where(columns.NodeId, nodeID)
+	}
 	if enabled := strings.TrimSpace(req.Enabled); enabled == "true" || enabled == "false" {
 		gModel = gModel.Where(columns.Enabled, enabled == "true")
 	}

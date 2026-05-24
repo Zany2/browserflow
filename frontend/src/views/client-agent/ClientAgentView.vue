@@ -132,6 +132,14 @@ const route = useRoute()
 const browserId = resolveClientAgentId()
 const token = String(route.query.token || '')
 const role = String(route.query.role || 'client_agent')
+const machineId = String(route.query.machine_id || '')
+const machineName = String(route.query.machine_name || '')
+const nodeId = String(route.query.node_id || '')
+const nodeName = String(route.query.node_name || nodeId || '')
+const nodeIndex = Number(route.query.node_index || 0)
+const workerVersion = String(route.query.worker_version || '')
+const profileDir = String(route.query.profile_dir || '')
+const extensionDir = String(route.query.extension_dir || '')
 
 const status = ref('connecting')
 const automaInstalled = ref(false)
@@ -183,6 +191,14 @@ function connectSocket() {
   closeSocketHandler.value?.()
   closeSocketHandler.value = createAgentSocket({
     browserId,
+    machineId,
+    machineName,
+    nodeId,
+    nodeName,
+    nodeIndex,
+    workerVersion,
+    profileDir,
+    extensionDir,
     token,
     role,
     enableHeartbeat: true,

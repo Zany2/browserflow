@@ -85,6 +85,21 @@ func BuildClientIdentity(clientIP string) ClientIdentity {
 	}
 }
 
+// BuildNodeIdentity builds a server execution-node identity.
+func BuildNodeIdentity(clientIP string, machineID string, nodeID string) ClientIdentity {
+	connectionID := strings.TrimSpace(nodeID)
+	if connectionID == "" {
+		connectionID = strings.TrimSpace(clientIP)
+	}
+	return ClientIdentity{
+		ConnectionID:     connectionID,
+		ClientIP:         strings.TrimSpace(clientIP),
+		MachineID:        strings.TrimSpace(machineID),
+		NodeID:           strings.TrimSpace(nodeID),
+		RequireHeartbeat: true,
+	}
+}
+
 // BuildConnectionIdentity build arbitrary connection identity.
 func BuildConnectionIdentity(connectionID, clientIP string, requireHeartbeat bool) ClientIdentity {
 	return ClientIdentity{
@@ -97,6 +112,14 @@ func BuildConnectionIdentity(connectionID, clientIP string, requireHeartbeat boo
 // SendClientMessage send structured websocket message.
 func SendClientMessage(clientIP string, in *model.WSResponse) int {
 	return sendStructuredMessage(clientIP, in)
+}
+
+// SendNodeMessage sends a message to an execution node, falling back to legacy ip.
+func SendNodeMessage(nodeID string, clientIP string, in *model.WSResponse) int {
+	if sent := sendStructuredMessage(strings.TrimSpace(nodeID), in); sent > 0 {
+		return sent
+	}
+	return sendStructuredMessage(strings.TrimSpace(clientIP), in)
 }
 
 // SendConnectionMessage send structured message by connection id.
@@ -193,10 +216,11 @@ func (ws *WsHandlerFunc) OnMessage(client *Client, messageType int, message []by
 // handleHeartbeat handle heartbeat message.
 func (ws *WsHandlerFunc) handleHeartbeat(client *Client, in *model.WSRequest) {
 	now := time.Now()
+	bindNodeIdentity(client, in)
 	client.markHeartbeat(in.ClientTime, now)
-	workflowcache.TouchClient(client.Ctx, client.ClientIP())
+	workflowcache.TouchNode(client.Ctx, executionNodeID(client, in), resolveNodeName(in), resolveMachineID(client, in), client.ClientIP())
 	if commandID := resolveExecutionCommandID(in); commandID != "" {
-		if _, err := tasklock.Renew(client.Ctx, client.ClientIP(), commandID); err != nil {
+		if _, err := tasklock.RenewNode(client.Ctx, executionNodeID(client, in), client.ClientIP(), commandID); err != nil {
 			g.Log().Line().Warningf(client.Ctx, "renew client task lock failed: client_ip=%s command_id=%s err=%+v", client.ClientIP(), commandID, err)
 		}
 	}
@@ -206,11 +230,14 @@ func (ws *WsHandlerFunc) handleHeartbeat(client *Client, in *model.WSRequest) {
 		g.Log().Line().Errorf(client.Ctx, "update client last seen failed: client_ip=%s err=%+v", client.ClientIP(), err)
 	}
 
-	_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
+	_ = SendNodeMessage(executionNodeID(client, in), client.ClientIP(), &model.WSResponse{
 		Type:       model.WSMessageTypeHeartbeatAck,
 		BrowserID:  in.BrowserID,
 		ClientID:   resolveClientID(client, in),
 		ClientIP:   client.ClientIP(),
+		MachineID:  resolveMachineID(client, in),
+		NodeID:     executionNodeID(client, in),
+		NodeName:   resolveNodeName(in),
 		ClientTime: in.ClientTime,
 		ServerTime: now.UnixMilli(),
 		Data: map[string]any{
@@ -236,11 +263,13 @@ func RequestTaskRecovery(ctx context.Context) {
 
 func requestClientTaskRecovery(ctx context.Context, lockInfo tasklock.LockInfo) {
 	clientIP := strings.TrimSpace(lockInfo.ClientIP)
+	nodeID := strings.TrimSpace(lockInfo.NodeID)
 	commandID := strings.TrimSpace(lockInfo.CommandID)
-	if clientIP == "" || !strings.HasPrefix(commandID, "task-record-") {
+	if clientIP == "" && nodeID == "" || !strings.HasPrefix(commandID, "task-record-") {
 		return
 	}
-	if WsManage == nil || !WsManage.HasClient(clientIP) {
+	connectionID := firstNonEmpty(nodeID, clientIP)
+	if WsManage == nil || !WsManage.HasClient(connectionID) {
 		return
 	}
 
@@ -260,13 +289,15 @@ func requestClientTaskRecovery(ctx context.Context, lockInfo tasklock.LockInfo) 
 		return
 	}
 	if record.IsEmpty() {
-		_ = tasklock.Release(ctx, clientIP, commandID)
+		_ = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID)
 		return
 	}
 
-	sent := SendClientMessage(clientIP, &model.WSResponse{
+	sent := SendNodeMessage(nodeID, clientIP, &model.WSResponse{
 		Type:      model.WSMessageTypeAgentCommand,
 		ClientIP:  clientIP,
+		MachineID: lockInfo.MachineID,
+		NodeID:    nodeID,
 		CommandID: commandID,
 		Command:   "task.status.query",
 		Payload: map[string]any{
@@ -286,6 +317,7 @@ func requestClientTaskRecovery(ctx context.Context, lockInfo tasklock.LockInfo) 
 // handleAgentRegister handle agent register message.
 func (ws *WsHandlerFunc) handleAgentRegister(client *Client, in *model.WSRequest) {
 	now := time.Now()
+	bindNodeIdentity(client, in)
 	client.markHeartbeat(now.UnixMilli(), now)
 
 	// Resolve client id before persistence.
@@ -303,17 +335,21 @@ func (ws *WsHandlerFunc) handleAgentRegister(client *Client, in *model.WSRequest
 		return
 	}
 
-	_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
+	_ = SendNodeMessage(executionNodeID(client, in), client.ClientIP(), &model.WSResponse{
 		Type:            model.WSMessageTypeAgentRegistered,
 		BrowserID:       in.BrowserID,
 		ClientID:        clientID,
 		ClientIP:        client.ClientIP(),
+		MachineID:       resolveMachineID(client, in),
+		MachineName:     resolveMachineName(in),
+		NodeID:          executionNodeID(client, in),
+		NodeName:        resolveNodeName(in),
 		Role:            in.Role,
 		AutomaInstalled: in.AutomaInstalled,
 		AutomaVersion:   in.AutomaVersion,
 	})
 
-	lockInfo, hasLock, err := tasklock.Get(client.Ctx, client.ClientIP())
+	lockInfo, hasLock, err := tasklock.GetNode(client.Ctx, executionNodeID(client, in), client.ClientIP())
 	if err != nil {
 		g.Log().Line().Warningf(client.Ctx, "read client task lock after register failed: client_ip=%s err=%+v", client.ClientIP(), err)
 		return
@@ -326,6 +362,7 @@ func (ws *WsHandlerFunc) handleAgentRegister(client *Client, in *model.WSRequest
 // handleAgentStatusUpdate handle agent status update.
 func (ws *WsHandlerFunc) handleAgentStatusUpdate(client *Client, in *model.WSRequest) {
 	now := time.Now()
+	bindNodeIdentity(client, in)
 	client.markHeartbeat(now.UnixMilli(), now)
 
 	// Refresh client status in database.
@@ -333,17 +370,20 @@ func (ws *WsHandlerFunc) handleAgentStatusUpdate(client *Client, in *model.WSReq
 		g.Log().Line().Errorf(client.Ctx, "update client status failed: client_ip=%s err=%+v", client.ClientIP(), err)
 	}
 
-	_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
+	_ = SendNodeMessage(executionNodeID(client, in), client.ClientIP(), &model.WSResponse{
 		Type:      model.WSMessageTypeAgentStatusUpdateAck,
 		BrowserID: in.BrowserID,
 		ClientID:  resolveClientID(client, in),
 		ClientIP:  client.ClientIP(),
+		MachineID: resolveMachineID(client, in),
+		NodeID:    executionNodeID(client, in),
 	})
 }
 
 // handleAgentResult handle agent result message.
 func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) {
 	now := time.Now()
+	bindNodeIdentity(client, in)
 	client.markHeartbeat(now.UnixMilli(), now)
 	browserID := in.BrowserID
 	if browserID == "" {
@@ -378,7 +418,7 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 	if strings.HasPrefix(in.CommandID, "task-record-") {
 		recordID := gconv.Int64(strings.TrimPrefix(in.CommandID, "task-record-"))
 		if recordID > 0 {
-			if err := updateTaskRecordFromAgentResult(client.Ctx, recordID, client.ClientIP(), in.CommandID, in.Success, resultData, in.Error); err != nil {
+			if err := updateTaskRecordFromAgentResult(client.Ctx, recordID, executionNodeID(client, in), client.ClientIP(), in.CommandID, in.Success, resultData, in.Error); err != nil {
 				g.Log().Line().Errorf(client.Ctx, "update task record failed: record_id=%d err=%+v", recordID, err)
 			}
 		}
@@ -388,17 +428,19 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 		resultCh <- result
 	}
 
-	_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
+	_ = SendNodeMessage(executionNodeID(client, in), client.ClientIP(), &model.WSResponse{
 		Type:      model.WSMessageTypeAgentResultAck,
 		BrowserID: in.BrowserID,
 		ClientID:  resolveClientID(client, in),
 		ClientIP:  client.ClientIP(),
+		MachineID: resolveMachineID(client, in),
+		NodeID:    executionNodeID(client, in),
 		CommandID: in.CommandID,
 	})
 }
 
 // resolveExecutionCommandID returns current task command id from heartbeat payload.
-func updateTaskRecordFromAgentResult(ctx context.Context, recordID int64, clientIP string, commandID string, success bool, resultData []byte, errorText string) error {
+func updateTaskRecordFromAgentResult(ctx context.Context, recordID int64, nodeID string, clientIP string, commandID string, success bool, resultData []byte, errorText string) error {
 	resultJSON := "{}"
 	if len(resultData) > 0 {
 		resultJSON = string(resultData)
@@ -437,13 +479,13 @@ func updateTaskRecordFromAgentResult(ctx context.Context, recordID int64, client
 		return err
 	}
 	if status == "running" {
-		if _, renewErr := tasklock.Renew(ctx, clientIP, commandID); renewErr != nil {
+		if _, renewErr := tasklock.RenewNode(ctx, nodeID, clientIP, commandID); renewErr != nil {
 			g.Log().Line().Warningf(ctx, "renew client task lock failed: client_ip=%s command_id=%s err=%+v", clientIP, commandID, renewErr)
 		}
 		return nil
 	}
 	if status == "success" || status == "failed" {
-		if err = tasklock.Release(ctx, clientIP, commandID); err != nil {
+		if err = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID); err != nil {
 			g.Log().Line().Warningf(ctx, "release client task lock failed: client_ip=%s command_id=%s err=%+v", clientIP, commandID, err)
 		}
 	}
@@ -541,8 +583,9 @@ func resolveTaskRecordResultMessage(resultData []byte) string {
 // handleWorkflowInventory caches client workflow inventory.
 func (ws *WsHandlerFunc) handleWorkflowInventory(client *Client, in *model.WSRequest) {
 	now := time.Now()
+	bindNodeIdentity(client, in)
 	client.markHeartbeat(now.UnixMilli(), now)
-	workflowcache.TouchClient(client.Ctx, client.ClientIP())
+	workflowcache.TouchNode(client.Ctx, executionNodeID(client, in), resolveNodeName(in), resolveMachineID(client, in), client.ClientIP())
 
 	// Convert workflow list to GoFrame maps.
 	workflows := make([]g.Map, 0, len(in.Workflows))
@@ -552,7 +595,7 @@ func (ws *WsHandlerFunc) handleWorkflowInventory(client *Client, in *model.WSReq
 		}
 	}
 
-	if err := workflowcache.SaveInventory(client.Ctx, client.ClientIP(), workflows); err != nil {
+	if err := workflowcache.SaveNodeInventory(client.Ctx, executionNodeID(client, in), resolveNodeName(in), resolveMachineID(client, in), client.ClientIP(), workflows); err != nil {
 		g.Log().Line().Errorf(client.Ctx, "save workflow inventory failed: client_ip=%s err=%+v", client.ClientIP(), err)
 		_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
 			Type:     model.WSMessageTypeError,
@@ -563,10 +606,13 @@ func (ws *WsHandlerFunc) handleWorkflowInventory(client *Client, in *model.WSReq
 		return
 	}
 
-	_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
-		Type:     model.WSMessageTypeWorkflowInventoryAck,
-		ClientIP: client.ClientIP(),
-		ClientID: resolveClientID(client, in),
+	_ = SendNodeMessage(executionNodeID(client, in), client.ClientIP(), &model.WSResponse{
+		Type:      model.WSMessageTypeWorkflowInventoryAck,
+		ClientIP:  client.ClientIP(),
+		MachineID: resolveMachineID(client, in),
+		NodeID:    executionNodeID(client, in),
+		NodeName:  resolveNodeName(in),
+		ClientID:  resolveClientID(client, in),
 		Data: map[string]any{
 			"workflow_count": len(workflows),
 		},
@@ -596,6 +642,65 @@ func resolveClientID(client *Client, in *model.WSRequest) string {
 	return ""
 }
 
+func bindNodeIdentity(client *Client, in *model.WSRequest) {
+	if client == nil {
+		return
+	}
+	machineID := resolveMachineID(client, in)
+	nodeID := executionNodeID(client, in)
+	client.BindNodeIdentity(machineID, nodeID)
+}
+
+func executionNodeID(client *Client, in *model.WSRequest) string {
+	if in != nil {
+		if nodeID := strings.TrimSpace(in.NodeID); nodeID != "" {
+			return nodeID
+		}
+	}
+	if client != nil {
+		if nodeID := strings.TrimSpace(client.NodeID()); nodeID != "" {
+			return nodeID
+		}
+		return strings.TrimSpace(client.ClientIP())
+	}
+	return ""
+}
+
+func resolveMachineID(client *Client, in *model.WSRequest) string {
+	if in != nil {
+		if machineID := strings.TrimSpace(in.MachineID); machineID != "" {
+			return machineID
+		}
+	}
+	if client != nil {
+		return strings.TrimSpace(client.MachineID())
+	}
+	return ""
+}
+
+func resolveMachineName(in *model.WSRequest) string {
+	if in == nil {
+		return ""
+	}
+	return strings.TrimSpace(in.MachineName)
+}
+
+func resolveNodeName(in *model.WSRequest) string {
+	if in == nil {
+		return ""
+	}
+	return strings.TrimSpace(in.NodeName)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 // saveClientRegister save client register info.
 func saveClientRegister(client *Client, in *model.WSRequest, clientID string) error {
 	if client == nil || in == nil || strings.TrimSpace(client.ClientIP()) == "" {
@@ -609,28 +714,60 @@ func saveClientRegister(client *Client, in *model.WSRequest, clientID string) er
 	if clientName == "" {
 		clientName = clientID
 	}
+	machineID := resolveMachineID(client, in)
+	machineName := resolveMachineName(in)
+	nodeID := executionNodeID(client, in)
+	nodeName := resolveNodeName(in)
+	if nodeName == "" {
+		nodeName = clientName
+	}
+	if err := saveClientMachine(client, in, machineID, machineName, now); err != nil {
+		return err
+	}
+	capabilitiesJSON := "{}"
+	if len(in.Capabilities) > 0 {
+		if body, err := json.Marshal(in.Capabilities); err == nil {
+			capabilitiesJSON = string(body)
+		}
+	}
 
 	// Build shared save data.
 	saveData := do.Clients{
-		ClientId:       clientID,
-		ClientName:     clientName,
-		ClientIp:       client.ClientIP(),
-		UserAgent:      strings.TrimSpace(in.UserAgent),
-		Status:         "online",
-		PluginStatus:   resolvePluginStatus(in.AutomaInstalled),
-		AutomaVersion:  strings.TrimSpace(in.AutomaVersion),
-		BrowserName:    strings.TrimSpace(in.BrowserName),
-		BrowserVersion: strings.TrimSpace(in.BrowserVersion),
-		OsName:         strings.TrimSpace(in.OsName),
-		OsVersion:      strings.TrimSpace(in.OsVersion),
-		Hostname:       strings.TrimSpace(in.Hostname),
-		LastSeenAt:     now,
-		ConnectedAt:    now,
+		ClientId:         clientID,
+		ClientName:       clientName,
+		ClientIp:         client.ClientIP(),
+		MachineId:        machineID,
+		MachineName:      machineName,
+		NodeId:           nodeID,
+		NodeName:         nodeName,
+		NodeIndex:        in.NodeIndex,
+		WorkerVersion:    strings.TrimSpace(in.WorkerVersion),
+		ProfileDir:       strings.TrimSpace(in.ProfileDir),
+		ExtensionDir:     strings.TrimSpace(in.ExtensionDir),
+		UserAgent:        strings.TrimSpace(in.UserAgent),
+		Status:           "online",
+		BusyStatus:       "idle",
+		PluginStatus:     resolvePluginStatus(in.AutomaInstalled),
+		AutomaVersion:    strings.TrimSpace(in.AutomaVersion),
+		BrowserName:      strings.TrimSpace(in.BrowserName),
+		BrowserVersion:   strings.TrimSpace(in.BrowserVersion),
+		OsName:           strings.TrimSpace(in.OsName),
+		OsVersion:        strings.TrimSpace(in.OsVersion),
+		Hostname:         strings.TrimSpace(in.Hostname),
+		CapabilitiesJson: capabilitiesJSON,
+		LastSeenAt:       now,
+		ConnectedAt:      now,
 	}
 
-	// Query existing client by ip.
+	queryColumn := columns.ClientIp
+	queryValue := client.ClientIP()
+	if nodeID != "" {
+		queryColumn = columns.NodeId
+		queryValue = nodeID
+	}
+
 	record, err := dao.Clients.Ctx(client.Ctx).
-		Where(columns.ClientIp, client.ClientIP()).
+		Where(queryColumn, queryValue).
 		One()
 	if err != nil {
 		return err
@@ -648,9 +785,38 @@ func saveClientRegister(client *Client, in *model.WSRequest, clientID string) er
 		saveData.ClientName = nil
 	}
 	_, err = dao.Clients.Ctx(client.Ctx).
-		Where(columns.ClientIp, client.ClientIP()).
+		Where(queryColumn, queryValue).
 		Data(saveData).
 		Update()
+	return err
+}
+
+func saveClientMachine(client *Client, in *model.WSRequest, machineID string, machineName string, now *gtime.Time) error {
+	if client == nil || in == nil || strings.TrimSpace(machineID) == "" {
+		return nil
+	}
+	columns := dao.ClientMachines.Columns()
+	saveData := do.ClientMachines{
+		MachineId:     machineID,
+		MachineName:   machineName,
+		ClientIp:      client.ClientIP(),
+		Hostname:      strings.TrimSpace(in.Hostname),
+		OsName:        strings.TrimSpace(in.OsName),
+		OsVersion:     strings.TrimSpace(in.OsVersion),
+		WorkerVersion: strings.TrimSpace(in.WorkerVersion),
+		Status:        "online",
+		LastSeenAt:    now,
+	}
+	record, err := dao.ClientMachines.Ctx(client.Ctx).Where(columns.MachineId, machineID).One()
+	if err != nil {
+		return err
+	}
+	if record.IsEmpty() {
+		saveData.FirstSeenAt = now
+		_, err = dao.ClientMachines.Ctx(client.Ctx).Data(saveData).Insert()
+		return err
+	}
+	_, err = dao.ClientMachines.Ctx(client.Ctx).Where(columns.MachineId, machineID).Data(saveData).Update()
 	return err
 }
 
@@ -667,12 +833,17 @@ func updateClientLastSeen(client *Client, in *model.WSRequest) error {
 	}
 	clientID := resolveClientID(client, in)
 	client.BindClientID(clientID)
+	bindNodeIdentity(client, in)
+	machineID := resolveMachineID(client, in)
+	nodeID := executionNodeID(client, in)
 
 	// Build update data.
 	columns := dao.Clients.Columns()
 	now := gtime.Now()
 	updateData := do.Clients{
 		ClientIp:   client.ClientIP(),
+		MachineId:  machineID,
+		NodeId:     nodeID,
 		Status:     "online",
 		LastSeenAt: now,
 	}
@@ -684,10 +855,27 @@ func updateClientLastSeen(client *Client, in *model.WSRequest) error {
 	}
 
 	// Update matched client.
+	queryColumn := columns.ClientIp
+	queryValue := clientIP
+	if nodeID != "" {
+		queryColumn = columns.NodeId
+		queryValue = nodeID
+	}
 	_, err := dao.Clients.Ctx(client.Ctx).
-		Where(columns.ClientIp, clientIP).
+		Where(queryColumn, queryValue).
 		Data(updateData).
 		Update()
+	if err == nil && machineID != "" {
+		machineColumns := dao.ClientMachines.Columns()
+		_, err = dao.ClientMachines.Ctx(client.Ctx).
+			Where(machineColumns.MachineId, machineID).
+			Data(do.ClientMachines{
+				ClientIp:   client.ClientIP(),
+				Status:     "online",
+				LastSeenAt: now,
+			}).
+			Update()
+	}
 	return err
 }
 
@@ -699,17 +887,27 @@ func markClientOffline(client *Client) error {
 
 	// Resolve client ip.
 	clientIP := strings.TrimSpace(client.ClientIP())
-	if clientIP == "" {
+	nodeID := strings.TrimSpace(client.ExecutionIdentity())
+	if clientIP == "" && nodeID == "" {
 		return nil
 	}
 
 	// Update offline status.
 	columns := dao.Clients.Columns()
+	queryColumn := columns.ClientIp
+	queryValue := clientIP
+	if nodeID != "" {
+		queryColumn = columns.NodeId
+		queryValue = nodeID
+	}
 	_, err := dao.Clients.Ctx(client.Ctx).
-		Where(columns.ClientIp, clientIP).
+		Where(queryColumn, queryValue).
 		Data(do.Clients{
-			Status:         "offline",
-			DisconnectedAt: gtime.Now(),
+			Status:              "offline",
+			BusyStatus:          "idle",
+			CurrentExecutionId:  "",
+			CurrentTaskRecordId: 0,
+			DisconnectedAt:      gtime.Now(),
 		}).
 		Update()
 	return err
@@ -730,11 +928,12 @@ func failClientRunningTask(client *Client) {
 	}
 
 	clientIP := strings.TrimSpace(client.ClientIP())
-	if clientIP == "" {
+	nodeID := strings.TrimSpace(client.ExecutionIdentity())
+	if clientIP == "" && nodeID == "" {
 		return
 	}
 
-	lockInfo, hasLock, err := tasklock.Get(client.Ctx, clientIP)
+	lockInfo, hasLock, err := tasklock.GetNode(client.Ctx, nodeID, clientIP)
 	if err != nil {
 		g.Log().Line().Warningf(client.Ctx, "read client task lock on close failed: client_ip=%s err=%+v", clientIP, err)
 		return
@@ -761,7 +960,7 @@ func failClientRunningTask(client *Client) {
 	}
 
 	state.RemovePendingCommand(lockInfo.CommandID)
-	if err = tasklock.Release(client.Ctx, clientIP, lockInfo.CommandID); err != nil {
+	if err = tasklock.ReleaseNode(client.Ctx, nodeID, clientIP, lockInfo.CommandID); err != nil {
 		g.Log().Line().Warningf(client.Ctx, "release client task lock on close failed: client_ip=%s command_id=%s err=%+v", clientIP, lockInfo.CommandID, err)
 	}
 }
@@ -796,7 +995,7 @@ func (ws *WsHandlerFunc) OnClose(client *Client) {
 			if err := markClientOffline(client); err != nil {
 				g.Log().Line().Errorf(client.Ctx, "WebSocket close mark client offline failed: client_ip=%s err=%+v", client.ClientIP(), err)
 			}
-			if err := workflowcache.ClearClient(client.Ctx, client.ClientIP()); err != nil {
+			if err := workflowcache.ClearNode(client.Ctx, client.ExecutionIdentity()); err != nil {
 				g.Log().Line().Errorf(client.Ctx, "WebSocket close clear workflow cache failed: client_ip=%s err=%+v", client.ClientIP(), err)
 			}
 			failClientRunningTask(client)

@@ -451,6 +451,9 @@ const filteredClients = computed(() => {
     const keywordSource = [
       getClientId(client),
       getClientName(client),
+      getClientNodeId(client),
+      getClientNodeName(client),
+      getClientMachineId(client),
       client.client_ip,
       client.ip,
       client.remote_ip,
@@ -589,9 +592,12 @@ async function editTask(row) {
     ...row,
     workflow_id: row.workflow_id || '',
     workflow_name: row.workflow_name || '',
-    client_id: row.client_id || '',
+    client_id: row.node_id || row.client_id || '',
     client_name: row.client_name || '',
     client_ip: row.client_ip || row.source_ip || '',
+    machine_id: row.machine_id || '',
+    node_id: row.node_id || '',
+    node_name: row.node_name || '',
     cron_expression: row.cron_expression || row.cron || '',
     enabled: row.enabled !== false,
   })
@@ -624,19 +630,20 @@ async function checkSelectedClientWorkflow() {
   selectedClientHasWorkflow.value = null
   clientWorkflowChecking.value = false
   const workflowId = taskForm.workflow_id.trim()
+  const targetNodeId = taskForm.node_id.trim()
   const clientIp = taskForm.client_ip.trim()
-  if (!workflowId || !clientIp) return
+  if (!workflowId || (!targetNodeId && !clientIp)) return
 
   clientWorkflowChecking.value = true
   try {
     const data = await listAutomaSyncCandidatesByWorkflow(workflowId, {
       page_num: 1,
       page_size: clientWorkflowCheckPageSize,
-      source_ip: clientIp,
+      source_ip: targetNodeId || clientIp,
     })
     const candidates = normalizeList(data)
     if (seq !== clientWorkflowCheckSeq.value) return
-    selectedClientHasWorkflow.value = candidates.some((item) => getClientIp(item) === clientIp)
+    selectedClientHasWorkflow.value = candidates.some((item) => getClientNodeId(item) === targetNodeId || getClientIp(item) === clientIp)
   } catch {
     if (seq !== clientWorkflowCheckSeq.value) return
     selectedClientHasWorkflow.value = null
@@ -739,6 +746,8 @@ async function handleExecuteTask(row) {
   await executeTask(row.id, {
     client_id: row.client_id || '',
     client_ip: row.client_ip || '',
+    machine_id: row.machine_id || '',
+    node_id: row.node_id || '',
     params: row.params || {},
   })
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已下发' })
@@ -775,6 +784,8 @@ async function confirmExecuteTaskWithParams() {
     await executeTask(row.id, {
       client_id: row.client_id || '',
       client_ip: row.client_ip || '',
+      machine_id: row.machine_id || '',
+      node_id: row.node_id || '',
       params: {
         ...(row.params || {}),
         ...params,
@@ -807,6 +818,9 @@ function handleClientChange(clientId) {
   const client = findClientById(clientId)
   taskForm.client_name = client ? getClientName(client) : ''
   taskForm.client_ip = client ? getClientIp(client) : ''
+  taskForm.machine_id = client ? getClientMachineId(client) : ''
+  taskForm.node_id = client ? getClientNodeId(client) : ''
+  taskForm.node_name = client ? getClientNodeName(client) : ''
   checkSelectedClientWorkflow()
 }
 
@@ -866,6 +880,9 @@ function buildTaskPayload() {
     client_id: taskForm.client_id.trim(),
     client_name: taskForm.client_name.trim(),
     client_ip: taskForm.client_ip.trim(),
+    machine_id: taskForm.machine_id.trim(),
+    node_id: taskForm.node_id.trim(),
+    node_name: taskForm.node_name.trim(),
     cron_expression: cronExpression,
     run_once_after_create: false,
     params,
@@ -941,6 +958,9 @@ function buildTaskPayloadFromRow(row, overrides = {}) {
     client_id: String(row?.client_id || '').trim(),
     client_name: String(row?.client_name || '').trim(),
     client_ip: getTaskClientIpValue(row),
+    machine_id: String(row?.machine_id || '').trim(),
+    node_id: String(row?.node_id || '').trim(),
+    node_name: String(row?.node_name || '').trim(),
     cron_expression: String(row?.cron_expression || row?.cron || '').trim(),
     run_once_after_create: false,
     params: normalizeTaskParams(row?.params),
@@ -1240,7 +1260,7 @@ function getParamDescriptionText(param) {
 }
 
 function findClientById(clientId) {
-  return clientOptions.value.find((item) => getClientId(item) === clientId)
+  return clientOptions.value.find((item) => getClientId(item) === clientId || String(item?.id || '') === String(clientId || ''))
 }
 
 function getWorkflowId(row) {
@@ -1248,7 +1268,19 @@ function getWorkflowId(row) {
 }
 
 function getClientId(row) {
-  return row?.client_id || row?.clientId || row?.id || ''
+  return getClientNodeId(row) || row?.client_id || row?.clientId || row?.id || ''
+}
+
+function getClientNodeId(row) {
+  return row?.node_id || row?.nodeId || ''
+}
+
+function getClientNodeName(row) {
+  return row?.node_name || row?.nodeName || ''
+}
+
+function getClientMachineId(row) {
+  return row?.machine_id || row?.machineId || ''
 }
 
 function getClientIp(row) {
@@ -1256,7 +1288,7 @@ function getClientIp(row) {
 }
 
 function getClientName(row) {
-  return row?.client_name || row?.name || row?.hostname || getClientId(row) || ''
+  return row?.client_name || row?.name || row?.hostname || getClientNodeName(row) || getClientId(row) || ''
 }
 
 function getClientStatus(row) {
@@ -1273,20 +1305,25 @@ function getClientStatusText(row) {
 }
 
 function getClientSelectMeta(row) {
-  return [getClientId(row), getClientStatusText(row)].filter(Boolean).join(' / ')
+  return [getClientNodeName(row) || getClientNodeId(row), getClientMachineId(row), getClientStatusText(row)].filter(Boolean).join(' / ')
 }
 
 function getClientOptionLabel(row) {
-  return [getClientIp(row), getClientSelectMeta(row)].filter(Boolean).join(' / ')
+  return [getClientNodeName(row) || getClientIp(row), getClientSelectMeta(row)].filter(Boolean).join(' / ')
 }
 
 function getTaskClientIp(row) {
-  return getTaskClientIpValue(row) || '自动匹配'
+  return getTaskTargetText(row) || '自动匹配'
 }
 
 function getTaskClientIpValue(row) {
-  const client = findClientById(row?.client_id)
+  const client = findClientById(row?.node_id || row?.client_id)
   return String(row?.client_ip || (client ? getClientIp(client) : '') || '').trim()
+}
+
+function getTaskTargetText(row) {
+  const client = findClientById(row?.node_id || row?.client_id)
+  return String(row?.node_name || row?.node_id || (client ? getClientNodeName(client) || getClientNodeId(client) : '') || getTaskClientIpValue(row) || '').trim()
 }
 
 function getScheduleText(row) {
@@ -1316,6 +1353,9 @@ function createEmptyTaskForm() {
     client_id: '',
     client_name: '',
     client_ip: '',
+    machine_id: '',
+    node_id: '',
+    node_name: '',
     cron_expression: '',
     enabled: true,
   }

@@ -22,6 +22,8 @@ const (
 // LockInfo describes one client execution lease.
 type LockInfo struct {
 	ClientIP   string `json:"client_ip"`
+	MachineID  string `json:"machine_id,omitempty"`
+	NodeID     string `json:"node_id,omitempty"`
 	TaskID     int64  `json:"task_id"`
 	RecordID   int64  `json:"record_id"`
 	WorkflowID string `json:"workflow_id"`
@@ -32,9 +34,11 @@ type LockInfo struct {
 // Acquire creates a per-client task lease.
 func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
 	info.ClientIP = strings.TrimSpace(info.ClientIP)
+	info.MachineID = strings.TrimSpace(info.MachineID)
+	info.NodeID = strings.TrimSpace(info.NodeID)
 	info.WorkflowID = strings.TrimSpace(info.WorkflowID)
 	info.CommandID = strings.TrimSpace(info.CommandID)
-	if info.ClientIP == "" || info.CommandID == "" {
+	if lockIdentity(info) == "" || info.CommandID == "" {
 		return false, nil, nil
 	}
 	if info.AcquiredAt <= 0 {
@@ -45,7 +49,7 @@ func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	result, err := g.Redis().Do(ctx, "SET", clientLockKey(info.ClientIP), string(body), "NX", "EX", int(LeaseTTL.Seconds()))
+	result, err := g.Redis().Do(ctx, "SET", clientLockKey(lockIdentity(info)), string(body), "NX", "EX", int(LeaseTTL.Seconds()))
 	if err != nil {
 		return false, nil, err
 	}
@@ -53,7 +57,7 @@ func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
 		return true, &info, nil
 	}
 
-	current, ok, err := Get(ctx, info.ClientIP)
+	current, ok, err := Get(ctx, lockIdentity(info))
 	if err != nil {
 		return false, nil, err
 	}
@@ -84,6 +88,11 @@ return 0
 	return result.Int() > 0, nil
 }
 
+// RenewNode extends a lease for node identity, falling back to client ip.
+func RenewNode(ctx context.Context, nodeID string, clientIP string, commandID string) (bool, error) {
+	return Renew(ctx, firstNonEmpty(nodeID, clientIP), commandID)
+}
+
 // Release deletes a lease only when the command still owns it.
 func Release(ctx context.Context, clientIP string, commandID string) error {
 	commandID = strings.TrimSpace(commandID)
@@ -102,6 +111,11 @@ return 0
 	return err
 }
 
+// ReleaseNode deletes a lease for node identity, falling back to client ip.
+func ReleaseNode(ctx context.Context, nodeID string, clientIP string, commandID string) error {
+	return Release(ctx, firstNonEmpty(nodeID, clientIP), commandID)
+}
+
 // Get returns the active client lease.
 func Get(ctx context.Context, clientIP string) (LockInfo, bool, error) {
 	result, err := g.Redis().Do(ctx, "GET", clientLockKey(clientIP))
@@ -118,6 +132,11 @@ func Get(ctx context.Context, clientIP string) (LockInfo, bool, error) {
 		return LockInfo{}, false, err
 	}
 	return info, true, nil
+}
+
+// GetNode returns an active node lease, falling back to client ip.
+func GetNode(ctx context.Context, nodeID string, clientIP string) (LockInfo, bool, error) {
+	return Get(ctx, firstNonEmpty(nodeID, clientIP))
 }
 
 // List scans active client execution leases.
@@ -154,8 +173,12 @@ func List(ctx context.Context) ([]LockInfo, error) {
 			if err = json.Unmarshal([]byte(text), &info); err != nil {
 				return nil, err
 			}
+			identity := strings.TrimPrefix(key, KeyPrefix)
+			if info.NodeID == "" && strings.HasPrefix(identity, "node") {
+				info.NodeID = identity
+			}
 			if info.ClientIP == "" {
-				info.ClientIP = strings.TrimPrefix(key, KeyPrefix)
+				info.ClientIP = identity
 			}
 			locks = append(locks, info)
 		}
@@ -173,4 +196,17 @@ func RecordIDFromCommand(commandID string) int64 {
 
 func clientLockKey(clientIP string) string {
 	return KeyPrefix + strings.TrimSpace(clientIP)
+}
+
+func lockIdentity(info LockInfo) string {
+	return firstNonEmpty(info.NodeID, info.ClientIP)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }

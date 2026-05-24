@@ -21,13 +21,16 @@ type TaskRecordFilesDao struct {
 
 // TaskRecordFilesColumns defines and stores column names for the table task_record_files.
 type TaskRecordFilesColumns struct {
-	Id          string // 自增ID
-	RecordId    string // 关联任务执行记录ID
-	TaskId      string // 关联任务配置ID
+	Id          string // 自增 ID
+	RecordId    string // 关联任务执行记录 ID
+	TaskId      string // 关联任务配置 ID
 	WorkflowId  string // 执行时使用的 Automa 工作流 ID
-	ClientIp    string // 执行客户端 IP
+	ClientIp    string // 执行客户端 IP，仅用于展示和兼容旧逻辑
+	MachineId   string // 执行机器 ID
+	NodeId      string // 执行节点 ID
+	ExecutionId string // 后端本次执行标识
 	FileType    string // 文件类型：table_json、table_csv、variables_json、log、screenshot 等
-	FileName    string // 原始/展示文件名
+	FileName    string // 原始或展示文件名
 	FilePath    string // 服务端保存路径或对象存储 Key
 	MimeType    string // 文件 MIME 类型
 	FileSize    string // 文件大小，单位字节
@@ -46,6 +49,9 @@ var taskRecordFilesColumns = TaskRecordFilesColumns{
 	TaskId:      "task_id",
 	WorkflowId:  "workflow_id",
 	ClientIp:    "client_ip",
+	MachineId:   "machine_id",
+	NodeId:      "node_id",
+	ExecutionId: "execution_id",
 	FileType:    "file_type",
 	FileName:    "file_name",
 	FilePath:    "file_path",
