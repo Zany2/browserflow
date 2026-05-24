@@ -123,7 +123,8 @@
         :total="recordTotal" />
     </section>
 
-    <AppDialog v-model="recordDetailVisible" title="执行记录详情" width="720px">
+    <AppDialog v-model="recordDetailVisible" title="执行记录详情" width="min(1040px, calc(100vw - 32px))"
+      class="record-detail-dialog">
       <div v-if="recordDetail" class="detail-form">
         <el-descriptions border :column="2" class="detail-descriptions">
           <el-descriptions-item label="记录 ID">{{ recordDetail.id || '' }}</el-descriptions-item>
@@ -161,7 +162,7 @@
 
         <div class="detail-block">
           <h3>结果文件</h3>
-          <el-table :data="recordDetailFiles" border size="small" empty-text="暂无结果文件">
+          <el-table class="detail-files-table" :data="recordDetailFiles" border size="small" empty-text="暂无结果文件">
             <el-table-column prop="file_name" label="文件名" min-width="160" show-overflow-tooltip />
             <el-table-column prop="file_type" label="类型" width="110" />
             <el-table-column label="行数" width="90" align="right">
@@ -303,7 +304,7 @@ async function loadRecords() {
       page_size: recordPageSize.value,
     })
     const list = normalizeList(data, 'records')
-    records.value = sortByTimeDesc(list)
+    records.value = list
     recordTotal.value = Number(data?.total ?? list.length)
     retainRecordSelectionByRows(records.value)
   } finally {
@@ -427,16 +428,6 @@ function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
 }
 
-function sortByTimeDesc(data) {
-  return data.slice().sort((a, b) => getTimeValue(b) - getTimeValue(a))
-}
-
-function getTimeValue(row) {
-  const value =
-    row?.started_at || row?.created_at || row?.updated_at || row?.startedAt || row?.createdAt
-  return value ? new Date(value).getTime() || 0 : 0
-}
-
 function getRecordStatusTag(status) {
   if (status === 'success' || status === 'done') return 'success'
   if (status === 'failed' || status === 'error') return 'danger'
@@ -544,16 +535,23 @@ function formatDate(value) {
 .detail-form {
   display: grid;
   gap: 16px;
-  max-height: 70vh;
-  overflow: auto;
-  padding-right: 4px;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
 }
 
 .detail-descriptions {
   margin-bottom: 0;
+  max-width: 100%;
+}
+
+.detail-descriptions :deep(.el-descriptions__cell) {
+  min-width: 0;
+  word-break: break-word;
 }
 
 .detail-block {
+  min-width: 0;
   margin-top: 0;
 }
 
@@ -564,14 +562,41 @@ function formatDate(value) {
 }
 
 .detail-json {
+  box-sizing: border-box;
+  max-width: 100%;
   padding: 12px;
   margin: 0;
-  overflow: auto;
+  overflow: visible;
   color: #303133;
   background: #f5f7fa;
   border: 1px solid #e4e7ed;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.detail-files-table {
+  width: 100%;
+}
+
+.detail-files-table :deep(.el-table__inner-wrapper),
+.detail-files-table :deep(.el-scrollbar),
+.detail-files-table :deep(.el-scrollbar__wrap),
+.detail-files-table :deep(.el-scrollbar__view) {
+  min-width: 0;
+}
+
+.detail-files-table :deep(.el-table__header),
+.detail-files-table :deep(.el-table__body) {
+  width: 100% !important;
+  table-layout: fixed;
+}
+
+.detail-files-table :deep(.cell) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 1280px) {

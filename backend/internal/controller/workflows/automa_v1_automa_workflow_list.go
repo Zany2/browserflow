@@ -82,7 +82,7 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		}
 
 		items := []entity.AutomaWorkflows{}
-		if err = dbModel.OrderDesc(columns.UpdatedAt).Limit(start, pageSize).Scan(&items); err != nil {
+		if err = dbModel.OrderDesc(columns.CreatedAt).OrderDesc(columns.Id).Limit(start, pageSize).Scan(&items); err != nil {
 			return nil, err
 		}
 

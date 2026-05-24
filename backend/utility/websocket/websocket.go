@@ -23,32 +23,32 @@ import (
 )
 
 const (
-	// defaultMaxConn default max connection count 默认最大连接数
+	// defaultMaxConn default max connection count
 	defaultMaxConn = 1000000
 )
 
 var (
-	// once singleton initializer 全局只初始化一次
+	// once singleton initializer
 	once sync.Once
-	// WsManage global manager 全局连接管理器
+	// WsManage global manager
 	WsManage *WebSocketManager
-	// WsHandler global default handler 全局默认处理器
+	// WsHandler global default handler
 	WsHandler *WsHandlerFunc
 )
 
-// WsHandlerFunc default websocket handler 默认 WebSocket 处理器
+// WsHandlerFunc default websocket handler.
 type WsHandlerFunc struct {
-	// mode runtime mode 当前运行模式
+	// mode runtime mode
 	mode string
-	// mu protect context maps 保护上下文索引
+	// mu protect context maps
 	mu sync.RWMutex
-	// ClientCtxMap client contexts 客户端上下文
+	// ClientCtxMap client contexts
 	ClientCtxMap map[string]context.Context
-	// ClientCtxCancel client cancel funcs 客户端取消函数
+	// ClientCtxCancel client cancel funcs
 	ClientCtxCancel map[string]context.CancelFunc
 }
 
-// Init init websocket manager 初始化 WebSocket 管理器
+// Init init websocket manager.
 func Init(ctx context.Context) {
 	once.Do(func() {
 		WsHandler = &WsHandlerFunc{
@@ -60,7 +60,7 @@ func Init(ctx context.Context) {
 	})
 }
 
-// loadConfig load websocket config 加载 WebSocket 配置
+// loadConfig load websocket config.
 func loadConfig(ctx context.Context) Config {
 	return Config{
 		HeartbeatInterval: time.Duration(g.Cfg().MustGet(ctx, "websocket.heartbeatInterval", 15).Int()) * time.Second,
@@ -71,12 +71,12 @@ func loadConfig(ctx context.Context) Config {
 	}
 }
 
-// MaxConn get max websocket count 获取最大连接数
+// MaxConn get max websocket count.
 func MaxConn(ctx context.Context) int64 {
 	return g.Cfg().MustGet(ctx, "websocket.maxConn", defaultMaxConn).Int64()
 }
 
-// BuildClientIdentity build client identity 构建客户端标识
+// BuildClientIdentity build client identity.
 func BuildClientIdentity(clientIP string) ClientIdentity {
 	return ClientIdentity{
 		ConnectionID:     clientIP,
@@ -85,7 +85,7 @@ func BuildClientIdentity(clientIP string) ClientIdentity {
 	}
 }
 
-// BuildConnectionIdentity build arbitrary connection identity 构建通用连接标识
+// BuildConnectionIdentity build arbitrary connection identity.
 func BuildConnectionIdentity(connectionID, clientIP string, requireHeartbeat bool) ClientIdentity {
 	return ClientIdentity{
 		ConnectionID:     connectionID,
@@ -94,17 +94,17 @@ func BuildConnectionIdentity(connectionID, clientIP string, requireHeartbeat boo
 	}
 }
 
-// SendClientMessage send structured websocket message 发送结构化消息
+// SendClientMessage send structured websocket message.
 func SendClientMessage(clientIP string, in *model.WSResponse) int {
 	return sendStructuredMessage(clientIP, in)
 }
 
-// SendConnectionMessage send structured message by connection id 按连接标识发送结构化消息
+// SendConnectionMessage send structured message by connection id.
 func SendConnectionMessage(connectionID string, in *model.WSResponse) int {
 	return sendStructuredMessage(connectionID, in)
 }
 
-// sendStructuredMessage sends one JSON websocket message 发送单条 JSON WebSocket 消息
+// sendStructuredMessage sends one JSON websocket message.
 func sendStructuredMessage(connectionID string, in *model.WSResponse) int {
 	if in == nil {
 		return 0
@@ -123,7 +123,7 @@ func sendStructuredMessage(connectionID string, in *model.WSResponse) int {
 	return WsManage.SendMessageToClient(connectionID, body)
 }
 
-// SendRawClientMessage send raw websocket message 发送原始消息
+// SendRawClientMessage send raw websocket message.
 func SendRawClientMessage(clientIP string, messageType int, payload []byte) int {
 	if WsManage == nil {
 		Init(context.Background())
@@ -137,7 +137,7 @@ func SendRawClientMessage(clientIP string, messageType int, payload []byte) int 
 	}
 }
 
-// SendRawClientMessages send raw websocket messages in batch 批量发送原始消息
+// SendRawClientMessages send raw websocket messages in batch.
 func SendRawClientMessages(clientIPs []string, messageType int, payload []byte) int {
 	if WsManage == nil {
 		Init(context.Background())
@@ -151,19 +151,19 @@ func SendRawClientMessages(clientIPs []string, messageType int, payload []byte) 
 	}
 }
 
-// OnMessage handle websocket message 处理 WebSocket 消息
+// OnMessage handle websocket message.
 func (ws *WsHandlerFunc) OnMessage(client *Client, messageType int, message []byte) {
 	if client == nil {
 		return
 	}
 	if messageType != websocket.TextMessage {
-		g.Log().Line().Infof(client.Ctx, "收到非文本 WebSocket 消息：client_ip=%s message_type=%d", client.ClientIP(), messageType)
+		g.Log().Line().Infof(client.Ctx, "ignore non-text websocket message: client_ip=%s message_type=%d", client.ClientIP(), messageType)
 		return
 	}
 
 	var in model.WSRequest
 	if err := json.Unmarshal(message, &in); err != nil {
-		g.Log().Line().Infof(client.Ctx, "收到无法解析的 WebSocket 原始消息：client_ip=%s message=%s", client.ClientIP(), string(message))
+		g.Log().Line().Infof(client.Ctx, "parse websocket message failed: client_ip=%s message=%s", client.ClientIP(), string(message))
 		return
 	}
 
@@ -186,24 +186,24 @@ func (ws *WsHandlerFunc) OnMessage(client *Client, messageType int, message []by
 	case model.WSMessageTypePing:
 		_ = SendConnectionMessage(client.ConnectionID(), &model.WSResponse{Type: model.WSMessageTypePong})
 	default:
-		g.Log().Line().Infof(client.Ctx, "收到未处理的 WebSocket 消息：client_ip=%s type=%s", client.ClientIP(), in.Type)
+		g.Log().Line().Infof(client.Ctx, "unknown websocket message type: client_ip=%s type=%s", client.ClientIP(), in.Type)
 	}
 }
 
-// handleHeartbeat handle heartbeat message 处理心跳消息
+// handleHeartbeat handle heartbeat message.
 func (ws *WsHandlerFunc) handleHeartbeat(client *Client, in *model.WSRequest) {
 	now := time.Now()
 	client.markHeartbeat(in.ClientTime, now)
 	workflowcache.TouchClient(client.Ctx, client.ClientIP())
 	if commandID := resolveExecutionCommandID(in); commandID != "" {
 		if _, err := tasklock.Renew(client.Ctx, client.ClientIP(), commandID); err != nil {
-			g.Log().Line().Warningf(client.Ctx, "刷新客户端任务锁失败：client_ip=%s command_id=%s err=%+v", client.ClientIP(), commandID, err)
+			g.Log().Line().Warningf(client.Ctx, "renew client task lock failed: client_ip=%s command_id=%s err=%+v", client.ClientIP(), commandID, err)
 		}
 	}
 
-	// Refresh client online state 刷新客户端在线状态
+	// Refresh client online state.
 	if err := updateClientLastSeen(client, in); err != nil {
-		g.Log().Line().Errorf(client.Ctx, "处理心跳时更新客户端状态失败：client_ip=%s err=%+v", client.ClientIP(), err)
+		g.Log().Line().Errorf(client.Ctx, "update client last seen failed: client_ip=%s err=%+v", client.ClientIP(), err)
 	}
 
 	_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
@@ -221,21 +221,83 @@ func (ws *WsHandlerFunc) handleHeartbeat(client *Client, in *model.WSRequest) {
 	})
 }
 
-// handleAgentRegister handle agent register message 处理执行端注册消息
+// RequestTaskRecovery asks online clients to report an existing locked task.
+func RequestTaskRecovery(ctx context.Context) {
+	Init(ctx)
+	locks, err := tasklock.List(ctx)
+	if err != nil {
+		g.Log().Line().Warningf(ctx, "scan client task locks for recovery failed: %+v", err)
+		return
+	}
+	for _, lockInfo := range locks {
+		requestClientTaskRecovery(ctx, lockInfo)
+	}
+}
+
+func requestClientTaskRecovery(ctx context.Context, lockInfo tasklock.LockInfo) {
+	clientIP := strings.TrimSpace(lockInfo.ClientIP)
+	commandID := strings.TrimSpace(lockInfo.CommandID)
+	if clientIP == "" || !strings.HasPrefix(commandID, "task-record-") {
+		return
+	}
+	if WsManage == nil || !WsManage.HasClient(clientIP) {
+		return
+	}
+
+	recordID := tasklock.RecordIDFromCommand(commandID)
+	if recordID <= 0 {
+		return
+	}
+
+	columns := dao.TaskRecords.Columns()
+	record, err := dao.TaskRecords.Ctx(ctx).
+		Fields(columns.Id, columns.Status).
+		WherePri(recordID).
+		WhereIn(columns.Status, []string{"pending", "queued", "running"}).
+		One()
+	if err != nil {
+		g.Log().Line().Warningf(ctx, "query task record before recovery failed: record_id=%d err=%+v", recordID, err)
+		return
+	}
+	if record.IsEmpty() {
+		_ = tasklock.Release(ctx, clientIP, commandID)
+		return
+	}
+
+	sent := SendClientMessage(clientIP, &model.WSResponse{
+		Type:      model.WSMessageTypeAgentCommand,
+		ClientIP:  clientIP,
+		CommandID: commandID,
+		Command:   "task.status.query",
+		Payload: map[string]any{
+			"task_record_id": recordID,
+			"task_id":        lockInfo.TaskID,
+			"workflow_id":    lockInfo.WorkflowID,
+			"command_id":     commandID,
+			"execution_id":   commandID,
+			"recover":        true,
+		},
+	})
+	if sent <= 0 {
+		g.Log().Line().Warningf(ctx, "send task recovery query failed: client_ip=%s command_id=%s", clientIP, commandID)
+	}
+}
+
+// handleAgentRegister handle agent register message.
 func (ws *WsHandlerFunc) handleAgentRegister(client *Client, in *model.WSRequest) {
 	now := time.Now()
 	client.markHeartbeat(now.UnixMilli(), now)
 
-	// Resolve client id before persistence 保存前解析客户端标识
+	// Resolve client id before persistence.
 	clientID := resolveClientID(client, in)
 	client.BindClientID(clientID)
 
-	// Persist client information 保存客户端信息
+	// Persist client information.
 	if err := saveClientRegister(client, in, clientID); err != nil {
-		g.Log().Line().Errorf(client.Ctx, "处理客户端注册时保存客户端信息失败：client_ip=%s err=%+v", client.ClientIP(), err)
+		g.Log().Line().Errorf(client.Ctx, "save client register failed: client_ip=%s err=%+v", client.ClientIP(), err)
 		_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
 			Type:    model.WSMessageTypeError,
-			Error:   "客户端信息保存失败",
+			Error:   "client information save failed",
 			Message: err.Error(),
 		})
 		return
@@ -250,16 +312,25 @@ func (ws *WsHandlerFunc) handleAgentRegister(client *Client, in *model.WSRequest
 		AutomaInstalled: in.AutomaInstalled,
 		AutomaVersion:   in.AutomaVersion,
 	})
+
+	lockInfo, hasLock, err := tasklock.Get(client.Ctx, client.ClientIP())
+	if err != nil {
+		g.Log().Line().Warningf(client.Ctx, "read client task lock after register failed: client_ip=%s err=%+v", client.ClientIP(), err)
+		return
+	}
+	if hasLock {
+		requestClientTaskRecovery(client.Ctx, lockInfo)
+	}
 }
 
-// handleAgentStatusUpdate handle agent status update 处理执行端状态更新
+// handleAgentStatusUpdate handle agent status update.
 func (ws *WsHandlerFunc) handleAgentStatusUpdate(client *Client, in *model.WSRequest) {
 	now := time.Now()
 	client.markHeartbeat(now.UnixMilli(), now)
 
-	// Refresh client status in database 刷新数据库中的客户端状态
+	// Refresh client status in database.
 	if err := updateClientLastSeen(client, in); err != nil {
-		g.Log().Line().Errorf(client.Ctx, "处理客户端状态上报时更新客户端状态失败：client_ip=%s err=%+v", client.ClientIP(), err)
+		g.Log().Line().Errorf(client.Ctx, "update client status failed: client_ip=%s err=%+v", client.ClientIP(), err)
 	}
 
 	_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
@@ -270,7 +341,7 @@ func (ws *WsHandlerFunc) handleAgentStatusUpdate(client *Client, in *model.WSReq
 	})
 }
 
-// handleAgentResult handle agent result message 处理执行端命令结果
+// handleAgentResult handle agent result message.
 func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) {
 	now := time.Now()
 	client.markHeartbeat(now.UnixMilli(), now)
@@ -289,13 +360,13 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 	}
 	result := model.AgentCommandResult{BrowserID: browserID, CommandID: in.CommandID, Success: in.Success, Data: resultData, Error: in.Error}
 
-	// Refresh last seen time after command result 命令结果上报后刷新最近活跃时间
+	// Refresh last seen time after command result.
 	if err := updateClientLastSeen(client, in); err != nil {
-		g.Log().Line().Errorf(client.Ctx, "处理客户端命令结果时更新客户端状态失败：client_ip=%s err=%+v", client.ClientIP(), err)
+		g.Log().Line().Errorf(client.Ctx, "update client last seen after command result failed: client_ip=%s err=%+v", client.ClientIP(), err)
 	}
 
-	// Update task record when command id belongs to task execution 更新任务执行记录
-	// Notify command waiter and update execution state 通知命令等待方并更新执行状态
+	// Update task record when command id belongs to task execution.
+	// Notify command waiter and update execution state.
 	state.AgentMu.Lock()
 	resultCh := state.PopPendingCommand(in.CommandID)
 	if agent := state.AgentConnections[browserID]; agent != nil {
@@ -307,38 +378,8 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 	if strings.HasPrefix(in.CommandID, "task-record-") {
 		recordID := gconv.Int64(strings.TrimPrefix(in.CommandID, "task-record-"))
 		if recordID > 0 {
-			resultJSON := "{}"
-			if len(resultData) > 0 {
-				resultJSON = string(resultData)
-			}
-			resultJSON = saveTaskRecordResultFiles(client.Ctx, recordID, client.ClientIP(), resultJSON)
-			status := resolveTaskRecordResultStatus(in.Success, resultData)
-			errorMessage := strings.TrimSpace(in.Error)
-			if errorMessage == "" && status == "failed" {
-				errorMessage = resolveTaskRecordResultMessage(resultData)
-			}
-			updateData := do.TaskRecords{
-				Status:       status,
-				ResultJson:   resultJSON,
-				ErrorMessage: errorMessage,
-			}
-			if status == "running" {
-				updateData.StartedAt = gtime.Now()
-			}
-			if status == "success" || status == "failed" {
-				updateData.FinishedAt = gtime.Now()
-			}
-			_, err := dao.TaskRecords.Ctx(client.Ctx).
-				WherePri(recordID).
-				Data(updateData).
-				Update()
-			if err != nil {
-				g.Log().Line().Errorf(client.Ctx, "更新任务执行记录失败：record_id=%d err=%+v", recordID, err)
-			}
-			if status == "success" || status == "failed" {
-				if err := tasklock.Release(client.Ctx, client.ClientIP(), in.CommandID); err != nil {
-					g.Log().Line().Warningf(client.Ctx, "释放客户端任务锁失败：client_ip=%s command_id=%s err=%+v", client.ClientIP(), in.CommandID, err)
-				}
+			if err := updateTaskRecordFromAgentResult(client.Ctx, recordID, client.ClientIP(), in.CommandID, in.Success, resultData, in.Error); err != nil {
+				g.Log().Line().Errorf(client.Ctx, "update task record failed: record_id=%d err=%+v", recordID, err)
 			}
 		}
 	}
@@ -356,7 +397,59 @@ func (ws *WsHandlerFunc) handleAgentResult(client *Client, in *model.WSRequest) 
 	})
 }
 
-// resolveExecutionCommandID returns current task command id from heartbeat payload 解析心跳中的当前执行命令
+// resolveExecutionCommandID returns current task command id from heartbeat payload.
+func updateTaskRecordFromAgentResult(ctx context.Context, recordID int64, clientIP string, commandID string, success bool, resultData []byte, errorText string) error {
+	resultJSON := "{}"
+	if len(resultData) > 0 {
+		resultJSON = string(resultData)
+	}
+	resultJSON = saveTaskRecordResultFiles(ctx, recordID, clientIP, resultJSON)
+	status := resolveTaskRecordResultStatus(success, resultData)
+	errorMessage := strings.TrimSpace(errorText)
+	if errorMessage == "" && status == "failed" {
+		errorMessage = resolveTaskRecordResultMessage(resultData)
+		if errorMessage == "" && isLostTaskResultStatus(resultData) {
+			errorMessage = "client has no local execution state for this task"
+		}
+	}
+	updateData := do.TaskRecords{
+		Status:       status,
+		ResultJson:   resultJSON,
+		ErrorMessage: errorMessage,
+	}
+	if automaExecutionID := resolveAutomaExecutionID(resultData); automaExecutionID != "" {
+		updateData.AutomaExecutionId = automaExecutionID
+	}
+	if status == "running" {
+		updateData.StartedAt = gtime.Now()
+	}
+	if status == "success" || status == "failed" {
+		updateData.FinishedAt = gtime.Now()
+	}
+
+	columns := dao.TaskRecords.Columns()
+	_, err := dao.TaskRecords.Ctx(ctx).
+		WherePri(recordID).
+		WhereIn(columns.Status, []string{"pending", "queued", "running"}).
+		Data(updateData).
+		Update()
+	if err != nil {
+		return err
+	}
+	if status == "running" {
+		if _, renewErr := tasklock.Renew(ctx, clientIP, commandID); renewErr != nil {
+			g.Log().Line().Warningf(ctx, "renew client task lock failed: client_ip=%s command_id=%s err=%+v", clientIP, commandID, renewErr)
+		}
+		return nil
+	}
+	if status == "success" || status == "failed" {
+		if err = tasklock.Release(ctx, clientIP, commandID); err != nil {
+			g.Log().Line().Warningf(ctx, "release client task lock failed: client_ip=%s command_id=%s err=%+v", clientIP, commandID, err)
+		}
+	}
+	return nil
+}
+
 func resolveExecutionCommandID(in *model.WSRequest) string {
 	if in == nil {
 		return ""
@@ -378,7 +471,7 @@ func resolveExecutionCommandID(in *model.WSRequest) string {
 	return ""
 }
 
-// resolveTaskRecordResultStatus maps agent result to task status 映射执行端结果为任务状态
+// resolveTaskRecordResultStatus maps agent result to task status.
 func resolveTaskRecordResultStatus(success bool, resultData []byte) string {
 	if !success {
 		return "failed"
@@ -388,7 +481,7 @@ func resolveTaskRecordResultStatus(success bool, resultData []byte) string {
 	if len(resultData) > 0 && json.Unmarshal(resultData, &data) == nil {
 		status := strings.ToLower(strings.TrimSpace(gconv.String(data["status"])))
 		switch status {
-		case "error", "failed", "fail", "timeout", "stopped", "cancelled", "canceled":
+		case "error", "failed", "fail", "timeout", "stopped", "cancelled", "canceled", "unknown", "not_found", "missing", "lost":
 			return "failed"
 		case "queued", "submitted", "pending", "running":
 			return "running"
@@ -403,7 +496,35 @@ func resolveTaskRecordResultStatus(success bool, resultData []byte) string {
 	return "success"
 }
 
-// resolveTaskRecordResultMessage extracts readable failure message 提取失败提示
+func resolveAutomaExecutionID(resultData []byte) string {
+	var data map[string]any
+	if len(resultData) == 0 || json.Unmarshal(resultData, &data) != nil {
+		return ""
+	}
+	for _, key := range []string{"automa_execution_id", "automaExecutionId", "automa_run_id", "automaRunId", "history_id", "historyId"} {
+		if value := strings.TrimSpace(gconv.String(data[key])); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// isLostTaskResultStatus reports recovery states where the client cannot find the execution.
+func isLostTaskResultStatus(resultData []byte) bool {
+	var data map[string]any
+	if len(resultData) == 0 || json.Unmarshal(resultData, &data) != nil {
+		return false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(gconv.String(data["status"]))) {
+	case "unknown", "not_found", "missing", "lost":
+		return true
+	default:
+		return false
+	}
+}
+
+// resolveTaskRecordResultMessage extracts readable failure message.
 func resolveTaskRecordResultMessage(resultData []byte) string {
 	var data map[string]any
 	if len(resultData) == 0 || json.Unmarshal(resultData, &data) != nil {
@@ -417,13 +538,13 @@ func resolveTaskRecordResultMessage(resultData []byte) string {
 	return ""
 }
 
-// handleWorkflowInventory caches client workflow inventory 缓存客户端工作流清单
+// handleWorkflowInventory caches client workflow inventory.
 func (ws *WsHandlerFunc) handleWorkflowInventory(client *Client, in *model.WSRequest) {
 	now := time.Now()
 	client.markHeartbeat(now.UnixMilli(), now)
 	workflowcache.TouchClient(client.Ctx, client.ClientIP())
 
-	// Convert workflow list to GoFrame maps 转换工作流列表
+	// Convert workflow list to GoFrame maps.
 	workflows := make([]g.Map, 0, len(in.Workflows))
 	for _, workflow := range in.Workflows {
 		if workflow != nil {
@@ -432,7 +553,7 @@ func (ws *WsHandlerFunc) handleWorkflowInventory(client *Client, in *model.WSReq
 	}
 
 	if err := workflowcache.SaveInventory(client.Ctx, client.ClientIP(), workflows); err != nil {
-		g.Log().Line().Errorf(client.Ctx, "处理工作流清单上报时保存缓存失败：client_ip=%s err=%+v", client.ClientIP(), err)
+		g.Log().Line().Errorf(client.Ctx, "save workflow inventory failed: client_ip=%s err=%+v", client.ClientIP(), err)
 		_ = SendClientMessage(client.ClientIP(), &model.WSResponse{
 			Type:     model.WSMessageTypeError,
 			ClientIP: client.ClientIP(),
@@ -452,9 +573,9 @@ func (ws *WsHandlerFunc) handleWorkflowInventory(client *Client, in *model.WSReq
 	})
 }
 
-// resolveClientID resolve business client id 解析业务客户端标识
+// resolveClientID resolve business client id.
 func resolveClientID(client *Client, in *model.WSRequest) string {
-	// Prefer explicit client id 优先使用前端明确上报的客户端标识
+	// Prefer explicit client id.
 	if in != nil {
 		if clientID := strings.TrimSpace(in.ClientID); clientID != "" {
 			return clientID
@@ -464,7 +585,7 @@ func resolveClientID(client *Client, in *model.WSRequest) string {
 		}
 	}
 
-	// Reuse bound client id 复用已绑定的客户端标识
+	// Reuse bound client id.
 	if client != nil {
 		if clientID := strings.TrimSpace(client.ClientID()); clientID != "" {
 			return clientID
@@ -475,13 +596,13 @@ func resolveClientID(client *Client, in *model.WSRequest) string {
 	return ""
 }
 
-// saveClientRegister save client register info 保存客户端注册信息
+// saveClientRegister save client register info.
 func saveClientRegister(client *Client, in *model.WSRequest, clientID string) error {
 	if client == nil || in == nil || strings.TrimSpace(client.ClientIP()) == "" {
 		return nil
 	}
 
-	// Prepare columns and timestamps 准备字段和时间
+	// Prepare columns and timestamps.
 	columns := dao.Clients.Columns()
 	now := gtime.Now()
 	clientName := strings.TrimSpace(in.ClientName)
@@ -489,7 +610,7 @@ func saveClientRegister(client *Client, in *model.WSRequest, clientID string) er
 		clientName = clientID
 	}
 
-	// Build shared save data 构建新增和更新共用数据
+	// Build shared save data.
 	saveData := do.Clients{
 		ClientId:       clientID,
 		ClientName:     clientName,
@@ -507,7 +628,7 @@ func saveClientRegister(client *Client, in *model.WSRequest, clientID string) er
 		ConnectedAt:    now,
 	}
 
-	// Query existing client by ip 按客户端 IP 查询已有记录
+	// Query existing client by ip.
 	record, err := dao.Clients.Ctx(client.Ctx).
 		Where(columns.ClientIp, client.ClientIP()).
 		One()
@@ -515,14 +636,14 @@ func saveClientRegister(client *Client, in *model.WSRequest, clientID string) er
 		return err
 	}
 
-	// Insert new client when missing 不存在时新增客户端
+	// Insert new client when missing.
 	if record.IsEmpty() {
 		saveData.FirstSeenAt = now
 		_, err = dao.Clients.Ctx(client.Ctx).Data(saveData).Insert()
 		return err
 	}
 
-	// Keep custom name unless empty 保留自定义名称，仅空名称时由同步补全
+	// Keep custom name unless empty.
 	if strings.TrimSpace(gconv.String(record[columns.ClientName])) != "" {
 		saveData.ClientName = nil
 	}
@@ -533,13 +654,13 @@ func saveClientRegister(client *Client, in *model.WSRequest, clientID string) er
 	return err
 }
 
-// updateClientLastSeen update client active status 更新客户端活跃状态
+// updateClientLastSeen update client active status.
 func updateClientLastSeen(client *Client, in *model.WSRequest) error {
 	if client == nil {
 		return nil
 	}
 
-	// Resolve client ip for update 解析要更新的客户端 IP
+	// Resolve client ip for update.
 	clientIP := strings.TrimSpace(client.ClientIP())
 	if clientIP == "" {
 		return nil
@@ -547,7 +668,7 @@ func updateClientLastSeen(client *Client, in *model.WSRequest) error {
 	clientID := resolveClientID(client, in)
 	client.BindClientID(clientID)
 
-	// Build update data 构建更新数据
+	// Build update data.
 	columns := dao.Clients.Columns()
 	now := gtime.Now()
 	updateData := do.Clients{
@@ -562,7 +683,7 @@ func updateClientLastSeen(client *Client, in *model.WSRequest) error {
 		}
 	}
 
-	// Update matched client 按客户端 IP 更新记录
+	// Update matched client.
 	_, err := dao.Clients.Ctx(client.Ctx).
 		Where(columns.ClientIp, clientIP).
 		Data(updateData).
@@ -570,19 +691,19 @@ func updateClientLastSeen(client *Client, in *model.WSRequest) error {
 	return err
 }
 
-// markClientOffline mark client disconnected 标记客户端离线
+// markClientOffline mark client disconnected.
 func markClientOffline(client *Client) error {
 	if client == nil {
 		return nil
 	}
 
-	// Resolve client ip 解析客户端 IP
+	// Resolve client ip.
 	clientIP := strings.TrimSpace(client.ClientIP())
 	if clientIP == "" {
 		return nil
 	}
 
-	// Update offline status 更新离线状态
+	// Update offline status.
 	columns := dao.Clients.Columns()
 	_, err := dao.Clients.Ctx(client.Ctx).
 		Where(columns.ClientIp, clientIP).
@@ -594,7 +715,7 @@ func markClientOffline(client *Client) error {
 	return err
 }
 
-// resolvePluginStatus resolve Automa plugin status 解析 Automa 插件状态
+// resolvePluginStatus resolve Automa plugin status.
 func resolvePluginStatus(automaInstalled bool) string {
 	if automaInstalled {
 		return "installed"
@@ -602,7 +723,50 @@ func resolvePluginStatus(automaInstalled bool) string {
 	return "not_installed"
 }
 
-// OnOpen handle websocket open 处理连接建立
+// failClientRunningTask marks the disconnected client active task failed.
+func failClientRunningTask(client *Client) {
+	if client == nil {
+		return
+	}
+
+	clientIP := strings.TrimSpace(client.ClientIP())
+	if clientIP == "" {
+		return
+	}
+
+	lockInfo, hasLock, err := tasklock.Get(client.Ctx, clientIP)
+	if err != nil {
+		g.Log().Line().Warningf(client.Ctx, "read client task lock on close failed: client_ip=%s err=%+v", clientIP, err)
+		return
+	}
+	if !hasLock || !strings.HasPrefix(lockInfo.CommandID, "task-record-") {
+		return
+	}
+
+	recordID := tasklock.RecordIDFromCommand(lockInfo.CommandID)
+	if recordID > 0 {
+		columns := dao.TaskRecords.Columns()
+		_, err = dao.TaskRecords.Ctx(client.Ctx).
+			WherePri(recordID).
+			WhereIn(columns.Status, []string{"pending", "queued", "running"}).
+			Data(do.TaskRecords{
+				Status:       "failed",
+				ErrorMessage: "client disconnected, task execution was automatically ended",
+				FinishedAt:   gtime.Now(),
+			}).
+			Update()
+		if err != nil {
+			g.Log().Line().Warningf(client.Ctx, "fail client running task on close failed: record_id=%d client_ip=%s err=%+v", recordID, clientIP, err)
+		}
+	}
+
+	state.RemovePendingCommand(lockInfo.CommandID)
+	if err = tasklock.Release(client.Ctx, clientIP, lockInfo.CommandID); err != nil {
+		g.Log().Line().Warningf(client.Ctx, "release client task lock on close failed: client_ip=%s command_id=%s err=%+v", clientIP, lockInfo.CommandID, err)
+	}
+}
+
+// OnOpen handle websocket open.
 func (ws *WsHandlerFunc) OnOpen(client *Client) {
 	if client == nil || client.Ctx == nil {
 		return
@@ -615,19 +779,27 @@ func (ws *WsHandlerFunc) OnOpen(client *Client) {
 	ws.ClientCtxCancel[client.ConnectionID()] = cancel
 	ws.mu.Unlock()
 
-	g.Log().Line().Infof(client.Ctx, "WebSocket 连接已建立：connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
+	g.Log().Line().Infof(client.Ctx, "WebSocket connected: connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
 }
 
-// OnClose handle websocket close 处理连接关闭
+// OnClose handle websocket close.
 func (ws *WsHandlerFunc) OnClose(client *Client) {
 	if client == nil {
 		return
 	}
 
 	if ws.mode == consts.RuntimeModeServer {
-		// Mark database client offline 标记数据库客户端离线
-		if err := markClientOffline(client); err != nil {
-			g.Log().Line().Errorf(client.Ctx, "WebSocket 断开时标记客户端离线失败：client_ip=%s err=%+v", client.ClientIP(), err)
+		if client.IsSuperseded() {
+			g.Log().Line().Infof(client.Ctx, "WebSocket close skipped for superseded client: connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
+		} else {
+			// Mark database client offline.
+			if err := markClientOffline(client); err != nil {
+				g.Log().Line().Errorf(client.Ctx, "WebSocket close mark client offline failed: client_ip=%s err=%+v", client.ClientIP(), err)
+			}
+			if err := workflowcache.ClearClient(client.Ctx, client.ClientIP()); err != nil {
+				g.Log().Line().Errorf(client.Ctx, "WebSocket close clear workflow cache failed: client_ip=%s err=%+v", client.ClientIP(), err)
+			}
+			failClientRunningTask(client)
 		}
 	} else {
 		ws.handleDesktopClose(client)
@@ -643,5 +815,5 @@ func (ws *WsHandlerFunc) OnClose(client *Client) {
 		cancel()
 	}
 
-	g.Log().Line().Infof(client.Ctx, "WebSocket 连接已断开：connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
+	g.Log().Line().Infof(client.Ctx, "WebSocket disconnected: connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
 }

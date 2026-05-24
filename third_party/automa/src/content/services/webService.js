@@ -85,7 +85,7 @@ async function initWebServiceBridge() {
       sendMessage('open:dashboard', `/workflows/${workflowId}`, 'background');
     });
     // BrowserFlow local change start: import server workflow with stable id and ack 带稳定 ID 导入服务端工作流并回执
-    webListener.on('add-workflow', async ({ workflow, requestId }) => {
+    webListener.on('add-workflow', async ({ workflow, requestId, silent }) => {
       try {
         const { workflows: storedWorkflows } = await browser.storage.local.get(
           'workflows'
@@ -123,11 +123,13 @@ async function initWebServiceBridge() {
         }
 
         await browser.storage.local.set({ workflows: workflowsStorage });
-        sendMessage(
-          'workflow:added',
-          { workflowId, workflowData },
-          'background'
-        );
+        if (!silent) {
+          sendMessage(
+            'workflow:added',
+            { workflowId, workflowData },
+            'background'
+          );
+        }
         sendMessageBack('add-workflow', {
           ok: true,
           requestId,

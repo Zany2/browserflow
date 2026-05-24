@@ -15,6 +15,8 @@ const (
 	LeaseTTL = 10 * time.Minute
 	// StaleAfter gives the timeout scanner a small buffer after the Redis lease can expire.
 	StaleAfter = LeaseTTL + 2*time.Minute
+	// KeyPrefix is the Redis prefix for client execution locks.
+	KeyPrefix = "browserflow:client:task-lock:"
 )
 
 // LockInfo describes one client execution lease.
@@ -118,11 +120,57 @@ func Get(ctx context.Context, clientIP string) (LockInfo, bool, error) {
 	return info, true, nil
 }
 
+// List scans active client execution leases.
+func List(ctx context.Context) ([]LockInfo, error) {
+	var (
+		cursor = "0"
+		locks  []LockInfo
+	)
+
+	for {
+		result, err := g.Redis().Do(ctx, "SCAN", cursor, "MATCH", KeyPrefix+"*", "COUNT", 200)
+		if err != nil {
+			return nil, err
+		}
+
+		values := result.Array()
+		if len(values) < 2 {
+			return locks, nil
+		}
+
+		cursor = gconv.String(values[0])
+		keys := gconv.Strings(values[1])
+		for _, key := range keys {
+			value, err := g.Redis().Do(ctx, "GET", key)
+			if err != nil {
+				return nil, err
+			}
+			text := strings.TrimSpace(value.String())
+			if text == "" {
+				continue
+			}
+
+			var info LockInfo
+			if err = json.Unmarshal([]byte(text), &info); err != nil {
+				return nil, err
+			}
+			if info.ClientIP == "" {
+				info.ClientIP = strings.TrimPrefix(key, KeyPrefix)
+			}
+			locks = append(locks, info)
+		}
+
+		if cursor == "0" {
+			return locks, nil
+		}
+	}
+}
+
 // RecordIDFromCommand extracts task record id from a task-record command id.
 func RecordIDFromCommand(commandID string) int64 {
 	return gconv.Int64(strings.TrimPrefix(strings.TrimSpace(commandID), "task-record-"))
 }
 
 func clientLockKey(clientIP string) string {
-	return "browserflow:client:task-lock:" + strings.TrimSpace(clientIP)
+	return KeyPrefix + strings.TrimSpace(clientIP)
 }

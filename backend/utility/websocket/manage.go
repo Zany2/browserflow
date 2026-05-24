@@ -218,6 +218,7 @@ func (m *WebSocketManager) onConnect(client *Client) bool {
 
 	// onConnect replace same connection id 同一连接标识的新连接顶掉旧连接
 	if previous, replaced := m.addClient(client); replaced {
+		previous.MarkSuperseded()
 		m.disConnect(previous)
 	}
 	if m.Handler != nil {

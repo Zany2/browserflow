@@ -19,6 +19,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/controller/ws"
 	"github.com/Zany2/browserflow/backend/middleware"
 	"github.com/Zany2/browserflow/backend/utility/taskcron"
+	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
 	"github.com/Zany2/browserflow/backend/utility/workflowcache"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
@@ -104,6 +105,8 @@ var (
 			if runtimeMode == consts.RuntimeModeServer {
 				// Task scheduler only belongs to Server mode because scheduled workflow dispatch is a server responsibility. 任务调度器仅在 Server 模式启动，因为定时工作流调度属于服务端职责。
 				taskcron.StartCronScheduler(ctx)
+				// Ask online clients to report locked tasks left by a previous server process. 启动后恢复上次进程遗留的客户端任务锁。
+				websockets.RequestTaskRecovery(ctx)
 
 				// Redis cleanup clears transient client inventory when the server exits. Server 退出时清理临时客户端清单缓存。
 				gproc.AddSigHandlerShutdown(func(sig os.Signal) {

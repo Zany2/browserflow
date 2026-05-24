@@ -123,27 +123,137 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		}
 	}
 
+	if serverMode && mode == "workflow" && sourceIP == "" {
+		if automaID == "" {
+			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
+		}
+		serverRecord := serverRecords[automaID]
+		if serverRecord == nil {
+			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
+		}
+
+		serverAutomaName := strings.TrimSpace(serverRecord.AutomaName)
+		if serverAutomaName == "" {
+			serverAutomaName = serverRecord.Name
+		}
+		serverAutomaDescription := strings.TrimSpace(serverRecord.AutomaDescription)
+		if serverAutomaDescription == "" {
+			serverAutomaDescription = serverRecord.Description
+		}
+
+		clientIPs, listErr := workflowcache.ListOnlineClients(ctx)
+		if listErr != nil {
+			return nil, listErr
+		}
+
+		candidates := make([]v1.WorkflowSyncCandidatesResModel, 0, len(clientIPs))
+		for _, clientIP := range clientIPs {
+			clientIP = strings.TrimSpace(clientIP)
+			if clientIP == "" || !workflowcache.IsClientOnline(ctx, clientIP) {
+				continue
+			}
+			if keyword != "" && !strings.Contains(strings.ToLower(clientIP), keyword) {
+				continue
+			}
+
+			item, ok, loadErr := workflowcache.GetClientWorkflow(ctx, clientIP, automaID)
+			if loadErr != nil {
+				return nil, loadErr
+			}
+
+			candidate := v1.WorkflowSyncCandidatesResModel{
+				Id:                automaID,
+				AutomaId:          automaID,
+				WorkflowId:        automaID,
+				Source:            "客户端同步",
+				SourceIp:          clientIP,
+				IsProtected:       serverRecord.IsProtected,
+				Synced:            false,
+				HasUpdate:         false,
+				SyncStatus:        "client_missing",
+				Online:            true,
+				ServerId:          serverRecord.ID,
+				ServerName:        serverRecord.Name,
+				ServerDesc:        serverRecord.Description,
+				ServerAutomaName:  serverAutomaName,
+				ServerAutomaDesc:  serverAutomaDescription,
+				ServerRevision:    serverRecord.Revision,
+				ServerUpdatedAt:   nil,
+				LastSyncedAt:      nil,
+				AutomaName:        "",
+				AutomaDescription: "",
+			}
+			if !serverRecord.LastSyncedAt.IsZero() {
+				candidate.LastSyncedAt = gtime.NewFromTime(serverRecord.LastSyncedAt)
+			}
+			if !serverRecord.UpdatedAt.IsZero() {
+				candidate.ServerUpdatedAt = gtime.NewFromTime(serverRecord.UpdatedAt)
+			}
+
+			if ok {
+				synced := false
+				hasUpdate := true
+				status := "has_update"
+				serverContentHash := strings.TrimSpace(serverRecord.ContentHash)
+				clientContentHash := strings.TrimSpace(item.ContentHash)
+				if serverContentHash != "" && clientContentHash != "" && serverContentHash == clientContentHash {
+					synced = true
+					hasUpdate = false
+					status = "synced"
+				} else if item.UpdatedAtAutoma > 0 && serverRecord.UpdatedAtAutoma > 0 {
+					if item.UpdatedAtAutoma > serverRecord.UpdatedAtAutoma {
+						status = "client_newer"
+					} else if item.UpdatedAtAutoma < serverRecord.UpdatedAtAutoma {
+						hasUpdate = false
+						status = "server_newer"
+					}
+				}
+				candidate.Id = item.AutomaId
+				candidate.AutomaId = item.AutomaId
+				candidate.WorkflowId = item.WorkflowId
+				candidate.Name = item.Name
+				candidate.Description = item.Description
+				candidate.AutomaName = item.Name
+				candidate.AutomaDescription = item.Description
+				candidate.AutomaVersion = item.AutomaVersion
+				candidate.ExtVersion = item.ExtVersion
+				candidate.CreatedAtAutoma = item.CreatedAtAutoma
+				candidate.UpdatedAtAutoma = item.UpdatedAtAutoma
+				candidate.IsDisabled = item.IsDisabled
+				candidate.NodeCount = item.NodeCount
+				candidate.EdgeCount = item.EdgeCount
+				candidate.ContentHash = item.ContentHash
+				candidate.Synced = synced
+				candidate.HasUpdate = hasUpdate
+				candidate.SyncStatus = status
+			}
+			candidates = append(candidates, candidate)
+		}
+
+		total := len(candidates)
+		pageNum := req.PageNum
+		if pageNum <= 0 {
+			pageNum = 1
+		}
+		pageSize := req.PageSize
+		if pageSize <= 0 {
+			pageSize = 30
+		}
+		start := (pageNum - 1) * pageSize
+		if start >= total {
+			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: total}, nil
+		}
+		end := start + pageSize
+		if end > total {
+			end = total
+		}
+		return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}, nil
+	}
+
 	var cacheItems []workflowcache.WorkflowItem
 	if serverMode {
 		if sourceIP != "" {
 			cacheItems, err = workflowcache.ListClientWorkflows(ctx, sourceIP)
-		} else if mode == "workflow" {
-			if automaID != "" {
-				cacheItems, err = workflowcache.ListWorkflowClients(ctx, automaID)
-			} else {
-				clientIPs, listErr := workflowcache.ListOnlineClients(ctx)
-				if listErr != nil {
-					return nil, listErr
-				}
-				cacheItems = make([]workflowcache.WorkflowItem, 0)
-				for _, clientIP := range clientIPs {
-					items, listErr := workflowcache.ListClientWorkflows(ctx, clientIP)
-					if listErr != nil {
-						return nil, listErr
-					}
-					cacheItems = append(cacheItems, items...)
-				}
-			}
 		}
 	}
 	if err != nil {

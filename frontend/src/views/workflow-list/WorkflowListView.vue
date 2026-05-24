@@ -512,7 +512,7 @@ async function handleExportSkill() {
       scope: selectedWorkflows.value.length > 0 ? 'selected' : 'all',
       workflowIds,
     })
-    downloadBlob(blob, 'SKILL_AUTOMA.md')
+    downloadBlob(blob, 'SKILL.md')
     appMessage({ type: APP_MESSAGE_TYPE.success, message: 'Skill 已导出' })
   } catch (err) {
     error.value = err.message

@@ -39,12 +39,7 @@
       "all_frames": true
     },
     {
-      "matches": [
-        "http://localhost/*",
-        "http://127.0.0.1/*",
-        "*://*.automa.site/*",
-        "*://automa.vercel.app/*"
-      ],
+      "matches": ["<all_urls>"],
       "js": ["webService.bundle.js"],
       "run_at": "document_start",
       "all_frames": false

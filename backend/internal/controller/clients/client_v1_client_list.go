@@ -42,7 +42,7 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 
 	// Query clients 查询客户端列表
 	clients := []entity.Clients{}
-	if err = gModel.OrderDesc(columns.UpdatedAt).Scan(&clients); err != nil {
+	if err = gModel.OrderDesc(columns.CreatedAt).OrderDesc(columns.Id).Scan(&clients); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(req.Status) == "online" {

@@ -67,6 +67,8 @@ build/
 *.egg-info/
 
 # Go build output
+.gocache/
+backend/.gocache/
 *.exe
 *.dll
 *.so

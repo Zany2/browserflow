@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zany2/browserflow/backend/utility/tasklock"
 	"github.com/Zany2/browserflow/backend/utility/workflowhash"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -59,7 +60,16 @@ func ClearBrowserflowKeys(ctx context.Context) error {
 		if len(keys) > 0 {
 			args := make([]any, 0, len(keys))
 			for _, key := range keys {
+				if strings.HasPrefix(key, tasklock.KeyPrefix) {
+					continue
+				}
 				args = append(args, key)
+			}
+			if len(args) == 0 {
+				if cursor == "0" {
+					return nil
+				}
+				continue
 			}
 			if _, err = g.Redis().Do(ctx, "DEL", args...); err != nil {
 				return err
@@ -152,6 +162,40 @@ func TouchClient(ctx context.Context, clientIP string) {
 	})
 	_, _ = g.Redis().Do(ctx, "SET", clientOnlineKey(clientIP), string(onlineBody), "EX", int(onlineTTL.Seconds()))
 	_, _ = g.Redis().Do(ctx, "SADD", onlineClientsKey(), clientIP)
+}
+
+// ClearClient removes one client's online and workflow cache 清理单个客户端的在线和工作流缓存
+func ClearClient(ctx context.Context, clientIP string) error {
+	clientIP = strings.TrimSpace(clientIP)
+	if clientIP == "" {
+		return nil
+	}
+
+	summaryKey := clientWorkflowsKey(clientIP)
+	result, err := g.Redis().Do(ctx, "HKEYS", summaryKey)
+	if err != nil {
+		return err
+	}
+	for _, workflowID := range gconv.Strings(result.Val()) {
+		workflowID = strings.TrimSpace(workflowID)
+		if workflowID == "" {
+			continue
+		}
+		if _, err = g.Redis().Do(ctx, "SREM", workflowClientsKey(workflowID), clientIP); err != nil {
+			return err
+		}
+	}
+
+	if _, err = g.Redis().Do(ctx, "SREM", onlineClientsKey(), clientIP); err != nil {
+		return err
+	}
+	_, err = g.Redis().Do(ctx, "DEL",
+		clientOnlineKey(clientIP),
+		summaryKey,
+		clientWorkflowPayloadKey(clientIP),
+		clientWorkflowInventoryUpdatedKey(clientIP),
+	)
+	return err
 }
 
 // ListOnlineClients lists currently online clients 列出当前在线客户端

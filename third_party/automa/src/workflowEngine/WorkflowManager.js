@@ -201,6 +201,7 @@ class WorkflowManager {
           status: event.status,
           request_id: requestId,
           execution_id: requestId,
+          automa_execution_id: event.id,
           workflow_id: workflow?.id,
           message:
             event.status === 'error' ? getBlockMessage(event.blockDetail) : '',

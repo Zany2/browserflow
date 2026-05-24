@@ -142,6 +142,11 @@ class BackgroundEventsListeners {
           collections: [],
           workflowState: {},
           isFirstTime: true,
+          // BrowserFlow local change start: persist Simplified Chinese on install 安装时默认简体中文
+          settings: {
+            locale: 'zh',
+          },
+          // BrowserFlow local change end
           visitWebTriggers: [],
         });
         await browser.windows.create({

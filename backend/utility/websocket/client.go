@@ -43,6 +43,8 @@ type Client struct {
 	closeOnce sync.Once
 	// disconnectOnce cleanup once 只执行一次断连清理
 	disconnectOnce sync.Once
+	// superseded marks an old connection replaced by a newer one.
+	superseded atomic.Bool
 }
 
 // messageData outbound websocket message 待发送 WebSocket 消息
@@ -80,6 +82,16 @@ func (c *Client) BindClientID(clientID string) {
 // ConnectedAt get connected time 获取连接建立时间
 func (c *Client) ConnectedAt() time.Time {
 	return c.connectedAt
+}
+
+// MarkSuperseded marks this connection as replaced by a newer connection.
+func (c *Client) MarkSuperseded() {
+	c.superseded.Store(true)
+}
+
+// IsSuperseded reports whether this connection has been replaced.
+func (c *Client) IsSuperseded() bool {
+	return c.superseded.Load()
 }
 
 // LastActiveTime get last active time 获取最近活跃时间

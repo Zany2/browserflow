@@ -80,7 +80,7 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 	}
 	start := (pageNum - 1) * pageSize
 
-	records, err := gModel.OrderDesc(columns.CreatedAt).Limit(start, pageSize).All()
+	records, err := gModel.OrderDesc(columns.CreatedAt).OrderDesc(columns.Id).Limit(start, pageSize).All()
 	if err != nil {
 		return nil, err
 	}

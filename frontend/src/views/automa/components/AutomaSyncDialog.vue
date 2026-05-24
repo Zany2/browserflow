@@ -89,7 +89,7 @@
       >
         <el-table-column type="selection" width="40" reserve-selection :selectable="isSelectable" />
 
-        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="96" show-overflow-tooltip>
+        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="136" class-name="nowrap-column">
           <template #default="{ row }">
             {{ row.source_ip || '' }}
           </template>
@@ -140,7 +140,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="同步状态" width="86" header-align="center">
+        <el-table-column label="同步状态" width="116" header-align="center">
           <template #default="{ row }">
             <div class="center-cell">
               <el-tag :type="getSyncTagType(row)" effect="plain">
@@ -150,7 +150,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流状态" width="96" header-align="center">
+        <el-table-column label="工作流状态" width="132" header-align="center">
           <template #default="{ row }">
             <div class="center-cell">
               <el-tag class="workflow-status-tag" :type="getWorkflowTagType(row)" effect="plain">
@@ -214,6 +214,7 @@ import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { listClients } from '@/services/client'
 import {
+  listAutomaWorkflows,
   listAutomaSyncCandidates,
   listAutomaSyncCandidatesByWorkflow,
   syncAutomaWorkflowsByIp,
@@ -221,7 +222,7 @@ import {
 import { formatDate } from '@/utils/format'
 import { DEFAULT_PAGE_SIZES, normalizeList, normalizeText } from '@/utils/list'
 
-const props = defineProps({
+defineProps({
   workflows: {
     type: Array,
     default: () => [],
@@ -376,39 +377,31 @@ async function loadOnlineWorkflowOptions() {
   try {
     let pageNum = 1
     let total = 0
-    const allWorkflowCandidates = []
+    const allDbWorkflows = []
 
     do {
-      const data = await listAutomaSyncCandidatesByWorkflow('', {
+      const data = await listAutomaWorkflows({
         page_num: pageNum,
         page_size: 60,
-        refresh: pageNum === 1 ? 1 : 0,
       })
       const pageList = normalizeList(data, 'workflows')
       total = Number(data?.total || pageList.length)
-      allWorkflowCandidates.push(...pageList)
+      allDbWorkflows.push(...pageList)
       if (pageList.length === 0) break
       pageNum += 1
-    } while (allWorkflowCandidates.length < total)
+    } while (allDbWorkflows.length < total)
 
     const workflowMap = new Map()
-    const dbWorkflowMap = new Map(
-      normalizeList(props.workflows)
-        .map((workflow) => [workflow.automa_id || getWorkflowId(workflow), workflow])
-        .filter(([workflowId]) => Boolean(workflowId)),
-    )
 
-    allWorkflowCandidates.forEach((item) => {
-      const workflowId = item.automa_id || getWorkflowId(item)
+    allDbWorkflows.forEach((workflow) => {
+      const workflowId = workflow.automa_id || getWorkflowId(workflow)
       if (!workflowId || workflowMap.has(workflowId)) return
 
-      const dbWorkflow = dbWorkflowMap.get(workflowId) || {}
       workflowMap.set(workflowId, {
-        ...item,
-        ...dbWorkflow,
+        ...workflow,
         automa_id: workflowId,
-        name: dbWorkflow.name || item.server_name || item.name || '',
-        automa_name: dbWorkflow.automa_name || item.automa_name || item.name || '',
+        name: workflow.name || '',
+        automa_name: workflow.automa_name || workflow.automa_id || workflowId,
       })
     })
 
@@ -548,11 +541,13 @@ function loadFirstCandidatePage() {
 }
 
 function isSelectable(row) {
+  if (row.sync_status === 'client_missing') return false
   if (row.sync_status === 'server_newer') return false
   return Boolean(row.has_update ?? row.hasUpdate ?? !row.synced)
 }
 
 function getSyncText(row) {
+  if (row.sync_status === 'client_missing') return '客户端缺失'
   if (row.sync_status === 'server_newer') return '不可同步'
   if (row.has_update || row.hasUpdate) return '可同步'
   if (row.synced) return '已同步'
@@ -567,6 +562,7 @@ function getSyncTagType(row) {
 }
 
 function getWorkflowText(row) {
+  if (row.sync_status === 'client_missing') return '客户端无此工作流'
   if (row.sync_status === 'not_synced') return '数据库无记录'
   if (row.sync_status === 'client_newer') return '客户端较新'
   if (row.sync_status === 'server_newer') return '数据库较新'
@@ -577,6 +573,7 @@ function getWorkflowText(row) {
 
 function getWorkflowTagType(row) {
   if (row.synced) return 'success'
+  if (row.sync_status === 'client_missing') return 'info'
   if (row.sync_status === 'server_newer') return 'danger'
   if (row.has_update || row.hasUpdate) return 'warning'
   return 'info'
@@ -738,15 +735,14 @@ function formatCompareText(clientValue, serverValue) {
 }
 
 .center-cell :deep(.el-tag) {
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: none;
+  min-width: 72px;
+  padding-inline: 8px;
   white-space: nowrap;
 }
 
 .workflow-status-tag {
-  min-width: 0;
+  min-width: 100px;
   justify-content: center;
   white-space: nowrap;
 }

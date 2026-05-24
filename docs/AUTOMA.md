@@ -544,6 +544,7 @@ const hasParams =
 - Purpose: Server-mode client task dispatch needs the final Automa status and returned data written back to backend `task_records`, not only the immediate queued response.
 - Behavior: When `browserFlowReturnData.variables` contains names, Automa returns only those variables. When it is an empty array or omitted, Automa returns all current workflow variables. If `include_table` is true, Automa also returns table rows with `table_limit` plus `table_total`, `table_limit`, and `table_truncated` metadata.
 - Backend fit: Server-mode task dispatch sends `execution_id` as `task-record-{id}` and requests returned variables plus table data. The client-agent page maps the final `__browserflow_automa_workflow_result__` event back to the original WebSocket command id so the backend updates `task_records.status`, `result_json`, `error_message`, and `finished_at`.
+- Update: The result payload also includes `automa_execution_id` from Automa engine `event.id`, so backend `task_records.automa_execution_id` can persist the client-side execution instance id.
 - Reliability fit: Backend dispatch now acquires a Redis per-client task lease before sending `task.execute`; the client-agent page also keeps a localStorage lease while Automa is running. Heartbeats renew the lease, final Automa results release it, and the server scheduler marks stale `queued/running` records failed after the lease window if the client disappears.
 
 ## Manual import keeps workflow identity and timestamps
@@ -563,3 +564,32 @@ workflowStore.insert(
   { duplicateId: true }
 );
 ```
+
+## BrowserFlow bridge injection on LAN and custom hosts
+
+- File: `third_party/automa/src/manifest.chrome.json`
+- File: `third_party/automa/src/manifest.chrome.dev.json`
+- File: `third_party/automa/src/manifest.firefox.json`
+- Build copy: `third_party/automa/build/manifest.json`
+- Purpose: BrowserFlow Server mode clients may open the client-agent page through LAN IPs, intranet domains, Nginx reverse proxies, or HTTPS endpoints instead of only `localhost`.
+- Problem: The `webService.bundle.js` content script provides the BrowserFlow page bridge (`__automa-ext__`, `data-atm-ext-installed`, workflow list/import/export responses). Its match rules previously covered only `localhost`, `127.0.0.1`, and Automa public domains. Opening `http://192.168.0.103/#/client-agent` therefore did not inject the bridge and the frontend reported Automa as not installed.
+- Behavior: The bridge content script now uses `"<all_urls>"`, matching the main Automa content script scope. BrowserFlow pages served from LAN IPs, intranet hostnames, local dev URLs, HTTPS domains, or file URLs can receive the Automa bridge after the unpacked extension is reloaded.
+- Note: Manifest JSON files cannot contain `// BrowserFlow local change` markers because the build script parses them with `JSON.parse`; this documentation entry records the local manifest change instead.
+
+## Silent BrowserFlow workflow import
+
+- File: `third_party/automa/src/content/services/webService.js`
+- File: `frontend/src/services/automaBridge.js`
+- Purpose: Client-agent batch sync imports server workflows into local Automa storage without repeatedly opening or focusing the Automa dashboard.
+- Problem: Each imported workflow previously emitted `workflow:added`, which made Automa open or focus `/workflows/{id}`. Batch sync could trigger that multiple times while the dashboard was still loading, leaving the Automa page spinning.
+- Behavior: BrowserFlow import requests now include `silent: true` by default. The Automa bridge still writes the workflow into `browser.storage.local` and returns the `add-workflow` ack, but it skips the `workflow:added` background notification unless the caller explicitly requests dashboard opening.
+- Frontend fit: `importAutomaWorkflow(workflow, { openDashboard = false })` keeps client sync quiet by default while preserving a future opt-in path for interactive imports.
+
+## BrowserFlow default Automa profile
+
+- File: `third_party/automa/src/stores/main.js`
+- File: `third_party/automa/src/background/BackgroundEventsListeners.js`
+- File: `third_party/automa/src/stores/workflow.js`
+- Purpose: BrowserFlow bundles Automa as an execution component, so a fresh install should open in Simplified Chinese and start with an empty workflow list.
+- Language behavior: The default settings locale is `zh`, and first install persists `settings.locale = 'zh'` into extension storage.
+- Workflow behavior: First-time workflow initialization no longer imports the upstream bundled sample workflows such as `Twitter Trends to Google Sheets`; it stores an empty workflow list instead.

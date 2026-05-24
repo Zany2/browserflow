@@ -37,6 +37,7 @@ func (c *ControllerV1) TaskRecordDetail(ctx context.Context, req *v1.TaskRecordD
 		Where(fileColumns.RecordId, gconv.Int64(req.ID)).
 		Where(fileColumns.DeletedAt + " IS NULL").
 		OrderDesc(fileColumns.CreatedAt).
+		OrderDesc(fileColumns.Id).
 		All()
 	if err != nil {
 		return nil, err

@@ -278,10 +278,7 @@
 
         <el-form-item label="Cron 表达式">
           <div class="schedule-editor">
-            <el-input
-              v-model="taskForm.cron_expression"
-              placeholder="可选，例如 0 */10 * * * *"
-            />
+            <AppCronPicker v-model="taskForm.cron_expression" />
             <span class="form-help">
               不填写时不会自动调度，可在任务列表手动执行一次；填写后按定时任务处理。
             </span>
@@ -345,6 +342,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Plus, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
+import AppCronPicker from '@/components/AppCronPicker.vue'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
@@ -524,7 +522,7 @@ async function loadTasks() {
       page_size: taskPageSize.value,
     })
     const list = normalizeList(data, 'tasks')
-    tasks.value = sortByTimeDesc(list)
+    tasks.value = list
     taskTotal.value = Number(data?.total ?? list.length)
     retainTaskSelectionByRows(tasks.value)
   } finally {
@@ -855,7 +853,7 @@ function buildTaskPayload() {
   if (!isValidCronExpression(cronExpression)) {
     appMessage({
       type: APP_MESSAGE_TYPE.warning,
-      message: 'Cron 表达式格式不正确，请填写 5 段或 6 段表达式，例如 */10 * * * * 或 0 */10 * * * *',
+      message: 'Cron 表达式格式不正确，请填写 GoFrame gcron 支持的 5 段、6 段、@every 或预设表达式',
     })
     return null
   }
@@ -879,14 +877,14 @@ function isValidCronExpression(expression) {
   const cronExpression = String(expression || '').trim()
   if (!cronExpression) return true
   if (CRON_PREDEFINED_PATTERNS.has(cronExpression.toLowerCase())) return true
-  if (/^@every\s+\d+(ns|us|µs|ms|s|m|h)$/i.test(cronExpression)) return true
+  if (/^@every\s+(\d+(ns|us|µs|ms|s|m|h))+$/i.test(cronExpression)) return true
 
   const parts = cronExpression.split(/\s+/)
   if (parts.length !== 5 && parts.length !== 6) return false
 
   const normalizedParts = parts.length === 5 ? ['0', ...parts] : parts
   const ranges = [
-    { min: 0, max: 59, names: null, allowQuestion: false },
+    { min: 0, max: 59, names: null, allowQuestion: false, allowHash: true },
     { min: 0, max: 59, names: null, allowQuestion: false },
     { min: 0, max: 23, names: null, allowQuestion: false },
     { min: 1, max: 31, names: null, allowQuestion: true },
@@ -900,6 +898,7 @@ function isValidCronExpression(expression) {
 function isValidCronPart(part, range) {
   if (!part) return false
   if (part === '*') return true
+  if (range.allowHash && part === '#') return true
   if (range.allowQuestion && part === '?') return true
 
   return part.split(',').every((item) => isValidCronListItem(item, range))
@@ -941,7 +940,7 @@ function buildTaskPayloadFromRow(row, overrides = {}) {
     workflow_name: String(row?.workflow_name || '').trim(),
     client_id: String(row?.client_id || '').trim(),
     client_name: String(row?.client_name || '').trim(),
-    client_ip: String(getTaskClientIp(row)).trim(),
+    client_ip: getTaskClientIpValue(row),
     cron_expression: String(row?.cron_expression || row?.cron || '').trim(),
     run_once_after_create: false,
     params: normalizeTaskParams(row?.params),
@@ -1059,8 +1058,8 @@ function upsertTask(task) {
 
 function mergeSavedTask(serverTask, payload, taskId) {
   return {
-    ...serverTask,
     ...payload,
+    ...serverTask,
     id: serverTask?.id || taskId || `local_${Date.now()}`,
     updated_at: serverTask?.updated_at || new Date().toISOString(),
   }
@@ -1282,22 +1281,17 @@ function getClientOptionLabel(row) {
 }
 
 function getTaskClientIp(row) {
+  return getTaskClientIpValue(row) || '自动匹配'
+}
+
+function getTaskClientIpValue(row) {
   const client = findClientById(row?.client_id)
-  return row?.client_ip || (client ? getClientIp(client) : '') || '自动匹配'
+  return String(row?.client_ip || (client ? getClientIp(client) : '') || '').trim()
 }
 
 function getScheduleText(row) {
   const cronExpression = row?.cron_expression || row?.cron || ''
   return cronExpression || '手动执行'
-}
-
-function sortByTimeDesc(data) {
-  return data.slice().sort((a, b) => getTimeValue(b) - getTimeValue(a))
-}
-
-function getTimeValue(row) {
-  const value = row?.updated_at || row?.created_at || row?.updatedAt || row?.createdAt
-  return value ? new Date(value).getTime() || 0 : 0
 }
 
 function formatDate(value) {

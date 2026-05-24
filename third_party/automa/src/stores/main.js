@@ -16,7 +16,9 @@ export const useStore = defineStore('main', {
       nodes: [],
     },
     settings: {
-      locale: 'en',
+      // BrowserFlow local change start: default Simplified Chinese language 默认简体中文
+      locale: 'zh',
+      // BrowserFlow local change end
       deleteLogAfter: 30,
       logsLimit: 1000,
       editor: {

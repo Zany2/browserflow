@@ -53,8 +53,9 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	if err != nil {
 		return nil, err
 	}
+	storedClientIP := strings.TrimSpace(gconv.String(taskRecord[taskColumns.ClientIp]))
 	if clientIP == "" {
-		clientIP = strings.TrimSpace(gconv.String(taskRecord[taskColumns.ClientIp]))
+		clientIP = storedClientIP
 	}
 
 	params := req.Params
@@ -72,10 +73,61 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 
 	triggerType := taskdata.NormalizeTriggerType(req.TriggerType)
 	serverMode := consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer
+	autoDispatch := serverMode && storedClientIP == "" && strings.TrimSpace(req.ClientIP) == "" && strings.TrimSpace(req.ClientID) == ""
+	failedResponse := func(recordID int64, message string) (*v1.TaskExecuteRes, error) {
+		record, recordErr := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
+		if recordErr != nil {
+			return nil, recordErr
+		}
+		recordMap, recordErr := taskdata.BuildTaskRecordMap(ctx, record)
+		if recordErr != nil {
+			return nil, recordErr
+		}
+		if request := g.RequestFromCtx(ctx); request != nil {
+			rr.FailedJsonWithMessageAndDataExitAll(request, message, &v1.TaskExecuteRes{Record: recordMap})
+			return nil, nil
+		}
+		return &v1.TaskExecuteRes{Record: recordMap}, nil
+	}
+	createFailedRecord := func(message string) (*v1.TaskExecuteRes, error) {
+		failedRecordID, recordErr := dao.TaskRecords.Ctx(ctx).Data(do.TaskRecords{
+			TaskId:       taskID,
+			WorkflowId:   workflowID,
+			ClientIp:     clientIP,
+			TriggerType:  triggerType,
+			Status:       "failed",
+			ParamsJson:   paramsJSON,
+			ErrorMessage: message,
+			FinishedAt:   gtime.Now(),
+		}).InsertAndGetId()
+		if recordErr != nil {
+			return nil, recordErr
+		}
+		failedCommandID := "task-record-" + gconv.String(failedRecordID)
+		if _, recordErr = dao.TaskRecords.Ctx(ctx).
+			WherePri(failedRecordID).
+			Data(do.TaskRecords{ExecutionId: failedCommandID}).
+			Update(); recordErr != nil {
+			return nil, recordErr
+		}
+		return failedResponse(failedRecordID, message)
+	}
+	failRecord := func(failedRecordID int64, message string) (*v1.TaskExecuteRes, error) {
+		_, _ = dao.TaskRecords.Ctx(ctx).
+			WherePri(failedRecordID).
+			Data(do.TaskRecords{
+				Status:       "failed",
+				ErrorMessage: message,
+				FinishedAt:   gtime.Now(),
+			}).
+			Update()
+		return failedResponse(failedRecordID, message)
+	}
 	dispatchMessage := ""
 	candidateClientIPs := make([]string, 0, 1)
 	workflowID = strings.TrimSpace(workflowID)
 	clientIP = strings.TrimSpace(clientIP)
+
 	if workflowID == "" {
 		dispatchMessage = "工作流不能为空"
 	} else if !serverMode {
@@ -110,32 +162,7 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		}
 	}
 	if dispatchMessage != "" {
-		recordID, recordErr := dao.TaskRecords.Ctx(ctx).Data(do.TaskRecords{
-			TaskId:       taskID,
-			WorkflowId:   workflowID,
-			ClientIp:     clientIP,
-			TriggerType:  triggerType,
-			Status:       "failed",
-			ParamsJson:   paramsJSON,
-			ErrorMessage: dispatchMessage,
-			FinishedAt:   gtime.Now(),
-		}).InsertAndGetId()
-		if recordErr != nil {
-			return nil, recordErr
-		}
-		record, recordErr := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
-		if recordErr != nil {
-			return nil, recordErr
-		}
-		recordMap, recordErr := taskdata.BuildTaskRecordMap(ctx, record)
-		if recordErr != nil {
-			return nil, recordErr
-		}
-		if request := g.RequestFromCtx(ctx); request != nil {
-			rr.FailedJsonWithMessageAndDataExitAll(request, dispatchMessage, &v1.TaskExecuteRes{Record: recordMap})
-			return nil, nil
-		}
-		return &v1.TaskExecuteRes{Record: recordMap}, nil
+		return createFailedRecord(dispatchMessage)
 	}
 
 	recordID, err := dao.TaskRecords.Ctx(ctx).Data(do.TaskRecords{
@@ -151,7 +178,25 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	}
 
 	commandID := "task-record-" + gconv.String(recordID)
+	if _, err = dao.TaskRecords.Ctx(ctx).
+		WherePri(recordID).
+		Data(do.TaskRecords{ExecutionId: commandID}).
+		Update(); err != nil {
+		return nil, err
+	}
+	websockets.Init(ctx)
+	timeout := workflowagent.NormalizeRunTimeout(req.Timeout)
+	returnData := workflowexecution.NormalizeReturnData(req.ReturnData)
+	if returnData == nil {
+		returnData = &model.WorkflowExecutionReturnData{
+			IncludeTable: true,
+			TableLimit:   100,
+		}
+	}
+
+	var resultCh chan model.AgentCommandResult
 	locked := false
+	sendFailed := false
 	for _, candidateClientIP := range candidateClientIPs {
 		candidateClientIP = strings.TrimSpace(candidateClientIP)
 		if candidateClientIP == "" {
@@ -167,103 +212,67 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		if lockErr != nil {
 			return nil, lockErr
 		}
-		if ok {
-			clientIP = candidateClientIP
-			locked = true
+		if !ok {
+			continue
+		}
+
+		clientIP = candidateClientIP
+		if _, err = dao.TaskRecords.Ctx(ctx).
+			WherePri(recordID).
+			Data(do.TaskRecords{ClientIp: clientIP}).
+			Update(); err != nil {
+			_ = tasklock.Release(ctx, clientIP, commandID)
+			return nil, err
+		}
+
+		if req.WaitResult {
+			resultCh = make(chan model.AgentCommandResult, 1)
+			state.SetPendingCommand(commandID, resultCh)
+		}
+		sentCount := websockets.SendClientMessage(clientIP, &model.WSResponse{
+			Type:      model.WSMessageTypeAgentCommand,
+			ClientIP:  clientIP,
+			CommandID: commandID,
+			Command:   "task.execute",
+			Payload: map[string]any{
+				"task_id":      taskID,
+				"task_name":    strings.TrimSpace(gconv.String(taskRecord[taskColumns.Name])),
+				"workflow_id":  workflowID,
+				"params":       params,
+				"check_params": false,
+				"execution_id": commandID,
+				"wait_result":  req.WaitResult,
+				"timeout":      timeout,
+				"return_data":  returnData,
+			},
+		})
+		if sentCount <= 0 {
+			sendFailed = true
+			state.RemovePendingCommand(commandID)
+			_ = tasklock.Release(ctx, clientIP, commandID)
+			if serverMode {
+				_ = workflowcache.ClearClient(ctx, clientIP)
+			}
+			if autoDispatch {
+				continue
+			}
 			break
 		}
+
+		locked = true
+		break
 	}
+
 	if !locked {
-		busyMessage := "客户端正在执行其他任务，请稍后重试"
-		if serverMode && strings.TrimSpace(gconv.String(taskRecord[taskColumns.ClientIp])) == "" && strings.TrimSpace(req.ClientIP) == "" && strings.TrimSpace(req.ClientID) == "" {
-			busyMessage = "已遍历调度所有在线且拥有工作流的客户端，均处于繁忙状态，任务执行失败"
+		message := "客户端正在执行其他任务，请稍后重试"
+		if autoDispatch && sendFailed {
+			message = "已遍历调度所有在线且拥有工作流的客户端，均已断开或 WebSocket 不可发送，任务执行失败"
+		} else if autoDispatch {
+			message = "已遍历调度所有在线且拥有工作流的客户端，均处于繁忙状态，任务执行失败"
+		} else if sendFailed {
+			message = "客户端不在线或 WebSocket 未连接"
 		}
-		_, _ = dao.TaskRecords.Ctx(ctx).
-			WherePri(recordID).
-			Data(do.TaskRecords{
-				Status:       "failed",
-				ErrorMessage: busyMessage,
-				FinishedAt:   gtime.Now(),
-			}).
-			Update()
-		record, recordErr := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
-		if recordErr != nil {
-			return nil, recordErr
-		}
-		recordMap, recordErr := taskdata.BuildTaskRecordMap(ctx, record)
-		if recordErr != nil {
-			return nil, recordErr
-		}
-		if request := g.RequestFromCtx(ctx); request != nil {
-			rr.FailedJsonWithMessageAndDataExitAll(request, busyMessage, &v1.TaskExecuteRes{Record: recordMap})
-			return nil, nil
-		}
-		return &v1.TaskExecuteRes{Record: recordMap}, nil
-	}
-
-	if _, err = dao.TaskRecords.Ctx(ctx).
-		WherePri(recordID).
-		Data(do.TaskRecords{ClientIp: clientIP}).
-		Update(); err != nil {
-		_ = tasklock.Release(ctx, clientIP, commandID)
-		return nil, err
-	}
-
-	websockets.Init(ctx)
-	timeout := workflowagent.NormalizeRunTimeout(req.Timeout)
-	returnData := workflowexecution.NormalizeReturnData(req.ReturnData)
-	if returnData == nil {
-		returnData = &model.WorkflowExecutionReturnData{
-			IncludeTable: true,
-			TableLimit:   100,
-		}
-	}
-	var resultCh chan model.AgentCommandResult
-	if req.WaitResult {
-		resultCh = make(chan model.AgentCommandResult, 1)
-		state.SetPendingCommand(commandID, resultCh)
-	}
-	sentCount := websockets.SendClientMessage(clientIP, &model.WSResponse{
-		Type:      model.WSMessageTypeAgentCommand,
-		ClientIP:  clientIP,
-		CommandID: commandID,
-		Command:   "task.execute",
-		Payload: map[string]any{
-			"task_id":      taskID,
-			"task_name":    strings.TrimSpace(gconv.String(taskRecord[taskColumns.Name])),
-			"workflow_id":  workflowID,
-			"params":       params,
-			"check_params": false,
-			"execution_id": commandID,
-			"wait_result":  req.WaitResult,
-			"timeout":      timeout,
-			"return_data":  returnData,
-		},
-	})
-	if sentCount <= 0 {
-		state.RemovePendingCommand(commandID)
-		_ = tasklock.Release(ctx, clientIP, commandID)
-		_, _ = dao.TaskRecords.Ctx(ctx).
-			WherePri(recordID).
-			Data(do.TaskRecords{
-				Status:       "failed",
-				ErrorMessage: "客户端不在线或 WebSocket 未连接",
-				FinishedAt:   gtime.Now(),
-			}).
-			Update()
-		record, recordErr := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
-		if recordErr != nil {
-			return nil, recordErr
-		}
-		recordMap, recordErr := taskdata.BuildTaskRecordMap(ctx, record)
-		if recordErr != nil {
-			return nil, recordErr
-		}
-		if request := g.RequestFromCtx(ctx); request != nil {
-			rr.FailedJsonWithMessageAndDataExitAll(request, "客户端不在线或 WebSocket 未连接", &v1.TaskExecuteRes{Record: recordMap})
-			return nil, nil
-		}
-		return &v1.TaskExecuteRes{Record: recordMap}, nil
+		return failRecord(recordID, message)
 	}
 
 	_, err = dao.TaskRecords.Ctx(ctx).

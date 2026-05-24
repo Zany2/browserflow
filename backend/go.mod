@@ -10,6 +10,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/sashabaranov/go-openai v1.41.2
 	go.etcd.io/bbolt v1.4.3
+	golang.org/x/text v0.25.0
 )
 
 require (
@@ -46,6 +47,5 @@ require (
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

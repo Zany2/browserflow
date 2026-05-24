@@ -102,7 +102,7 @@ export function openAutomaWorkflow(workflowId) {
   })
 }
 
-export function importAutomaWorkflow(workflow) {
+export function importAutomaWorkflow(workflow, { openDashboard = false } = {}) {
   if (!workflow) {
     throw new Error('导入工作流数据不能为空')
   }
@@ -136,6 +136,7 @@ export function importAutomaWorkflow(workflow) {
       type: 'add-workflow',
       data: {
         requestId,
+        silent: !openDashboard,
         workflow,
       },
     })

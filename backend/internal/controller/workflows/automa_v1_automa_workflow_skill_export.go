@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
@@ -42,9 +43,16 @@ func (c *ServerControllerV1) WorkflowExportSkill(ctx context.Context, req *v1.Wo
 	}
 
 	request := g.RequestFromCtx(ctx)
+	baseURL := workflowskill.BaseURLFromFrontendURL(g.Cfg().MustGet(ctx, "frontend.url", "").String())
+	if baseURL == "" {
+		baseURL = workflowskill.BaseURLFromFrontendURL(os.Getenv("FRONTEND_URL"))
+	}
+	if baseURL == "" {
+		baseURL = workflowskill.BaseURL(request.Host, request.TLS != nil)
+	}
 	request.Response.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	request.Response.Header().Set("Content-Disposition", workflowskill.ContentDisposition(workflowskill.FileName))
-	request.Response.Write(workflowskill.GenerateServerMarkdown(workflows, workflowskill.BaseURL(request.Host, request.TLS != nil)))
+	request.Response.Write(workflowskill.GenerateServerMarkdown(workflows, baseURL))
 
 	request.ExitAll()
 	return nil, nil
@@ -53,7 +61,7 @@ func (c *ServerControllerV1) WorkflowExportSkill(ctx context.Context, req *v1.Wo
 func loadServerWorkflowRecordsForSkill(ctx context.Context) ([]*model.AutomaWorkflowRecord, error) {
 	columns := dao.AutomaWorkflows.Columns()
 	items := []entity.AutomaWorkflows{}
-	if err := dao.AutomaWorkflows.Ctx(ctx).OrderDesc(columns.UpdatedAt).Scan(&items); err != nil {
+	if err := dao.AutomaWorkflows.Ctx(ctx).OrderDesc(columns.CreatedAt).OrderDesc(columns.Id).Scan(&items); err != nil {
 		return nil, err
 	}
 

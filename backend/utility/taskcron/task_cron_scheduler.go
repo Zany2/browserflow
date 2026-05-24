@@ -154,13 +154,13 @@ func executeCronTask(ctx context.Context, taskID string) {
 	}
 }
 
-// sweepStaleTaskRecords marks stuck queued/running task records failed.
+// sweepStaleTaskRecords marks stuck pending/queued/running task records failed.
 func sweepStaleTaskRecords(ctx context.Context) {
 	columns := dao.TaskRecords.Columns()
 	cutoff := gtime.New(time.Now().Add(-tasklock.StaleAfter))
 	records, err := dao.TaskRecords.Ctx(ctx).
-		WhereIn(columns.Status, []string{"queued", "running"}).
-		WhereLT(columns.StartedAt, cutoff).
+		WhereIn(columns.Status, []string{"pending", "queued", "running"}).
+		Where("COALESCE("+columns.StartedAt+", "+columns.CreatedAt+") < ?", cutoff).
 		Limit(100).
 		All()
 	if err != nil {
@@ -187,7 +187,7 @@ func sweepStaleTaskRecords(ctx context.Context) {
 
 		_, err = dao.TaskRecords.Ctx(ctx).
 			WherePri(recordID).
-			WhereIn(columns.Status, []string{"queued", "running"}).
+			WhereIn(columns.Status, []string{"pending", "queued", "running"}).
 			Data(do.TaskRecords{
 				Status:       "failed",
 				ErrorMessage: "client task execution timed out and was automatically ended",
