@@ -17,6 +17,8 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/controller/tasks"
 	"github.com/Zany2/browserflow/backend/internal/controller/workflows"
 	"github.com/Zany2/browserflow/backend/internal/controller/ws"
+	"github.com/Zany2/browserflow/backend/internal/dao"
+	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/middleware"
 	"github.com/Zany2/browserflow/backend/utility/taskcron"
 	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
@@ -26,6 +28,7 @@ import (
 	"github.com/gogf/gf/v2/os/gcmd"
 	"github.com/gogf/gf/v2/os/gctx"
 	"github.com/gogf/gf/v2/os/gproc"
+	"github.com/gogf/gf/v2/os/gtime"
 )
 
 var (
@@ -37,85 +40,105 @@ var (
 			s := g.Server()
 			runtimeMode := consts.ResolveRuntimeMode(ctx)
 
+			if runtimeMode == consts.RuntimeModeServer {
+				// Reset stale node state before accepting reconnects. 启动监听前重置遗留在线节点状态
+				now := gtime.Now()
+				clientColumns := dao.Clients.Columns()
+				if _, err = dao.Clients.Ctx(ctx).
+					Where(clientColumns.Status, "online").
+					Data(do.Clients{
+						Status:              "offline",
+						BusyStatus:          "idle",
+						CurrentExecutionId:  "",
+						CurrentTaskRecordId: 0,
+						DisconnectedAt:      now,
+					}).
+					Update(); err != nil {
+					return err
+				}
+
+				if err = workflowcache.ClearBrowserflowKeys(ctx); err != nil {
+					return err
+				}
+				tasks.RecoverActiveTaskState(ctx)
+			}
+
 			s.Group("/api/v1", func(group *ghttp.RouterGroup) {
 				group.Middleware(
-					middleware.Cors(),                      // Cors handles cross-origin requests. 跨域处理中间件。
-					middleware.HandlerResponseMiddleware(), // Response middleware wraps common responses. 统一响应处理中间件。
+					middleware.Cors(),
+					middleware.HandlerResponseMiddleware(),
 				)
 
-				// Common routes are required by both Windows and Server runtimes. 公共路由同时服务 Windows 与 Server 模式。
 				group.Group("/app", func(group *ghttp.RouterGroup) {
-					// App exposes runtime metadata for frontend bootstrap and route gating. 应用接口提供前端启动与路由控制所需的运行信息。
 					group.Bind(app.NewV1())
 				})
 				group.Group("/ws", func(group *ghttp.RouterGroup) {
-					// WS is the shared transport entry for local agents, remote clients, and status subscriptions. WebSocket 是本地执行端、远程客户端与状态订阅共用的长连接入口。
 					group.Bind(ws.NewV1())
 				})
 				group.Group("/agents", func(group *ghttp.RouterGroup) {
-					// Agents reports online browser-agent state for pages that need live executors. 执行端接口返回在线 browser-agent 状态，供需要实时执行端的页面使用。
 					group.Bind(agents.NewV1())
 				})
 				group.Group("/workflows", func(group *ghttp.RouterGroup) {
-					// Workflows stays shared because both modes reuse workflow storage and agent dispatch APIs. 工作流接口保持公共，因为两种模式都会复用工作流数据与执行端调度能力。
 					group.Bind(workflows.NewV1())
 				})
 
 				if runtimeMode == consts.RuntimeModeServer {
-					// Server-only routes manage remote clients, stored workflows, and task execution. Server 专属路由负责远程客户端、服务端工作流资产与任务调度。
+					// Server routes manage remote nodes, tasks, records, and server-side workflow assets. Server 路由管理远程节点和任务调度
 					group.Group("/tasks", func(group *ghttp.RouterGroup) {
-						// Tasks manages scheduled/manual tasks and dispatches them to remote clients. 任务接口管理任务并调度到远程客户端执行。
 						group.Bind(tasks.NewV1())
 					})
 					group.Group("/task-records", func(group *ghttp.RouterGroup) {
-						// Task records exposes server-side execution history. 任务记录接口提供服务端执行历史查询。
 						group.Bind(taskrecords.NewV1())
 					})
 					group.Group("/automa", func(group *ghttp.RouterGroup) {
-						// Automa reuses the shared workflow controller so server mode stays on PostgreSQL/Redis. Automa 复用工作流控制器，确保 Server 模式只使用 PostgreSQL/Redis。
 						group.Bind(workflows.NewV1())
-						// Server workflow extras stay off the shared /workflows route. Server 专属工作流扩展不挂到公共 /workflows 路由。
 						group.Bind(workflows.NewServerV1())
 					})
 					group.Group("/clients", func(group *ghttp.RouterGroup) {
-						// Clients manages remote client inventory and administrative actions. 客户端接口负责远程客户端列表与管理操作。
 						group.Bind(clients.NewV1())
 					})
 				} else {
-					// Windows-only routes operate local desktop resources. Windows 专属路由只操作本机桌面资源。
+					// Windows routes operate local desktop resources only. Windows 路由只操作本机资源
 					group.Group("/browser", func(group *ghttp.RouterGroup) {
-						// Browser manages local browser instances started by the desktop runtime. 浏览器接口管理由桌面端启动的本地浏览器实例。
 						group.Bind(browser.NewV1())
 					})
 					group.Group("/browser-executor", func(group *ghttp.RouterGroup) {
-						// Browser executor controls the current local browser instance and is not a remote-dispatch proxy. 浏览器执行器只控制当前本地浏览器实例，不承担远程转发职责。
 						group.Bind(browserexecutor.NewV1())
 					})
 					group.Group("/llm", func(group *ghttp.RouterGroup) {
-						// LLM manages local model-provider configurations. 大模型接口管理本地模型提供商配置。
 						group.Bind(llm.NewV1())
 					})
 					group.Group("/chat", func(group *ghttp.RouterGroup) {
-						// Chat manages local model conversations and SSE streaming. 对话接口管理本地会话与 SSE 流式输出。
 						group.Bind(chat.NewV1())
 					})
 				}
 			})
 
 			if runtimeMode == consts.RuntimeModeServer {
-				// Task scheduler only belongs to Server mode because scheduled workflow dispatch is a server responsibility. 任务调度器仅在 Server 模式启动，因为定时工作流调度属于服务端职责。
+				// Start scheduler and recovery after stale online state has been cleared. 清理后启动调度与恢复
 				taskcron.StartCronScheduler(ctx)
-				// Ask online clients to report locked tasks left by a previous server process. 启动后恢复上次进程遗留的客户端任务锁。
 				websockets.RequestTaskRecovery(ctx)
 
-				// Redis cleanup clears transient client inventory when the server exits. Server 退出时清理临时客户端清单缓存。
 				gproc.AddSigHandlerShutdown(func(sig os.Signal) {
 					cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
 
-					// Stop scheduler before process exit to avoid accepting new scheduled work during shutdown. 进程退出前停止调度器，避免关闭阶段继续接收新的定时任务。
 					taskcron.StopCronScheduler()
 
+					now := gtime.Now()
+					clientColumns := dao.Clients.Columns()
+					if _, cleanupErr := dao.Clients.Ctx(cleanupCtx).
+						Where(clientColumns.Status, "online").
+						Data(do.Clients{
+							Status:              "offline",
+							BusyStatus:          "idle",
+							CurrentExecutionId:  "",
+							CurrentTaskRecordId: 0,
+							DisconnectedAt:      now,
+						}).
+						Update(); cleanupErr != nil {
+						g.Log().Line().Error(gctx.New(), "标记服务端客户端离线失败 ", cleanupErr.Error())
+					}
 					if cleanupErr := workflowcache.ClearBrowserflowKeys(cleanupCtx); cleanupErr != nil {
 						g.Log().Line().Error(gctx.New(), "清理 Redis 客户端缓存失败 ", cleanupErr.Error())
 					}

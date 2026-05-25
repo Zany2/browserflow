@@ -28,7 +28,6 @@ type TaskAttemptsColumns struct {
 	AttemptNo    string // 尝试序号，从 1 开始
 	WorkflowId   string // 执行工作流 ID
 	ClientIp     string // 执行客户端 IP 快照
-	MachineId    string // 执行机器 ID
 	NodeId       string // 执行节点 ID
 	ExecutionId  string // 后端本次执行标识
 	CommandId    string // 对应节点命令 ID
@@ -50,7 +49,6 @@ var taskAttemptsColumns = TaskAttemptsColumns{
 	AttemptNo:    "attempt_no",
 	WorkflowId:   "workflow_id",
 	ClientIp:     "client_ip",
-	MachineId:    "machine_id",
 	NodeId:       "node_id",
 	ExecutionId:  "execution_id",
 	CommandId:    "command_id",

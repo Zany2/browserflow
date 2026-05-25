@@ -23,7 +23,7 @@ type NodePackagesDao struct {
 type NodePackagesColumns struct {
 	Id              string // 自增 ID
 	NodeId          string // 执行节点 ID
-	MachineId       string // 机器 ID
+	ClientIp        string // 客户端 IP 快照，用于区分同名执行节点
 	PackageId       string // 关联的 Automa 插件安装包 ID
 	ExpectedVersion string // 服务端期望安装的插件版本
 	ActualVersion   string // 节点实际上报的插件版本
@@ -43,7 +43,7 @@ type NodePackagesColumns struct {
 var nodePackagesColumns = NodePackagesColumns{
 	Id:              "id",
 	NodeId:          "node_id",
-	MachineId:       "machine_id",
+	ClientIp:        "client_ip",
 	PackageId:       "package_id",
 	ExpectedVersion: "expected_version",
 	ActualVersion:   "actual_version",

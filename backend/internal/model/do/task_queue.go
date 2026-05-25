@@ -15,9 +15,8 @@ type TaskQueue struct {
 	Id            interface{} // 自增 ID
 	TaskId        interface{} // 关联任务配置 ID
 	WorkflowId    interface{} // 待执行 Automa 工作流 ID
-	DispatchMode  interface{} // 调度模式快照：auto、group、machine、node、ip
-	ClientIp      interface{} // 目标客户端 IP 快照，仅用于兼容旧逻辑
-	MachineId     interface{} // 目标机器 ID
+	DispatchMode  interface{} // 调度模式快照：auto、group、node、ip
+	ClientIp      interface{} // 目标客户端 IP 快照
 	NodeId        interface{} // 目标节点 ID
 	TargetGroupId interface{} // 目标节点分组 ID
 	TriggerType   interface{} // 触发类型

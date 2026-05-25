@@ -9,15 +9,11 @@ import (
 	"github.com/gogf/gf/v2/os/gtime"
 )
 
-// ClientBatchOffline forces clients offline in batch 批量强制客户端下线
+// ClientBatchOffline forces client nodes offline in batch. 批量强制客户端节点下线
 func (c *ControllerV1) ClientBatchOffline(ctx context.Context, req *v1.ClientBatchOfflineReq) (res *v1.ClientBatchOfflineRes, err error) {
-	// Stats 统计批量下线处理结果
-	stats := v1.ClientBatchActionRes{
-		Total: len(req.IDs),
-	}
+	stats := v1.ClientBatchActionRes{Total: len(req.IDs)}
 	for _, id := range req.IDs {
-		// Query client 按选择的客户端标识查询记录
-		record, queryErr := clientops.QueryRecord(ctx, id)
+		record, queryErr := queryClientRecord(ctx, id)
 		if queryErr != nil {
 			return nil, queryErr
 		}
@@ -26,9 +22,10 @@ func (c *ControllerV1) ClientBatchOffline(ctx context.Context, req *v1.ClientBat
 			continue
 		}
 
-		// Mark offline 标记离线并关闭当前连接
-		closed := clientops.CloseConnection(ctx, clientops.TargetConnectionID(record))
-		if _, err = clientops.ScopedModel(ctx, record).
+		clientIP := clientIPFromRecord(record)
+		nodeID := clientNodeIDFromRecord(record)
+		closed := clientops.CloseConnection(ctx, clientIP, nodeID)
+		if _, err = scopedClientModel(ctx, record).
 			Data(do.Clients{
 				Status:         "offline",
 				DisconnectedAt: gtime.Now(),
@@ -41,7 +38,5 @@ func (c *ControllerV1) ClientBatchOffline(ctx context.Context, req *v1.ClientBat
 		stats.Notified += closed
 	}
 
-	return &v1.ClientBatchOfflineRes{
-		ClientBatchActionRes: stats,
-	}, nil
+	return &v1.ClientBatchOfflineRes{ClientBatchActionRes: stats}, nil
 }

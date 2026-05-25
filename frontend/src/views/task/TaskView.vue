@@ -62,6 +62,11 @@
             {{ getTaskClientIp(row) }}
           </template>
         </el-table-column>
+        <el-table-column label="执行节点 ID" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ getTaskNodeId(row) }}
+          </template>
+        </el-table-column>
         <el-table-column label="执行计划" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getScheduleText(row) }}
@@ -149,30 +154,50 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="执行客户端">
+        <el-form-item label="调度目标">
           <div class="client-config">
             <div class="client-select-row">
+              <el-select
+                v-model="taskForm.client_ip"
+                class="client-select"
+                clearable
+                filterable
+                placeholder="客户端 IP（可选，不选则自动匹配全部）"
+                :loading="clientLoading"
+                @change="handleClientIpChange"
+                @clear="handleClientIpClear"
+              >
+                <el-option
+                  v-for="option in clientIpOptions"
+                  :key="option.ip"
+                  :label="option.ip"
+                  :value="option.ip"
+                >
+                  <div class="client-option client-ip-option">
+                    <span>{{ option.ip }}</span>
+                    <small>{{ option.total }} 个执行节点 / {{ option.online }} 个在线</small>
+                  </div>
+                </el-option>
+              </el-select>
               <el-select
                 v-model="taskForm.client_id"
                 class="client-select"
                 clearable
                 filterable
-                placeholder="可选，搜索并选择客户端名称、ID、IP、浏览器"
-                :filter-method="handleClientKeywordFilter"
+                placeholder="执行节点（可选，不选则自动匹配节点）"
                 :loading="clientLoading"
-                @change="handleClientChange"
-                @clear="handleClientClear"
-                @visible-change="handleClientSelectVisibleChange"
+                @change="handleNodeChange"
+                @clear="handleNodeClear"
               >
                 <el-option
-                  v-for="client in filteredClients"
+                  v-for="client in filteredNodeOptions"
                   :key="getClientId(client)"
                   :label="getClientOptionLabel(client)"
                   :value="getClientId(client)"
                 >
                   <div class="client-option">
-                    <span>{{ getClientIp(client) || '' }}</span>
-                    <small>{{ getClientSelectMeta(client) }}</small>
+                    <span>{{ getClientNodeId(client) || '' }}</span>
+                    <small>{{ getNodeSelectMeta(client) }}</small>
                   </div>
                 </el-option>
               </el-select>
@@ -182,15 +207,16 @@
             </div>
 
             <div class="client-selection-summary">
-              <template v-if="selectedClient">
-                <el-tag effect="plain">{{ getClientIp(selectedClient) || '' }}</el-tag>
-                <span class="client-selection-text">{{ getClientSelectMeta(selectedClient) }}</span>
+              <template v-if="hasDispatchTarget">
+                <el-tag effect="plain">IP：{{ taskForm.client_ip || '自动匹配' }}</el-tag>
+                <el-tag effect="plain">节点：{{ taskForm.node_id || '自动匹配' }}</el-tag>
+                <span class="client-selection-text">{{ selectedTargetText }}</span>
                 <span v-if="clientWorkflowStatusText" :class="clientWorkflowStatusClass">
                   {{ clientWorkflowStatusText }}
                 </span>
               </template>
               <span v-else class="client-selection-empty">
-                未选择时，后端会匹配拥有该工作流的在线客户端执行
+                未选择时，后端会匹配拥有该工作流的在线执行节点
               </span>
             </div>
           </div>
@@ -281,6 +307,19 @@
             <AppCronPicker v-model="taskForm.cron_expression" />
             <span class="form-help">
               不填写时不会自动调度，可在任务列表手动执行一次；填写后按定时任务处理。
+            </span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="繁忙策略">
+          <div class="policy-editor">
+            <el-radio-group v-model="taskForm.queue_policy">
+              <el-radio-button label="queue">等待可用</el-radio-button>
+              <el-radio-button label="fail">直接失败</el-radio-button>
+              <el-radio-button label="skip">跳过本次</el-radio-button>
+            </el-radio-group>
+            <span class="form-help">
+              所有匹配节点都繁忙时的处理方式；当前版本不会长期阻塞等待。
             </span>
           </div>
         </el-form-item>
@@ -427,9 +466,6 @@ const taskFilters = reactive({
   created_time_range: [],
   enabled: '',
 })
-const clientSelector = reactive({
-  keyword: '',
-})
 
 const taskDialogTitle = computed(() => (taskForm.id ? '编辑任务' : '新增任务'))
 const pagedTasks = computed(() => tasks.value)
@@ -444,37 +480,37 @@ const {
   rows: pagedTasks,
   getRowKey: getTaskSelectionKey,
 })
-const filteredClients = computed(() => {
-  const keyword = clientSelector.keyword.trim().toLowerCase()
-
-  return clientOptions.value.filter((client) => {
-    const keywordSource = [
-      getClientId(client),
-      getClientName(client),
-      getClientNodeId(client),
-      getClientNodeName(client),
-      getClientMachineId(client),
-      client.client_ip,
-      client.ip,
-      client.remote_ip,
-      client.browser,
-      client.browser_name,
-      client.user_agent,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-
-    return !keyword || keywordSource.includes(keyword)
-  })
+const clientIpOptions = computed(() => {
+  const optionMap = new Map()
+  for (const client of clientOptions.value) {
+    const ip = getClientIp(client)
+    if (!ip) continue
+    const option = optionMap.get(ip) || { ip, total: 0, online: 0 }
+    option.total += 1
+    if (getClientStatus(client) === 'online') option.online += 1
+    optionMap.set(ip, option)
+  }
+  return Array.from(optionMap.values()).sort((a, b) => a.ip.localeCompare(b.ip))
+})
+const filteredNodeOptions = computed(() => {
+  const clientIP = taskForm.client_ip.trim()
+  return clientOptions.value.filter((client) => !clientIP || getClientIp(client) === clientIP)
 })
 const selectedClient = computed(() => findClientById(taskForm.client_id))
+const hasDispatchTarget = computed(() => Boolean(taskForm.client_ip || taskForm.node_id))
+const selectedTargetText = computed(() => {
+  if (selectedClient.value) return getClientDetailMeta(selectedClient.value)
+  if (taskForm.client_ip && !taskForm.node_id) return '将在该 IP 下自动匹配拥有工作流的在线执行节点'
+  return ''
+})
 const clientWorkflowStatusText = computed(() => {
-  if (!taskForm.workflow_id || !selectedClient.value) return ''
-  if (clientWorkflowChecking.value) return '正在检测当前客户端是否拥有该工作流...'
-  if (selectedClientHasWorkflow.value === true) return '当前客户端已拥有该工作流'
+  if (!taskForm.workflow_id || !hasDispatchTarget.value) return ''
+  if (clientWorkflowChecking.value) return '正在检测当前调度目标是否拥有该工作流...'
+  if (selectedClientHasWorkflow.value === true) return '当前执行节点已拥有该工作流'
   if (selectedClientHasWorkflow.value === false) {
-    return '当前客户端没有上报该工作流，保存后执行会直接失败'
+    return taskForm.node_id
+      ? '当前执行节点没有上报该工作流，保存后执行会直接失败'
+      : '该 IP 下没有在线节点上报该工作流，保存后执行会直接失败'
   }
   return ''
 })
@@ -598,6 +634,8 @@ async function editTask(row) {
     machine_id: row.machine_id || '',
     node_id: row.node_id || '',
     node_name: row.node_name || '',
+    dispatch_mode: row.dispatch_mode || '',
+    queue_policy: row.queue_policy || 'queue',
     cron_expression: row.cron_expression || row.cron || '',
     enabled: row.enabled !== false,
   })
@@ -639,11 +677,15 @@ async function checkSelectedClientWorkflow() {
     const data = await listAutomaSyncCandidatesByWorkflow(workflowId, {
       page_num: 1,
       page_size: clientWorkflowCheckPageSize,
-      source_ip: targetNodeId || clientIp,
+      source_ip: clientIp,
+      source_node_id: targetNodeId,
     })
     const candidates = normalizeList(data)
     if (seq !== clientWorkflowCheckSeq.value) return
-    selectedClientHasWorkflow.value = candidates.some((item) => getClientNodeId(item) === targetNodeId || getClientIp(item) === clientIp)
+    selectedClientHasWorkflow.value = candidates.some((item) => {
+      if (targetNodeId) return getClientNodeId(item) === targetNodeId
+      return getClientIp(item) === clientIp
+    })
   } catch {
     if (seq !== clientWorkflowCheckSeq.value) return
     selectedClientHasWorkflow.value = null
@@ -787,7 +829,7 @@ async function confirmExecuteTaskWithParams() {
       machine_id: row.machine_id || '',
       node_id: row.node_id || '',
       params: {
-        ...(row.params || {}),
+        ...row.params,
         ...params,
       },
     })
@@ -814,27 +856,45 @@ async function handleWorkflowChange(workflowId) {
   checkSelectedClientWorkflow()
 }
 
-function handleClientChange(clientId) {
+function handleClientIpChange(clientIP) {
+  const nextClientIP = String(clientIP || '').trim()
+  if (taskForm.client_ip !== nextClientIP) taskForm.client_ip = nextClientIP
+  if (taskForm.node_id) {
+    const selectedNode = findClientById(taskForm.client_id)
+    if (!selectedNode || getClientIp(selectedNode) !== nextClientIP) {
+      clearSelectedNode()
+    }
+  }
+  checkSelectedClientWorkflow()
+}
+
+function handleClientIpClear() {
+  taskForm.client_ip = ''
+  clearSelectedNode()
+  checkSelectedClientWorkflow()
+}
+
+function handleNodeChange(clientId) {
   const client = findClientById(clientId)
   taskForm.client_name = client ? getClientName(client) : ''
-  taskForm.client_ip = client ? getClientIp(client) : ''
+  if (client) taskForm.client_ip = getClientIp(client)
   taskForm.machine_id = client ? getClientMachineId(client) : ''
   taskForm.node_id = client ? getClientNodeId(client) : ''
   taskForm.node_name = client ? getClientNodeName(client) : ''
   checkSelectedClientWorkflow()
 }
 
-function handleClientClear() {
-  clientSelector.keyword = ''
-  handleClientChange('')
+function handleNodeClear() {
+  clearSelectedNode()
+  checkSelectedClientWorkflow()
 }
 
-function handleClientKeywordFilter(keyword) {
-  clientSelector.keyword = keyword
-}
-
-function handleClientSelectVisibleChange(visible) {
-  if (!visible) clientSelector.keyword = ''
+function clearSelectedNode() {
+  taskForm.client_id = ''
+  taskForm.client_name = ''
+  taskForm.machine_id = ''
+  taskForm.node_id = ''
+  taskForm.node_name = ''
 }
 
 function addParam() {
@@ -883,6 +943,8 @@ function buildTaskPayload() {
     machine_id: taskForm.machine_id.trim(),
     node_id: taskForm.node_id.trim(),
     node_name: taskForm.node_name.trim(),
+    dispatch_mode: getTaskDispatchMode(taskForm),
+    queue_policy: taskForm.queue_policy,
     cron_expression: cronExpression,
     run_once_after_create: false,
     params,
@@ -961,6 +1023,8 @@ function buildTaskPayloadFromRow(row, overrides = {}) {
     machine_id: String(row?.machine_id || '').trim(),
     node_id: String(row?.node_id || '').trim(),
     node_name: String(row?.node_name || '').trim(),
+    dispatch_mode: String(row?.dispatch_mode || row?.dispatchMode || '').trim(),
+    queue_policy: String(row?.queue_policy || row?.queuePolicy || 'queue').trim(),
     cron_expression: String(row?.cron_expression || row?.cron || '').trim(),
     run_once_after_create: false,
     params: normalizeTaskParams(row?.params),
@@ -1037,7 +1101,6 @@ function buildManualParamObject(options = {}) {
 
 function resetTaskForm() {
   Object.assign(taskForm, createEmptyTaskForm())
-  clientSelector.keyword = ''
   autoParamItems.value = []
   paramEntries.value = [createEmptyParamEntry()]
   selectedClientHasWorkflow.value = null
@@ -1308,12 +1371,20 @@ function getClientSelectMeta(row) {
   return [getClientNodeName(row) || getClientNodeId(row), getClientMachineId(row), getClientStatusText(row)].filter(Boolean).join(' / ')
 }
 
+function getNodeSelectMeta(row) {
+  return [getClientIp(row), getClientNodeName(row), getClientStatusText(row)].filter(Boolean).join(' / ')
+}
+
+function getClientDetailMeta(row) {
+  return [getClientNodeName(row), getClientStatusText(row)].filter(Boolean).join(' / ')
+}
+
 function getClientOptionLabel(row) {
   return [getClientNodeName(row) || getClientIp(row), getClientSelectMeta(row)].filter(Boolean).join(' / ')
 }
 
 function getTaskClientIp(row) {
-  return getTaskTargetText(row) || '自动匹配'
+  return getTaskClientIpValue(row) || '自动匹配'
 }
 
 function getTaskClientIpValue(row) {
@@ -1321,9 +1392,16 @@ function getTaskClientIpValue(row) {
   return String(row?.client_ip || (client ? getClientIp(client) : '') || '').trim()
 }
 
-function getTaskTargetText(row) {
+function getTaskNodeId(row) {
   const client = findClientById(row?.node_id || row?.client_id)
-  return String(row?.node_name || row?.node_id || (client ? getClientNodeName(client) || getClientNodeId(client) : '') || getTaskClientIpValue(row) || '').trim()
+  return String(row?.node_id || row?.nodeId || (client ? getClientNodeId(client) : '') || '').trim() || '自动匹配'
+}
+
+function getTaskDispatchMode(row) {
+  if (row?.node_id) return 'node'
+  if (row?.target_group_id) return 'group'
+  if (row?.client_ip) return 'ip'
+  return 'auto'
 }
 
 function getScheduleText(row) {
@@ -1356,6 +1434,8 @@ function createEmptyTaskForm() {
     machine_id: '',
     node_id: '',
     node_name: '',
+    dispatch_mode: 'auto',
+    queue_policy: 'queue',
     cron_expression: '',
     enabled: true,
   }
@@ -1439,7 +1519,8 @@ function createEmptyTaskForm() {
 
 .client-config,
 .params-editor,
-.schedule-editor {
+.schedule-editor,
+.policy-editor {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1448,7 +1529,7 @@ function createEmptyTaskForm() {
 
 .client-select-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.1fr) auto;
   gap: 12px;
 }
 
@@ -1545,8 +1626,6 @@ function createEmptyTaskForm() {
 }
 
 .execute-param-form {
-  max-height: 58vh;
-  overflow: auto;
   padding-right: 8px;
 }
 

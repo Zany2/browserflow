@@ -49,12 +49,9 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 		return nil, nil
 	}
 
-	clientIP, machineID, nodeID, _, err := taskdata.ResolveClientTarget(ctx, req.ClientID, req.ClientIP, req.NodeID)
+	clientIP, nodeID, err := resolveClientTarget(ctx, req.ClientID, req.ClientIP, req.NodeID)
 	if err != nil {
 		return nil, err
-	}
-	if machineID == "" {
-		machineID = strings.TrimSpace(req.MachineID)
 	}
 	if consts.ResolveRuntimeMode(ctx) != consts.RuntimeModeServer && clientIP == "" {
 		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "执行客户端不能为空")
@@ -63,7 +60,9 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 	if clientIP != "" || nodeID != "" {
 		clientColumns := dao.Clients.Columns()
 		clientModel := dao.Clients.Ctx(ctx)
-		if nodeID != "" {
+		if clientIP != "" && nodeID != "" {
+			clientModel = clientModel.Where(clientColumns.ClientIp, clientIP).Where(clientColumns.NodeId, nodeID)
+		} else if nodeID != "" {
 			clientModel = clientModel.Where(clientColumns.NodeId, nodeID)
 		} else {
 			clientModel = clientModel.Where(clientColumns.ClientIp, clientIP)
@@ -93,10 +92,9 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 		Description:    description,
 		AutomaId:       workflowID,
 		ClientIp:       clientIP,
-		MachineId:      machineID,
 		NodeId:         nodeID,
 		TargetGroupId:  req.TargetGroupID,
-		DispatchMode:   normalizeDispatchMode(req.DispatchMode, machineID, nodeID, req.TargetGroupID, clientIP),
+		DispatchMode:   normalizeDispatchMode(req.DispatchMode, nodeID, req.TargetGroupID, clientIP),
 		QueuePolicy:    normalizeQueuePolicy(req.QueuePolicy),
 		CronExpression: cronExpression,
 		ParamsJson:     paramsJSON,
@@ -109,7 +107,7 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 	if err != nil {
 		return nil, err
 	}
-	task, err := taskdata.BuildTaskMap(ctx, record)
+	task, err := buildTaskMap(ctx, record)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +116,6 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 		_, _ = c.TaskExecute(ctx, &v1.TaskExecuteReq{
 			ID:          gconv.String(taskID),
 			ClientIP:    clientIP,
-			MachineID:   machineID,
 			NodeID:      nodeID,
 			TriggerType: "task_create",
 			Params:      req.Params,

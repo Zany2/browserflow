@@ -332,7 +332,7 @@ function reloadFirstRecordPage() {
 }
 
 function getRecordSelectionKey(row) {
-  // Selection key 浣跨敤鎵ц璁板綍 ID 淇濇寔璺ㄥ垎椤靛閫夌姸鎬?
+  // Selection key 使用执行记录 ID 保持跨分页多选状态
   return String(row?.id || '').trim()
 }
 
@@ -362,7 +362,7 @@ async function handleRetryRecord(row) {
     node_id: row.node_id || '',
     params: row.params || {},
   })
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '浠诲姟宸查噸鏂颁笅鍙? })
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '任务已重新下发' })
   await loadRecords()
 }
 
@@ -371,16 +371,16 @@ async function handleBatchDeleteRecords() {
   if (ids.length === 0) return
 
   const confirmed = await appConfirm({
-    title: '鎵归噺鍒犻櫎鎵ц璁板綍',
-    message: `纭鍒犻櫎閫変腑鐨?${ids.length} 鏉℃墽琛岃褰曞悧锛焋,
+    title: '批量删除执行记录',
+    message: `确认删除选中的 ${ids.length} 条执行记录吗？`,
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '鍒犻櫎',
+    confirmText: '删除',
   })
   if (!confirmed) return
 
   await deleteTaskRecords(ids)
   resetRecordSelection(recordTableRef)
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '宸插垹闄ら€変腑鎵ц璁板綍' })
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '已删除选中执行记录' })
   await loadRecords()
 }
 
@@ -389,15 +389,15 @@ async function handleDeleteRecord(row) {
   if (id <= 0) return
 
   const confirmed = await appConfirm({
-    title: '鍒犻櫎鎵ц璁板綍',
-    message: '纭鍒犻櫎杩欐潯鎵ц璁板綍鍚楋紵',
+    title: '删除执行记录',
+    message: '确认删除这条执行记录吗？',
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '鍒犻櫎',
+    confirmText: '删除',
   })
   if (!confirmed) return
 
   await deleteTaskRecords([id])
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '鎵ц璁板綍宸插垹闄? })
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '执行记录已删除' })
   await loadRecords()
 }
 
@@ -421,7 +421,10 @@ function getClientIp(row) {
 }
 
 function getRecordNodeText(row) {
-  return [row?.node_name || row?.nodeName, row?.node_id || row?.nodeId].filter(Boolean).join(' / ')
+  const nodeName = String(row?.node_name || row?.nodeName || '').trim()
+  const nodeId = String(row?.node_id || row?.nodeId || '').trim()
+  if (nodeName && nodeName !== nodeId) return `${nodeName} / ${nodeId}`
+  return nodeId || nodeName
 }
 
 function getRecordStatusTag(status) {
@@ -433,21 +436,21 @@ function getRecordStatusTag(status) {
 }
 
 function getStatusText(status) {
-  if (status === 'pending') return '寰呮墽琛?
-  if (status === 'queued') return '宸蹭笅鍙?
-  if (status === 'running') return '鎵ц涓?
-  if (status === 'success' || status === 'done') return '鎴愬姛'
-  if (status === 'failed' || status === 'error') return '澶辫触'
-  if (status === 'cancelled') return '宸插彇娑?
+  if (status === 'pending') return '待执行'
+  if (status === 'queued') return '已下发'
+  if (status === 'running') return '执行中'
+  if (status === 'success' || status === 'done') return '成功'
+  if (status === 'failed' || status === 'error') return '失败'
+  if (status === 'cancelled') return '已取消'
   return status || ''
 }
 
 function getTriggerText(triggerType) {
-  if (triggerType === 'cron') return '瀹氭椂'
-  if (triggerType === 'task_create') return '鍒涘缓鍗虫墽琛?
-  if (triggerType === 'skill') return 'Skill瑙﹀彂'
-  if (triggerType === 'system') return '绯荤粺'
-  return '鎵嬪姩'
+  if (triggerType === 'cron') return '定时'
+  if (triggerType === 'task_create') return '创建即执行'
+  if (triggerType === 'skill') return 'Skill触发'
+  if (triggerType === 'system') return '系统'
+  return '手动'
 }
 
 function formatDuration(value) {

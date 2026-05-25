@@ -688,7 +688,7 @@ export function createAgentSocket({
 
     if (stopped) return
 
-    socket = new WebSocket(wsUrl || getWSURL())
+    socket = new WebSocket(wsUrl || getWSURL(nodeIdentity))
 
     socket.addEventListener('open', async () => {
       reconnectCount = 0
@@ -992,16 +992,25 @@ function getOSInfo(userAgent) {
   return { name: 'Unknown', version: '' }
 }
 
-export function getWSURL() {
+export function getWSURL(identity = {}) {
+  const query = new URLSearchParams()
+  if (identity.node_id) query.set('node_id', identity.node_id)
+  const queryString = query.toString()
+
   if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL
+    return appendQuery(import.meta.env.VITE_WS_URL, queryString)
   }
 
   const baseURL = API_BASE_URL.replace(/\/$/, '')
   if (baseURL.startsWith('http')) {
-    return `${baseURL.replace(/^http/, 'ws')}/ws`
+    return appendQuery(`${baseURL.replace(/^http/, 'ws')}/ws`, queryString)
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}${baseURL}/ws`
+  return appendQuery(`${protocol}//${window.location.host}${baseURL}/ws`, queryString)
+}
+
+function appendQuery(url, queryString) {
+  if (!queryString) return url
+  return `${url}${url.includes('?') ? '&' : '?'}${queryString}`
 }

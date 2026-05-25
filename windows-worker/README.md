@@ -13,7 +13,9 @@ BrowserFlow Windows Worker 是一个 Windows 桌面执行器原型，用来让�
 - 支持配置 BrowserFlow 服务端地址和执行节点数。
 - 为每个执行节点创建独立 Chrome profile 目录。
 - 每个节点启动一个独立 Chrome 窗口。
-- 支持加载本地 Automa 扩展目录。
+- 支持设置下载根目录，并为每个执行节点自动分配独立下载子目录。
+- 支持从 zip 安装/更新 Automa，并在界面显示插件安装/更新时间。
+- 兼容新版 Chrome 的 Automa 自动加载逻辑。
 - 使用前端 `favicon.ico` 作为窗口图标和 exe 图标。
 
 ## 目录结构
@@ -52,18 +54,19 @@ windows-worker/
 2. 填写 BrowserFlow 服务端地址，例如公司提供的管理端地址。
 3. 点击“自动检测”检测 Chrome，或点击“浏览...”手动选择 `chrome.exe`。
 4. 设置“执行节点数”。
-5. 点击“保存配置”。
-6. 首次使用时，点击“安装/更新 Automa”，选择 Automa zip 安装包。
-7. 点击“启动执行节点”。
-8. 需要停止已启动的 Chrome 节点时，点击“关闭所有执行节点”。
-9. 如果启动过执行节点后点击窗口右上角 `X`，程序会询问是否同时关闭所有执行节点。
+5. 设置“下载目录”，可以手动填写，也可以点击旁边的“浏览...”选择目录。
+6. 点击“保存配置”。
+7. 首次使用时，点击“安装/更新 Automa”，选择 Automa zip 安装包。
+8. 点击“启动执行节点”。
+9. 需要停止已启动的 Chrome 节点时，点击“关闭所有执行节点”。
+10. 如果启动过执行节点后点击窗口右上角 `X`，程序会询问是否同时关闭所有执行节点。
 
 启动后，每个执行节点会使用独立 profile 打开一个 Chrome 窗口，并访问客户端入口。
 
 当前生成的访问地址格式为：
 
 ```text
-{server_url}/?machine_id=...&machine_name=...&node_id=...#/client-agent
+{server_url}/#/client-agent?node_id=node-1
 ```
 
 ## 配置文件
@@ -87,7 +90,11 @@ C:\Users\用户名\AppData\Local\BrowserFlowWorker
 ```text
 %LOCALAPPDATA%\BrowserFlowWorker\
   config.json
-  worker.log
+  logs\
+    worker.log
+  downloads\
+    node-1\
+    node-2\
   data\
     profiles\
       node-1\
@@ -106,6 +113,7 @@ C:\Users\用户名\AppData\Local\BrowserFlowWorker
   "machine_id": "bfw-xxxxxx",
   "machine_name": "OFFICE-PC",
   "data_dir": "C:\\Users\\用户名\\AppData\\Local\\BrowserFlowWorker\\data",
+  "download_dir": "C:\\Users\\用户名\\AppData\\Local\\BrowserFlowWorker\\downloads",
   "automa_extension_dir": "C:\\Users\\用户名\\AppData\\Local\\BrowserFlowWorker\\extensions\\automa",
   "require_automa_folder": false
 }
@@ -119,8 +127,52 @@ C:\Users\用户名\AppData\Local\BrowserFlowWorker
 - `machine_id`: 当前 Windows 电脑的稳定 ID。
 - `machine_name`: 当前 Windows 电脑显示名称。
 - `data_dir`: profile 和本地数据目录。
+- `download_dir`: 执行节点下载根目录，程序会按节点分为 `node-1`、`node-2` 等子目录。
 - `automa_extension_dir`: Automa 扩展目录。
 - `require_automa_folder`: 是否要求 Automa 扩展目录必须存在。
+
+## 下载目录
+
+界面中的“下载目录”是所有执行节点的下载根目录。启动节点时，程序会自动写入每个 Chrome profile 的下载设置：
+
+```text
+{download_dir}\node-1
+{download_dir}\node-2
+```
+
+例如下载目录为：
+
+```text
+D:\BrowserFlowDownloads
+```
+
+则节点下载位置为：
+
+```text
+D:\BrowserFlowDownloads\node-1
+D:\BrowserFlowDownloads\node-2
+```
+
+这样多个节点同时导出文件时不会混在同一个目录里。
+
+如果不填写下载目录，默认使用：
+
+```text
+%LOCALAPPDATA%\BrowserFlowWorker\downloads
+```
+
+注意：下载设置是在启动执行节点前写入对应 Chrome profile 的。如果某个节点 Chrome 已经打开，需要关闭该节点后重新启动，新的下载目录才会生效。
+
+## 启动性能
+
+启动执行节点时会同时做几件事：创建或检查独立 profile、写入下载设置、加载 Automa 扩展、打开 Chrome 并进入客户端页面。因此第一次启动或一次启动多个节点时，Chrome 有几秒钟卡顿是正常现象。
+
+建议：
+
+- 普通办公电脑先从 1 到 2 个节点开始测试。
+- 确认可用后再逐步增加到 3 到 4 个节点。
+- 节点数越多，占用的内存、CPU 和磁盘 IO 越高。
+- Chrome for Testing 第一次加载 Automa 扩展时通常会比后续启动更慢一点。
 
 ## Automa 扩展
 
@@ -136,12 +188,26 @@ automa-chrome-v1.30.00.zip
 %LOCALAPPDATA%\BrowserFlowWorker\extensions\automa
 ```
 
-启动 Chrome 时，程序会自动添加：
+界面底部会显示 Automa 插件状态：
+
+```text
+未安装（点击“安装/更新 Automa”选择 zip 安装包）
+```
+
+或：
+
+```text
+已安装，更新时间：2026-05-25 11:17:09
+```
+
+启动 Chrome 时，程序会优先使用 Chrome 启动参数加载扩展：
 
 ```text
 --load-extension=extensions/automa
 --disable-extensions-except=extensions/automa
 ```
+
+新版 Chrome 对命令行加载扩展有额外限制，因此程序还会通过 Chrome DevTools Protocol 调用 `Extensions.loadUnpacked` 再加载一次解压后的 Automa 目录，然后跳转到客户端入口页面。
 
 如果 `extensions/automa` 不存在，默认不会阻止启动。需要强制要求扩展存在时，把配置改为：
 
@@ -150,6 +216,49 @@ automa-chrome-v1.30.00.zip
 ```
 
 后续升级 Automa 时，再次点击“安装/更新 Automa”，选择新的 zip 安装包即可。
+
+## Chrome 版本要求
+
+Automa 当前安装包的 `manifest.json` 中声明了：
+
+```json
+"minimum_chrome_version": "116"
+```
+
+因此 BrowserFlowWorker 建议使用：
+
+- 最低版本：Chrome 116 及以上。
+- 首选推荐：Chrome for Testing 136.0.7103.94 Windows 64 位。
+- 备用推荐：普通 Chrome 136.0.7103.114 及以下。
+- Chrome 136 及以下：通常可以直接通过 `--load-extension` 加载 Automa。
+- Chrome 137 及以上：普通 Google Chrome 对 `--load-extension` 做了限制，BrowserFlowWorker 会尝试使用 Chrome DevTools Protocol 的 `Extensions.loadUnpacked` 进行兼容加载，但普通正式版 Chrome 不保证可用。
+
+推荐把 Chrome for Testing 作为 BrowserFlowWorker 的专用执行浏览器，不影响用户日常使用的普通 Chrome。
+
+下载地址：
+
+```text
+https://storage.googleapis.com/chrome-for-testing-public/136.0.7103.94/win64/chrome-win64.zip
+```
+
+使用方式：
+
+1. 下载 `chrome-win64.zip`。
+2. 解压到固定目录，例如：
+
+```text
+C:\BrowserFlow\chrome-win64
+```
+
+3. 在 BrowserFlowWorker 中点击“浏览...”，选择：
+
+```text
+C:\BrowserFlow\chrome-win64\chrome.exe
+```
+
+4. 再点击“启动执行节点”。
+
+如果用户电脑存在企业策略限制，例如禁用调试端口、禁止安装扩展、禁止加载 unpacked extension，自动加载可能会失败。这种场景建议使用 Chrome for Testing、Chromium，或由管理员手动允许/安装 Automa 扩展。
 
 ## 编译准备
 

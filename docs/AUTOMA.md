@@ -585,6 +585,24 @@ workflowStore.insert(
 - Behavior: BrowserFlow import requests now include `silent: true` by default. The Automa bridge still writes the workflow into `browser.storage.local` and returns the `add-workflow` ack, but it skips the `workflow:added` background notification unless the caller explicitly requests dashboard opening.
 - Frontend fit: `importAutomaWorkflow(workflow, { openDashboard = false })` keeps client sync quiet by default while preserving a future opt-in path for interactive imports.
 
+## BrowserFlow client workflow deletion bridge
+
+- File: `third_party/automa/src/content/services/webService.js`
+- Purpose: Server-mode 管理端需要对指定客户端执行节点的 Automa 工作流做维护，支持从管理端删除某个节点上的本地工作流。
+- Behavior: BrowserFlow 页面通过 `__automa-ext__` 发送 `delete-workflow`，Automa bridge 会从 `browser.storage.local.workflows` 删除指定 ID，清理相关触发器、草稿和置顶记录，然后通过 `__automa-ext__delete-workflow` 返回结果。
+- Frontend fit: `frontend/src/services/automaBridge.js` 的 `deleteAutomaWorkflowFromClient(workflowIds)` 发送删除请求并等待回执；`frontend/src/views/client-agent/ClientAgentView.vue` 在收到后端 `automa.workflow.maintain` 命令时执行删除。
+- Safety: 删除动作只影响目标客户端节点的 Automa 本地存储，不删除服务端数据库中的工作流记录。
+
+### 关键源码标记
+
+```js
+// BrowserFlow local change start: delete local workflows from BrowserFlow 管理端删除本地工作流
+webListener.on('delete-workflow', async ({ workflowIds, requestId }) => {
+  // Remove workflows, triggers, drafts and pinned records.
+});
+// BrowserFlow local change end
+```
+
 ## BrowserFlow default Automa profile
 
 - File: `third_party/automa/src/stores/main.js`

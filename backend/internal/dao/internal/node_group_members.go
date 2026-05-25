@@ -23,7 +23,7 @@ type NodeGroupMembersDao struct {
 type NodeGroupMembersColumns struct {
 	Id        string // 自增 ID
 	GroupId   string // 节点分组 ID
-	MachineId string // 机器 ID 快照
+	ClientIp  string // 客户端 IP 快照
 	NodeId    string // 执行节点 ID
 	CreatedAt string // 记录创建时间
 	UpdatedAt string // 记录更新时间
@@ -34,7 +34,7 @@ type NodeGroupMembersColumns struct {
 var nodeGroupMembersColumns = NodeGroupMembersColumns{
 	Id:        "id",
 	GroupId:   "group_id",
-	MachineId: "machine_id",
+	ClientIp:  "client_ip",
 	NodeId:    "node_id",
 	CreatedAt: "created_at",
 	UpdatedAt: "updated_at",

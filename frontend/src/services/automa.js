@@ -1,4 +1,4 @@
-﻿import request from '@/api/request'
+import request from '@/api/request'
 
 import { API_BASE_URL } from '@/api/request'
 
@@ -108,12 +108,13 @@ export function batchDeleteAutomaWorkflows(ids) {
   })
 }
 
-export function syncAutomaWorkflowCache(sourceIp = '', workflows = []) {
+export function syncAutomaWorkflowCache(sourceIp = '', workflows = [], sourceNodeId = '') {
   return request({
     url: '/workflows/sync',
     method: 'POST',
     data: {
       source_ip: sourceIp,
+      source_node_id: normalizeSourceNodeId(sourceIp, sourceNodeId),
       workflows,
     },
     showSuccessMessage: false,
@@ -127,31 +128,52 @@ export function listAutomaSyncCandidates(sourceIp, params = {}) {
       ...params,
       mode: 'client',
       source_ip: sourceIp,
+      source_node_id: normalizeSourceNodeId(sourceIp, params.source_node_id),
     },
     showSuccessMessage: false,
   })
 }
 
 export function listAutomaSyncCandidatesByWorkflow(automaId, params = {}) {
+  const sourceIp = params.source_ip || ''
   return request({
     url: '/workflows/sync-candidates',
     params: {
       ...params,
       mode: 'workflow',
       automa_id: automaId,
+      source_node_id: normalizeSourceNodeId(sourceIp, params.source_node_id),
     },
     showSuccessMessage: false,
   })
 }
 
-export function syncAutomaWorkflowsByIp(sourceIp, workflowIds, workflows = []) {
+export function syncAutomaWorkflowsByIp(sourceIp, workflowIds, workflows = [], sourceNodeId = '') {
   return request({
     url: '/workflows/sync',
     method: 'POST',
     data: {
       source_ip: sourceIp,
+      source_node_id: normalizeSourceNodeId(sourceIp, sourceNodeId),
       workflow_ids: workflowIds,
       workflows,
+    },
+    showSuccessMessage: false,
+  })
+}
+
+export function maintainClientAutomaWorkflows(data = {}) {
+  const sourceIp = data.source_ip || ''
+  const sourceNodeIds = Array.isArray(data.source_node_ids)
+    ? data.source_node_ids.map((nodeId) => normalizeSourceNodeId(sourceIp, nodeId)).filter(Boolean)
+    : []
+  return request({
+    url: '/workflows/client-maintenance',
+    method: 'POST',
+    data: {
+      ...data,
+      source_node_id: normalizeSourceNodeId(sourceIp, data.source_node_id),
+      source_node_ids: sourceNodeIds,
     },
     showSuccessMessage: false,
   })
@@ -255,6 +277,18 @@ function normalizeSource(source) {
   if (source === '' || source === undefined || source === null) return 0
   if (typeof source === 'number') return source
   return AUTOMA_SOURCE[source] || Number(source) || 0
+}
+
+function normalizeSourceNodeId(sourceIp = '', sourceNodeId = '') {
+  sourceIp = String(sourceIp || '').trim()
+  sourceNodeId = String(sourceNodeId || '').trim()
+  if (!sourceIp || !sourceNodeId) return sourceNodeId
+
+  const prefix = `${sourceIp}|`
+  while (sourceNodeId.startsWith(prefix)) {
+    sourceNodeId = sourceNodeId.slice(prefix.length)
+  }
+  return sourceNodeId
 }
 
 function buildWorkflowFormData(workflows) {

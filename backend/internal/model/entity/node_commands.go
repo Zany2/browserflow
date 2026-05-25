@@ -12,8 +12,8 @@ import (
 type NodeCommands struct {
 	Id             int64       `json:"id"              orm:"id"              ` // 自增 ID
 	CommandId      string      `json:"command_id"      orm:"command_id"      ` // 服务端命令唯一 ID，用于客户端回调和幂等处理
+	ClientIp       string      `json:"client_ip"       orm:"client_ip"       ` // 目标客户端 IP
 	NodeId         string      `json:"node_id"         orm:"node_id"         ` // 目标执行节点 ID
-	MachineId      string      `json:"machine_id"      orm:"machine_id"      ` // 目标机器 ID
 	CommandType    string      `json:"command_type"    orm:"command_type"    ` // 命令类型：install_workflow、delete_workflow、sync_inventory、install_package、restart_node、execute_workflow 等
 	Status         string      `json:"status"          orm:"status"          ` // 命令状态：pending、sent、running、success、failed、cancelled、timeout
 	PayloadJson    string      `json:"payload_json"    orm:"payload_json"    ` // 命令参数 JSON

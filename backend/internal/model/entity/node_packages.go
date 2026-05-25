@@ -12,7 +12,7 @@ import (
 type NodePackages struct {
 	Id              int64       `json:"id"               orm:"id"               ` // 自增 ID
 	NodeId          string      `json:"node_id"          orm:"node_id"          ` // 执行节点 ID
-	MachineId       string      `json:"machine_id"       orm:"machine_id"       ` // 机器 ID
+	ClientIp        string      `json:"client_ip"        orm:"client_ip"        ` // 客户端 IP 快照，用于区分同名执行节点
 	PackageId       int64       `json:"package_id"       orm:"package_id"       ` // 关联的 Automa 插件安装包 ID
 	ExpectedVersion string      `json:"expected_version" orm:"expected_version" ` // 服务端期望安装的插件版本
 	ActualVersion   string      `json:"actual_version"   orm:"actual_version"   ` // 节点实际上报的插件版本

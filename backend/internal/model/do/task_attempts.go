@@ -19,7 +19,6 @@ type TaskAttempts struct {
 	AttemptNo    interface{} // 尝试序号，从 1 开始
 	WorkflowId   interface{} // 执行工作流 ID
 	ClientIp     interface{} // 执行客户端 IP 快照
-	MachineId    interface{} // 执行机器 ID
 	NodeId       interface{} // 执行节点 ID
 	ExecutionId  interface{} // 后端本次执行标识
 	CommandId    interface{} // 对应节点命令 ID

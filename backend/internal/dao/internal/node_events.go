@@ -22,7 +22,6 @@ type NodeEventsDao struct {
 // NodeEventsColumns defines and stores column names for the table node_events.
 type NodeEventsColumns struct {
 	Id          string // 自增 ID
-	MachineId   string // 机器 ID
 	NodeId      string // 执行节点 ID
 	ClientIp    string // 客户端 IP 快照
 	EventType   string // 事件类型：register、heartbeat、disconnect、command、workflow_sync、package_install、error 等
@@ -37,7 +36,6 @@ type NodeEventsColumns struct {
 // nodeEventsColumns holds the columns for the table node_events.
 var nodeEventsColumns = NodeEventsColumns{
 	Id:          "id",
-	MachineId:   "machine_id",
 	NodeId:      "node_id",
 	ClientIp:    "client_ip",
 	EventType:   "event_type",

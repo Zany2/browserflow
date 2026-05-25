@@ -14,7 +14,7 @@ type NodePackages struct {
 	g.Meta          `orm:"table:node_packages, do:true"`
 	Id              interface{} // 自增 ID
 	NodeId          interface{} // 执行节点 ID
-	MachineId       interface{} // 机器 ID
+	ClientIp        interface{} // 客户端 IP 快照，用于区分同名执行节点
 	PackageId       interface{} // 关联的 Automa 插件安装包 ID
 	ExpectedVersion interface{} // 服务端期望安装的插件版本
 	ActualVersion   interface{} // 节点实际上报的插件版本

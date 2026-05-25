@@ -14,7 +14,7 @@ type NodeWorkflows struct {
 	g.Meta           `orm:"table:node_workflows, do:true"`
 	Id               interface{} // 自增 ID
 	NodeId           interface{} // 执行节点 ID
-	MachineId        interface{} // 机器 ID
+	ClientIp         interface{} // 客户端 IP 快照，用于区分同名执行节点
 	AutomaId         interface{} // Automa 原始工作流 ID
 	WorkflowId       interface{} // 服务端工作流主表 ID
 	ExpectedRevision interface{} // 服务端期望节点安装的工作流版本

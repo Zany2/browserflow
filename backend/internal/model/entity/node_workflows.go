@@ -12,7 +12,7 @@ import (
 type NodeWorkflows struct {
 	Id               int64       `json:"id"                orm:"id"                ` // 自增 ID
 	NodeId           string      `json:"node_id"           orm:"node_id"           ` // 执行节点 ID
-	MachineId        string      `json:"machine_id"        orm:"machine_id"        ` // 机器 ID
+	ClientIp         string      `json:"client_ip"         orm:"client_ip"         ` // 客户端 IP 快照，用于区分同名执行节点
 	AutomaId         string      `json:"automa_id"         orm:"automa_id"         ` // Automa 原始工作流 ID
 	WorkflowId       int64       `json:"workflow_id"       orm:"workflow_id"       ` // 服务端工作流主表 ID
 	ExpectedRevision int         `json:"expected_revision" orm:"expected_revision" ` // 服务端期望节点安装的工作流版本

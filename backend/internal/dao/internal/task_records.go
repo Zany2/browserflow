@@ -24,10 +24,8 @@ type TaskRecordsColumns struct {
 	Id                string // 自增 ID
 	TaskId            string // 关联的任务配置 ID
 	WorkflowId        string // 执行时使用的 Automa 工作流 ID
-	ClientIp          string // 执行目标客户端 IP，仅用于展示和兼容旧逻辑
-	MachineId         string // 执行目标机器 ID
+	ClientIp          string // 执行客户端 IP
 	NodeId            string // 执行目标节点 ID
-	NodeName          string // 执行目标节点名称快照
 	ExecutionId       string // 后端本次执行标识，用于客户端回调和状态恢复，例如 task-record-{id}
 	AutomaExecutionId string // Automa 客户端侧本次执行实例 ID，例如 stateId 或 historyId
 	CommandId         string // 对应下发给节点的命令 ID
@@ -51,9 +49,7 @@ var taskRecordsColumns = TaskRecordsColumns{
 	TaskId:            "task_id",
 	WorkflowId:        "workflow_id",
 	ClientIp:          "client_ip",
-	MachineId:         "machine_id",
 	NodeId:            "node_id",
-	NodeName:          "node_name",
 	ExecutionId:       "execution_id",
 	AutomaExecutionId: "automa_execution_id",
 	CommandId:         "command_id",

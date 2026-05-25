@@ -14,8 +14,8 @@ type NodeCommands struct {
 	g.Meta         `orm:"table:node_commands, do:true"`
 	Id             interface{} // 自增 ID
 	CommandId      interface{} // 服务端命令唯一 ID，用于客户端回调和幂等处理
+	ClientIp       interface{} // 目标客户端 IP
 	NodeId         interface{} // 目标执行节点 ID
-	MachineId      interface{} // 目标机器 ID
 	CommandType    interface{} // 命令类型：install_workflow、delete_workflow、sync_inventory、install_package、restart_node、execute_workflow 等
 	Status         interface{} // 命令状态：pending、sent、running、success、failed、cancelled、timeout
 	PayloadJson    interface{} // 命令参数 JSON

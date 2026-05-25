@@ -17,8 +17,7 @@ type AutomaWorkflows struct {
 	Name              interface{} // 服务端自定义工作流名称
 	Description       interface{} // 服务端自定义工作流描述
 	Source            interface{} // 来源：1 页面导入，2 客户端同步，3 服务端生成
-	SourceIp          interface{} // 最后同步来源 IP，仅用于展示和兼容旧逻辑
-	SourceMachineId   interface{} // 最后同步来源机器 ID
+	SourceIp          interface{} // 最后同步来源客户端 IP
 	SourceNodeId      interface{} // 最后同步来源执行节点 ID
 	SourceUserAgent   interface{} // 最后同步来源浏览器 User-Agent
 	AutomaVersion     interface{} // 工作流保存时的 Automa 插件版本

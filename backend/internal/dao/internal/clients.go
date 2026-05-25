@@ -22,13 +22,8 @@ type ClientsDao struct {
 // ClientsColumns defines and stores column names for the table clients.
 type ClientsColumns struct {
 	Id                  string // 主键 ID，自增
-	ClientId            string // 旧版浏览器客户端标识，保留用于兼容
-	ClientName          string // 客户端显示名称，保留用于兼容
-	ClientIp            string // 客户端当前或最后一次连接 IP，仅用于展示和兼容旧逻辑
-	MachineId           string // 所属物理机器 ID
-	MachineName         string // 所属物理机器名称快照
-	NodeId              string // 执行节点稳定 ID，同一台机器可存在多个独立浏览器节点
-	NodeName            string // 执行节点显示名称，例如 node-1、node-2
+	ClientIp            string // 客户端 IP
+	NodeId              string // 执行节点 ID，同一 IP 下唯一，例如 node-1、node-2
 	NodeIndex           string // Worker 本机节点序号
 	WorkerVersion       string // BrowserFlow Worker 客户端版本
 	ProfileDir          string // 执行节点使用的 Chrome 用户数据目录
@@ -58,18 +53,14 @@ type ClientsColumns struct {
 	CreatedAt           string // 记录创建时间
 	UpdatedAt           string // 记录更新时间
 	DeletedAt           string // 软删除时间
+	DisplayName         string // 客户端自定义显示名称
 }
 
 // clientsColumns holds the columns for the table clients.
 var clientsColumns = ClientsColumns{
 	Id:                  "id",
-	ClientId:            "client_id",
-	ClientName:          "client_name",
 	ClientIp:            "client_ip",
-	MachineId:           "machine_id",
-	MachineName:         "machine_name",
 	NodeId:              "node_id",
-	NodeName:            "node_name",
 	NodeIndex:           "node_index",
 	WorkerVersion:       "worker_version",
 	ProfileDir:          "profile_dir",
@@ -99,6 +90,7 @@ var clientsColumns = ClientsColumns{
 	CreatedAt:           "created_at",
 	UpdatedAt:           "updated_at",
 	DeletedAt:           "deleted_at",
+	DisplayName:         "display_name",
 }
 
 // NewClientsDao creates and returns a new DAO object for table data access.

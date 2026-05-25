@@ -39,7 +39,7 @@ func (c *ControllerV1) WorkflowDetail(ctx context.Context, req *v1.WorkflowDetai
 			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "工作流不存在")
 			return nil, nil
 		}
-		record = &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
+		record = &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceNodeID: item.SourceNodeId, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
 		if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {
 			record.FirstSyncedAt = item.FirstSyncedAt.Time
 		}
@@ -114,6 +114,7 @@ func (c *ControllerV1) WorkflowDetail(ctx context.Context, req *v1.WorkflowDetai
 	}
 	res.Source = source
 	res.SourceIp = record.SourceIP
+	res.SourceNodeId = record.SourceNodeID
 	res.SourceUserAgent = record.SourceUserAgent
 	res.AutomaVersion = record.AutomaVersion
 	res.ExtVersion = record.ExtVersion

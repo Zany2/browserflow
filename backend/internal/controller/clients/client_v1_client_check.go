@@ -5,20 +5,23 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
+	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/utility/clientops"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
-// ClientCheck checks whether client can connect 检查客户端是否允许连接
+// ClientCheck checks whether a client can connect. 检查客户端是否允许连接
 func (c *ControllerV1) ClientCheck(ctx context.Context, req *v1.ClientCheckReq) (res *v1.ClientCheckRes, err error) {
-	// Resolve request ip 解析请求 IP
 	clientIP := clientops.RequestIP(ctx)
 	if clientIP == "" {
 		return &v1.ClientCheckRes{Allowed: true}, nil
 	}
 
-	// Query ban record 查询拉黑记录
-	record, err := clientops.QueryBannedRecord(ctx, clientIP)
+	columns := dao.Clients.Columns()
+	record, err := dao.Clients.Ctx(ctx).
+		Where(columns.ClientIp, clientIP).
+		Where(columns.IsBanned, true).
+		One()
 	if err != nil {
 		return nil, err
 	}
@@ -26,9 +29,8 @@ func (c *ControllerV1) ClientCheck(ctx context.Context, req *v1.ClientCheckReq) 
 		return &v1.ClientCheckRes{Allowed: true}, nil
 	}
 
-	// Return banned result 返回拉黑状态
-	reason := strings.TrimSpace(gconv.String(record["ban_reason"]))
-	client, err := clientops.RecordToEntity(record)
+	reason := strings.TrimSpace(gconv.String(record[columns.BanReason]))
+	client, err := clientRecordToEntity(record)
 	if err != nil {
 		return nil, err
 	}

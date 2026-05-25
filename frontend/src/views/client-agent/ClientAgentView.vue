@@ -13,7 +13,7 @@
             同步工作流
           </el-button>
           <el-button :disabled="status !== 'online'" @click="disconnectSocket">断开连接</el-button>
-          <el-button type="success" :disabled="status === 'online'" @click="reconnectSocket">
+          <el-button type="success" :disabled="status === 'online' || missingNodeId" @click="reconnectSocket">
             恢复连接
           </el-button>
         </div>
@@ -114,12 +114,15 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import { createAgentSocket } from '@/services/agentWs'
+import { getRuntimeConfig } from '@/services/app'
 import { checkClient } from '@/services/client'
 import { localCache } from '@/utils/storage'
 import ClientAgentSyncDialog from './components/ClientAgentSyncDialog.vue'
 import {
+  deleteAutomaWorkflowFromClient,
   getAutomaWorkflows,
   getAutomaInfo,
+  importAutomaWorkflow,
   openAutomaWorkflow,
   runAutomaWorkflow,
 } from '@/services/automaBridge'
@@ -152,6 +155,8 @@ const blockedReason = ref('')
 const messageLogs = ref([])
 const syncDialogVisible = ref(false)
 const closeSocketHandler = ref(null)
+const runtimeMode = ref('')
+const missingNodeId = computed(() => runtimeMode.value === 'server' && !nodeId.trim())
 
 const connectionHint = computed(() => {
   if (blockedReason.value) return blockedReason.value
@@ -171,8 +176,14 @@ const roleLabel = computed(() => {
   return role === 'browser_agent' ? 'Browser Agent 兼容模式' : '目前仅做展示使用'
 })
 
-onMounted(() => {
+onMounted(async () => {
   refreshAutomaState()
+  await loadRuntimeMode()
+  if (missingNodeId.value) {
+    status.value = 'offline'
+    blockedReason.value = '服务器模式客户端执行页必须携带 node_id，请从首页点击客户端地址，或使用 BrowserFlowWorker.exe 启动执行节点'
+    return
+  }
   connectSocket()
 })
 
@@ -187,7 +198,21 @@ async function refreshAutomaState() {
   return automaInfo
 }
 
+async function loadRuntimeMode() {
+  try {
+    const config = await getRuntimeConfig()
+    runtimeMode.value = String(config?.mode || '')
+  } catch {
+    runtimeMode.value = ''
+  }
+}
+
 function connectSocket() {
+  if (missingNodeId.value) {
+    status.value = 'offline'
+    blockedReason.value = '服务器模式客户端执行页必须携带 node_id，请从首页点击客户端地址，或使用 BrowserFlowWorker.exe 启动执行节点'
+    return
+  }
   closeSocketHandler.value?.()
   closeSocketHandler.value = createAgentSocket({
     browserId,
@@ -296,6 +321,44 @@ async function handleCommand(command, payload) {
     return { ok: true, workflow_id: workflowId }
   }
 
+  if (command === 'automa.workflow.maintain') {
+    const action = String(payload.action || '').trim()
+    const workflowIds = normalizeWorkflowIds(payload.workflow_ids || payload.workflowIds || [])
+    if (action === 'delete') {
+      const result = await deleteAutomaWorkflowFromClient(workflowIds)
+      const succeeded = Number(result?.succeeded ?? workflowIds.length)
+      const failed = Number(result?.failed ?? 0)
+      return {
+        ok: true,
+        submitted: workflowIds.length,
+        succeeded,
+        failed,
+        workflow_ids: workflowIds,
+        message: failed > 0 ? `删除完成：成功 ${succeeded} 个，失败 ${failed} 个` : '删除完成',
+      }
+    }
+    if (action === 'install' || action === 'update') {
+      const workflows = Array.isArray(payload.workflows) ? payload.workflows : []
+      if (workflows.length === 0) {
+        throw new Error('未收到需要安装的工作流数据')
+      }
+      const installedIds = []
+      for (const workflow of workflows) {
+        const result = await importAutomaWorkflow(workflow)
+        installedIds.push(result?.id || result?.workflow_id || workflow.id || '')
+      }
+      return {
+        ok: true,
+        submitted: workflows.length,
+        succeeded: installedIds.length,
+        failed: 0,
+        workflow_ids: installedIds.filter(Boolean),
+        message: action === 'update' ? '更新完成' : '安装完成',
+      }
+    }
+    throw new Error(`不支持的客户端维护操作: ${action}`)
+  }
+
   if (command === 'automa.workflow.run' || command === 'task.execute' || command === 'task.run') {
     const workflowId = payload.id || payload.workflowId || payload.workflow_id || ''
     const publicId = payload.publicId || payload.public_id || ''
@@ -383,6 +446,11 @@ function updateTaskOverview(payload = {}, statusText = '') {
 
 function isTaskCommand(command) {
   return command === 'automa.workflow.run' || command === 'task.execute' || command === 'task.run'
+}
+
+function normalizeWorkflowIds(value) {
+  const values = Array.isArray(value) ? value : [value]
+  return values.map((item) => String(item || '').trim()).filter(Boolean)
 }
 
 function resolveTaskStatus(result = {}, success = true) {

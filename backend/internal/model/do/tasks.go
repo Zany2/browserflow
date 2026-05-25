@@ -16,11 +16,10 @@ type Tasks struct {
 	Name                  interface{} // 任务名称
 	Description           interface{} // 任务说明
 	AutomaId              interface{} // Automa 原始工作流 ID
-	ClientIp              interface{} // 目标客户端 IP，保留用于兼容旧版按 IP 调度
-	MachineId             interface{} // 目标机器 ID，为空表示不限定机器
+	ClientIp              interface{} // 目标客户端 IP，为空表示由服务端自动选择
 	NodeId                interface{} // 目标执行节点 ID，为空表示由服务端选择可用节点
 	TargetGroupId         interface{} // 目标节点分组 ID，为 0 表示不限定分组
-	DispatchMode          interface{} // 调度模式：auto 自动选择，group 指定分组，machine 指定机器，node 指定节点，ip 兼容旧 IP
+	DispatchMode          interface{} // 调度模式：auto 自动选择，group 指定分组，node 指定节点，ip 指定 IP
 	QueuePolicy           interface{} // 繁忙策略：queue 排队，fail 直接失败，skip 跳过本次
 	ConflictWindowSeconds interface{} // 创建或编辑定时任务时用于冲突提醒的时间窗口秒数
 	MaxAttempts           interface{} // 任务最多尝试次数

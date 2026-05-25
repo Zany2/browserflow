@@ -13,9 +13,8 @@ type TaskQueue struct {
 	Id            int64       `json:"id"              orm:"id"              ` // 自增 ID
 	TaskId        int64       `json:"task_id"         orm:"task_id"         ` // 关联任务配置 ID
 	WorkflowId    string      `json:"workflow_id"     orm:"workflow_id"     ` // 待执行 Automa 工作流 ID
-	DispatchMode  string      `json:"dispatch_mode"   orm:"dispatch_mode"   ` // 调度模式快照：auto、group、machine、node、ip
-	ClientIp      string      `json:"client_ip"       orm:"client_ip"       ` // 目标客户端 IP 快照，仅用于兼容旧逻辑
-	MachineId     string      `json:"machine_id"      orm:"machine_id"      ` // 目标机器 ID
+	DispatchMode  string      `json:"dispatch_mode"   orm:"dispatch_mode"   ` // 调度模式快照：auto、group、node、ip
+	ClientIp      string      `json:"client_ip"       orm:"client_ip"       ` // 目标客户端 IP 快照
 	NodeId        string      `json:"node_id"         orm:"node_id"         ` // 目标节点 ID
 	TargetGroupId int64       `json:"target_group_id" orm:"target_group_id" ` // 目标节点分组 ID
 	TriggerType   string      `json:"trigger_type"    orm:"trigger_type"    ` // 触发类型

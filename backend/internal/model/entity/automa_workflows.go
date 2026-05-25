@@ -15,8 +15,7 @@ type AutomaWorkflows struct {
 	Name              string      `json:"name"               orm:"name"               ` // 服务端自定义工作流名称
 	Description       string      `json:"description"        orm:"description"        ` // 服务端自定义工作流描述
 	Source            int         `json:"source"             orm:"source"             ` // 来源：1 页面导入，2 客户端同步，3 服务端生成
-	SourceIp          string      `json:"source_ip"          orm:"source_ip"          ` // 最后同步来源 IP，仅用于展示和兼容旧逻辑
-	SourceMachineId   string      `json:"source_machine_id"  orm:"source_machine_id"  ` // 最后同步来源机器 ID
+	SourceIp          string      `json:"source_ip"          orm:"source_ip"          ` // 最后同步来源客户端 IP
 	SourceNodeId      string      `json:"source_node_id"     orm:"source_node_id"     ` // 最后同步来源执行节点 ID
 	SourceUserAgent   string      `json:"source_user_agent"  orm:"source_user_agent"  ` // 最后同步来源浏览器 User-Agent
 	AutomaVersion     string      `json:"automa_version"     orm:"automa_version"     ` // 工作流保存时的 Automa 插件版本

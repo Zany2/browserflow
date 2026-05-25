@@ -6,7 +6,6 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
-	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
 )
@@ -24,7 +23,7 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 		gModel = gModel.Where(columns.AutomaId, workflowID)
 	}
 	if workflowName := strings.TrimSpace(req.WorkflowName); workflowName != "" {
-		workflowIDs, workflowErr := taskdata.FindWorkflowIDsByName(ctx, workflowName)
+		workflowIDs, workflowErr := findWorkflowIDsByName(ctx, workflowName)
 		if workflowErr != nil {
 			return nil, workflowErr
 		}
@@ -33,15 +32,12 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 		}
 		gModel = gModel.WhereIn(columns.AutomaId, workflowIDs)
 	}
-	if clientIP, resolveErr := taskdata.ResolveClientIP(ctx, req.ClientID, ""); resolveErr != nil {
+	if clientIP, resolveErr := resolveClientIP(ctx, req.ClientID, ""); resolveErr != nil {
 		return nil, resolveErr
 	} else if clientIP != "" {
 		gModel = gModel.Where(columns.ClientIp, clientIP)
 	} else if clientID := strings.TrimSpace(req.ClientID); clientID != "" {
 		gModel = gModel.Where(columns.ClientIp, clientID)
-	}
-	if machineID := strings.TrimSpace(req.MachineID); machineID != "" {
-		gModel = gModel.Where(columns.MachineId, machineID)
 	}
 	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
 		gModel = gModel.Where(columns.NodeId, nodeID)
@@ -108,7 +104,7 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 
 	list := make([]*v1.TaskListResModel, 0, len(records))
 	for _, record := range records {
-		item, mapErr := taskdata.BuildTaskMap(ctx, record)
+		item, mapErr := buildTaskMap(ctx, record)
 		if mapErr != nil {
 			return nil, mapErr
 		}

@@ -15,10 +15,8 @@ type TaskRecords struct {
 	Id                interface{} // 自增 ID
 	TaskId            interface{} // 关联的任务配置 ID
 	WorkflowId        interface{} // 执行时使用的 Automa 工作流 ID
-	ClientIp          interface{} // 执行目标客户端 IP，仅用于展示和兼容旧逻辑
-	MachineId         interface{} // 执行目标机器 ID
+	ClientIp          interface{} // 执行客户端 IP
 	NodeId            interface{} // 执行目标节点 ID
-	NodeName          interface{} // 执行目标节点名称快照
 	ExecutionId       interface{} // 后端本次执行标识，用于客户端回调和状态恢复，例如 task-record-{id}
 	AutomaExecutionId interface{} // Automa 客户端侧本次执行实例 ID，例如 stateId 或 historyId
 	CommandId         interface{} // 对应下发给节点的命令 ID

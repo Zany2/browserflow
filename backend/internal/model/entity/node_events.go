@@ -11,7 +11,6 @@ import (
 // NodeEvents is the golang structure for table node_events.
 type NodeEvents struct {
 	Id          int64       `json:"id"           orm:"id"           ` // 自增 ID
-	MachineId   string      `json:"machine_id"   orm:"machine_id"   ` // 机器 ID
 	NodeId      string      `json:"node_id"      orm:"node_id"      ` // 执行节点 ID
 	ClientIp    string      `json:"client_ip"    orm:"client_ip"    ` // 客户端 IP 快照
 	EventType   string      `json:"event_type"   orm:"event_type"   ` // 事件类型：register、heartbeat、disconnect、command、workflow_sync、package_install、error 等

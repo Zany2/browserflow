@@ -2,6 +2,7 @@ package websockets
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,8 +43,6 @@ type ClientIdentity struct {
 	ConnectionID string
 	// ClientIP unique client identity 客户端唯一标识
 	ClientIP string
-	// MachineID physical machine id 物理机器标识
-	MachineID string
 	// NodeID execution node id 执行节点标识
 	NodeID string
 	// RequireHeartbeat read timeout guard 是否要求心跳保活
@@ -56,8 +55,6 @@ type ClientSnapshot struct {
 	ConnectionID string `json:"connection_id"`
 	// ClientIP unique client identity 客户端唯一标识
 	ClientIP string `json:"client_ip"`
-	// MachineID physical machine id 物理机器标识
-	MachineID string `json:"machine_id"`
 	// NodeID execution node id 执行节点标识
 	NodeID string `json:"node_id"`
 	// ConnectedAt connected time 建连时间
@@ -294,6 +291,52 @@ func (m *WebSocketManager) addClient(client *Client) (*Client, bool) {
 	return nil, false
 }
 
+// RebindClientConnection moves one live connection to a stable identity 重新绑定在线连接标识
+func (m *WebSocketManager) RebindClientConnection(client *Client, connectionID string) (*Client, string, bool) {
+	if client == nil {
+		return nil, "", false
+	}
+	nextConnectionID := strings.TrimSpace(connectionID)
+	if nextConnectionID == "" || nextConnectionID == client.connectionID {
+		return nil, client.connectionID, false
+	}
+
+	oldConnectionID := client.connectionID
+	oldBucket := m.clientBucket(oldConnectionID)
+	nextBucket := m.clientBucket(nextConnectionID)
+
+	if oldBucket == nextBucket {
+		oldBucket.mu.Lock()
+		defer oldBucket.mu.Unlock()
+		if existing, ok := oldBucket.clients[oldConnectionID]; !ok || existing != client {
+			return nil, oldConnectionID, false
+		}
+		previous := oldBucket.clients[nextConnectionID]
+		delete(oldBucket.clients, oldConnectionID)
+		oldBucket.clients[nextConnectionID] = client
+		client.connectionID = nextConnectionID
+		return previous, oldConnectionID, true
+	}
+
+	firstBucket, secondBucket := oldBucket, nextBucket
+	if m.bucketIndex(oldConnectionID) > m.bucketIndex(nextConnectionID) {
+		firstBucket, secondBucket = nextBucket, oldBucket
+	}
+	firstBucket.mu.Lock()
+	secondBucket.mu.Lock()
+	defer secondBucket.mu.Unlock()
+	defer firstBucket.mu.Unlock()
+
+	if existing, ok := oldBucket.clients[oldConnectionID]; !ok || existing != client {
+		return nil, oldConnectionID, false
+	}
+	previous := nextBucket.clients[nextConnectionID]
+	delete(oldBucket.clients, oldConnectionID)
+	nextBucket.clients[nextConnectionID] = client
+	client.connectionID = nextConnectionID
+	return previous, oldConnectionID, true
+}
+
 // enqueue push message into write queue 推送消息到写队列
 func (m *WebSocketManager) enqueue(client *Client, msg *messageData) {
 	select {
@@ -322,7 +365,6 @@ func (m *WebSocketManager) RegisterClientWithIdentity(ctx context.Context, ident
 		Ctx:              ctx,
 		connectionID:     connectionID,
 		clientIP:         identity.ClientIP,
-		machineID:        identity.MachineID,
 		nodeID:           identity.NodeID,
 		connectedAt:      time.Now(),
 		conn:             conn,
@@ -510,7 +552,6 @@ func buildSnapshot(client *Client) *ClientSnapshot {
 	return &ClientSnapshot{
 		ConnectionID:        client.connectionID,
 		ClientIP:            client.clientIP,
-		MachineID:           client.MachineID(),
 		NodeID:              client.NodeID(),
 		ConnectedAt:         client.connectedAt,
 		LastActiveTime:      client.LastActiveTime(),

@@ -12,7 +12,7 @@ import (
 type NodeGroupMembers struct {
 	Id        int64       `json:"id"         orm:"id"         ` // 自增 ID
 	GroupId   int64       `json:"group_id"   orm:"group_id"   ` // 节点分组 ID
-	MachineId string      `json:"machine_id" orm:"machine_id" ` // 机器 ID 快照
+	ClientIp  string      `json:"client_ip"  orm:"client_ip"  ` // 客户端 IP 快照
 	NodeId    string      `json:"node_id"    orm:"node_id"    ` // 执行节点 ID
 	CreatedAt *gtime.Time `json:"created_at" orm:"created_at" ` // 记录创建时间
 	UpdatedAt *gtime.Time `json:"updated_at" orm:"updated_at" ` // 记录更新时间

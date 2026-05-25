@@ -16,8 +16,7 @@ type TaskRecordFiles struct {
 	RecordId    interface{} // 关联任务执行记录 ID
 	TaskId      interface{} // 关联任务配置 ID
 	WorkflowId  interface{} // 执行时使用的 Automa 工作流 ID
-	ClientIp    interface{} // 执行客户端 IP，仅用于展示和兼容旧逻辑
-	MachineId   interface{} // 执行机器 ID
+	ClientIp    interface{} // 执行客户端 IP
 	NodeId      interface{} // 执行节点 ID
 	ExecutionId interface{} // 后端本次执行标识
 	FileType    interface{} // 文件类型：table_json、table_csv、variables_json、log、screenshot 等

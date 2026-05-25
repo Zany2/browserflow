@@ -11,13 +11,8 @@ import (
 // Clients is the golang structure for table clients.
 type Clients struct {
 	Id                  int64       `json:"id"                     orm:"id"                     ` // 主键 ID，自增
-	ClientId            string      `json:"client_id"              orm:"client_id"              ` // 旧版浏览器客户端标识，保留用于兼容
-	ClientName          string      `json:"client_name"            orm:"client_name"            ` // 客户端显示名称，保留用于兼容
-	ClientIp            string      `json:"client_ip"              orm:"client_ip"              ` // 客户端当前或最后一次连接 IP，仅用于展示和兼容旧逻辑
-	MachineId           string      `json:"machine_id"             orm:"machine_id"             ` // 所属物理机器 ID
-	MachineName         string      `json:"machine_name"           orm:"machine_name"           ` // 所属物理机器名称快照
-	NodeId              string      `json:"node_id"                orm:"node_id"                ` // 执行节点稳定 ID，同一台机器可存在多个独立浏览器节点
-	NodeName            string      `json:"node_name"              orm:"node_name"              ` // 执行节点显示名称，例如 node-1、node-2
+	ClientIp            string      `json:"client_ip"              orm:"client_ip"              ` // 客户端 IP
+	NodeId              string      `json:"node_id"                orm:"node_id"                ` // 执行节点 ID，同一 IP 下唯一，例如 node-1、node-2
 	NodeIndex           int         `json:"node_index"             orm:"node_index"             ` // Worker 本机节点序号
 	WorkerVersion       string      `json:"worker_version"         orm:"worker_version"         ` // BrowserFlow Worker 客户端版本
 	ProfileDir          string      `json:"profile_dir"            orm:"profile_dir"            ` // 执行节点使用的 Chrome 用户数据目录
@@ -47,4 +42,5 @@ type Clients struct {
 	CreatedAt           *gtime.Time `json:"created_at"             orm:"created_at"             ` // 记录创建时间
 	UpdatedAt           *gtime.Time `json:"updated_at"             orm:"updated_at"             ` // 记录更新时间
 	DeletedAt           *gtime.Time `json:"deleted_at"             orm:"deleted_at"             ` // 软删除时间
+	DisplayName         string      `json:"display_name"           orm:"display_name"           ` // 客户端自定义显示名称
 }

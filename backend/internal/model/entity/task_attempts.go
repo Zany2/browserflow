@@ -17,7 +17,6 @@ type TaskAttempts struct {
 	AttemptNo    int         `json:"attempt_no"    orm:"attempt_no"    ` // 尝试序号，从 1 开始
 	WorkflowId   string      `json:"workflow_id"   orm:"workflow_id"   ` // 执行工作流 ID
 	ClientIp     string      `json:"client_ip"     orm:"client_ip"     ` // 执行客户端 IP 快照
-	MachineId    string      `json:"machine_id"    orm:"machine_id"    ` // 执行机器 ID
 	NodeId       string      `json:"node_id"       orm:"node_id"       ` // 执行节点 ID
 	ExecutionId  string      `json:"execution_id"  orm:"execution_id"  ` // 后端本次执行标识
 	CommandId    string      `json:"command_id"    orm:"command_id"    ` // 对应节点命令 ID

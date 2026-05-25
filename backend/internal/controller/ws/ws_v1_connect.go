@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/ws/v1"
 	"github.com/Zany2/browserflow/backend/internal/consts"
@@ -31,11 +32,18 @@ func (c *ControllerV1) Connect(ctx context.Context, req *v1.ConnectReq) (res *v1
 		// Desktop connections need unique ids because one machine opens multiple sockets. 桌面端同一机器会建立多条连接
 		identity = websockets.BuildConnectionIdentity("conn_"+guid.S(), clientIP, false)
 	} else {
-		machineID := request.Get("machine_id").String()
-		nodeID := request.Get("node_id").String()
-		if nodeID != "" {
-			identity = websockets.BuildNodeIdentity(clientIP, machineID, nodeID)
+		nodeID := strings.TrimSpace(request.Get("node_id").String())
+		if nodeID == "" {
+			_ = conn.WriteJSON(g.Map{
+				"type":    "agent_rejected",
+				"success": false,
+				"error":   "server 模式客户端连接必须携带 node_id",
+			})
+			_ = conn.Close()
+			request.ExitAll()
+			return nil, nil
 		}
+		identity = websockets.BuildNodeIdentity(clientIP, nodeID)
 	}
 	websockets.WsManage.RegisterClientWithIdentity(context.WithoutCancel(ctx), identity, conn)
 	request.ExitAll()

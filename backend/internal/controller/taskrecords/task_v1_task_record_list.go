@@ -6,7 +6,6 @@ import (
 
 	"github.com/Zany2/browserflow/backend/api/taskrecords/v1"
 	"github.com/Zany2/browserflow/backend/internal/dao"
-	"github.com/Zany2/browserflow/backend/utility/taskdata"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
@@ -19,7 +18,7 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 		gModel = gModel.Where(columns.TaskId, gconv.Int64(taskID))
 	}
 	if taskName := strings.TrimSpace(req.TaskName); taskName != "" {
-		taskIDs, taskErr := taskdata.FindTaskIDsByName(ctx, taskName)
+		taskIDs, taskErr := findTaskIDsByName(ctx, taskName)
 		if taskErr != nil {
 			return nil, taskErr
 		}
@@ -32,7 +31,7 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 		gModel = gModel.Where(columns.WorkflowId, workflowID)
 	}
 	if workflowName := strings.TrimSpace(req.WorkflowName); workflowName != "" {
-		workflowIDs, workflowErr := taskdata.FindWorkflowIDsByName(ctx, workflowName)
+		workflowIDs, workflowErr := findWorkflowIDsByName(ctx, workflowName)
 		if workflowErr != nil {
 			return nil, workflowErr
 		}
@@ -41,15 +40,12 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 		}
 		gModel = gModel.WhereIn(columns.WorkflowId, workflowIDs)
 	}
-	if clientIP, resolveErr := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP); resolveErr != nil {
+	if clientIP, resolveErr := resolveClientIP(ctx, req.ClientID, req.ClientIP); resolveErr != nil {
 		return nil, resolveErr
 	} else if clientIP != "" {
 		gModel = gModel.Where(columns.ClientIp, clientIP)
 	} else if clientID := strings.TrimSpace(req.ClientID); clientID != "" {
 		gModel = gModel.Where(columns.ClientIp, clientID)
-	}
-	if machineID := strings.TrimSpace(req.MachineID); machineID != "" {
-		gModel = gModel.Where(columns.MachineId, machineID)
 	}
 	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
 		gModel = gModel.Where(columns.NodeId, nodeID)
@@ -93,7 +89,7 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 
 	list := make([]*v1.TaskRecordListResModel, 0, len(records))
 	for _, record := range records {
-		item, mapErr := taskdata.BuildTaskRecordMap(ctx, record)
+		item, mapErr := buildTaskRecordMap(ctx, record)
 		if mapErr != nil {
 			return nil, mapErr
 		}

@@ -9,10 +9,9 @@ import (
 	"github.com/gogf/gf/v2/os/gtime"
 )
 
-// ClientOffline forces one client offline 强制单个客户端下线
+// ClientOffline forces one client node offline. 强制单个客户端节点下线
 func (c *ControllerV1) ClientOffline(ctx context.Context, req *v1.ClientOfflineReq) (res *v1.ClientOfflineRes, err error) {
-	// Query target client 查询目标客户端
-	record, err := clientops.QueryRecord(ctx, req.ID)
+	record, err := queryClientRecord(ctx, req.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -20,9 +19,10 @@ func (c *ControllerV1) ClientOffline(ctx context.Context, req *v1.ClientOfflineR
 		return &v1.ClientOfflineRes{Message: "客户端不存在或未注册"}, nil
 	}
 
-	// Close websocket and mark offline 关闭 WebSocket 并标记离线
-	closed := clientops.CloseConnection(ctx, clientops.TargetConnectionID(record))
-	_, err = clientops.ScopedModel(ctx, record).
+	clientIP := clientIPFromRecord(record)
+	nodeID := clientNodeIDFromRecord(record)
+	closed := clientops.CloseConnection(ctx, clientIP, nodeID)
+	_, err = scopedClientModel(ctx, record).
 		Data(do.Clients{
 			Status:         "offline",
 			DisconnectedAt: gtime.Now(),
@@ -36,7 +36,7 @@ func (c *ControllerV1) ClientOffline(ctx context.Context, req *v1.ClientOfflineR
 	if closed > 0 {
 		message = "客户端连接已断开，将由客户端自动重连"
 	}
-	client, err := clientops.RecordToEntity(record)
+	client, err := clientRecordToEntity(record)
 	if err != nil {
 		return nil, err
 	}

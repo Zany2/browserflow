@@ -34,7 +34,7 @@ localStorage:
 
 # 前端访问地址
 frontend:
-  url: "http://192.168.0.103"
+  url: "http://localhost:5173"
 
 # 数据库配置
 database:

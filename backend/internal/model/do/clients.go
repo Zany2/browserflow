@@ -13,13 +13,8 @@ import (
 type Clients struct {
 	g.Meta              `orm:"table:clients, do:true"`
 	Id                  interface{} // 主键 ID，自增
-	ClientId            interface{} // 旧版浏览器客户端标识，保留用于兼容
-	ClientName          interface{} // 客户端显示名称，保留用于兼容
-	ClientIp            interface{} // 客户端当前或最后一次连接 IP，仅用于展示和兼容旧逻辑
-	MachineId           interface{} // 所属物理机器 ID
-	MachineName         interface{} // 所属物理机器名称快照
-	NodeId              interface{} // 执行节点稳定 ID，同一台机器可存在多个独立浏览器节点
-	NodeName            interface{} // 执行节点显示名称，例如 node-1、node-2
+	ClientIp            interface{} // 客户端 IP
+	NodeId              interface{} // 执行节点 ID，同一 IP 下唯一，例如 node-1、node-2
 	NodeIndex           interface{} // Worker 本机节点序号
 	WorkerVersion       interface{} // BrowserFlow Worker 客户端版本
 	ProfileDir          interface{} // 执行节点使用的 Chrome 用户数据目录
@@ -49,4 +44,5 @@ type Clients struct {
 	CreatedAt           *gtime.Time // 记录创建时间
 	UpdatedAt           *gtime.Time // 记录更新时间
 	DeletedAt           *gtime.Time // 软删除时间
+	DisplayName         interface{} // 客户端自定义显示名称
 }

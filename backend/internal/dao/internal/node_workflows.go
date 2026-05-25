@@ -23,7 +23,7 @@ type NodeWorkflowsDao struct {
 type NodeWorkflowsColumns struct {
 	Id               string // 自增 ID
 	NodeId           string // 执行节点 ID
-	MachineId        string // 机器 ID
+	ClientIp         string // 客户端 IP 快照，用于区分同名执行节点
 	AutomaId         string // Automa 原始工作流 ID
 	WorkflowId       string // 服务端工作流主表 ID
 	ExpectedRevision string // 服务端期望节点安装的工作流版本
@@ -43,7 +43,7 @@ type NodeWorkflowsColumns struct {
 var nodeWorkflowsColumns = NodeWorkflowsColumns{
 	Id:               "id",
 	NodeId:           "node_id",
-	MachineId:        "machine_id",
+	ClientIp:         "client_ip",
 	AutomaId:         "automa_id",
 	WorkflowId:       "workflow_id",
 	ExpectedRevision: "expected_revision",

@@ -24,9 +24,8 @@ type TaskQueueColumns struct {
 	Id            string // 自增 ID
 	TaskId        string // 关联任务配置 ID
 	WorkflowId    string // 待执行 Automa 工作流 ID
-	DispatchMode  string // 调度模式快照：auto、group、machine、node、ip
-	ClientIp      string // 目标客户端 IP 快照，仅用于兼容旧逻辑
-	MachineId     string // 目标机器 ID
+	DispatchMode  string // 调度模式快照：auto、group、node、ip
+	ClientIp      string // 目标客户端 IP 快照
 	NodeId        string // 目标节点 ID
 	TargetGroupId string // 目标节点分组 ID
 	TriggerType   string // 触发类型
@@ -52,7 +51,6 @@ var taskQueueColumns = TaskQueueColumns{
 	WorkflowId:    "workflow_id",
 	DispatchMode:  "dispatch_mode",
 	ClientIp:      "client_ip",
-	MachineId:     "machine_id",
 	NodeId:        "node_id",
 	TargetGroupId: "target_group_id",
 	TriggerType:   "trigger_type",

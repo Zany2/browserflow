@@ -13,7 +13,6 @@ import (
 type NodeEvents struct {
 	g.Meta      `orm:"table:node_events, do:true"`
 	Id          interface{} // 自增 ID
-	MachineId   interface{} // 机器 ID
 	NodeId      interface{} // 执行节点 ID
 	ClientIp    interface{} // 客户端 IP 快照
 	EventType   interface{} // 事件类型：register、heartbeat、disconnect、command、workflow_sync、package_install、error 等

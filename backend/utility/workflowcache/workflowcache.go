@@ -103,7 +103,9 @@ func SaveInventory(ctx context.Context, clientIP string, workflows []g.Map) erro
 func SaveNodeInventory(ctx context.Context, nodeID string, nodeName string, machineID string, clientIP string, workflows []g.Map) error {
 	clientIP = strings.TrimSpace(clientIP)
 	machineID = strings.TrimSpace(machineID)
-	nodeID = normalizeNodeIdentity(nodeID, clientIP)
+	rawNodeID := strings.TrimSpace(nodeID)
+	nodeID = normalizeNodeIdentity(rawNodeID, clientIP)
+	displayNodeID := firstNonEmpty(normalizeNodeID(clientIP, rawNodeID), nodeID)
 	nodeName = strings.TrimSpace(nodeName)
 	if nodeID == "" {
 		return nil
@@ -112,6 +114,7 @@ func SaveNodeInventory(ctx context.Context, nodeID string, nodeName string, mach
 	now := time.Now().UnixMilli()
 	summaryKey := clientWorkflowsKey(nodeID)
 	payloadKey := clientWorkflowPayloadKey(nodeID)
+	workflowIDsKey := clientWorkflowIDsKey(nodeID)
 	nextIDs := make(map[string]struct{}, len(workflows))
 
 	for _, workflow := range workflows {
@@ -123,7 +126,7 @@ func SaveNodeInventory(ctx context.Context, nodeID string, nodeName string, mach
 			continue
 		}
 		item.MachineId = machineID
-		item.NodeId = nodeID
+		item.NodeId = displayNodeID
 		item.NodeName = nodeName
 
 		summaryJSON, err := json.Marshal(item)
@@ -147,11 +150,22 @@ func SaveNodeInventory(ctx context.Context, nodeID string, nodeName string, mach
 	if err := removeMissingWorkflows(ctx, nodeID, summaryKey, payloadKey, nextIDs); err != nil {
 		return err
 	}
+	if _, err := g.Redis().Do(ctx, "DEL", workflowIDsKey); err != nil {
+		return err
+	}
+	for workflowID := range nextIDs {
+		if _, err := g.Redis().Do(ctx, "SADD", workflowIDsKey, workflowID); err != nil {
+			return err
+		}
+	}
+	if len(nextIDs) > 0 {
+		_, _ = g.Redis().Do(ctx, "EXPIRE", workflowIDsKey, int(inventoryTTL.Seconds()))
+	}
 
 	if err := saveOnlineNode(ctx, OnlineNode{
 		ClientIP:   clientIP,
 		MachineID:  machineID,
-		NodeID:     nodeID,
+		NodeID:     displayNodeID,
 		NodeName:   nodeName,
 		LastSeenAt: now,
 	}); err != nil {
@@ -200,6 +214,14 @@ func ClearNode(ctx context.Context, nodeID string) error {
 		return nil
 	}
 
+	if node, ok, nodeErr := GetOnlineNode(ctx, nodeID); nodeErr != nil {
+		return nodeErr
+	} else if ok && strings.TrimSpace(node.ClientIP) != "" {
+		if _, err := g.Redis().Do(ctx, "SREM", clientNodesKey(node.ClientIP), nodeID); err != nil {
+			return err
+		}
+	}
+
 	summaryKey := clientWorkflowsKey(nodeID)
 	result, err := g.Redis().Do(ctx, "HKEYS", summaryKey)
 	if err != nil {
@@ -223,6 +245,7 @@ func ClearNode(ctx context.Context, nodeID string) error {
 		summaryKey,
 		clientWorkflowPayloadKey(nodeID),
 		clientWorkflowInventoryUpdatedKey(nodeID),
+		clientWorkflowIDsKey(nodeID),
 	)
 	return err
 }
@@ -241,6 +264,47 @@ func ListOnlineClients(ctx context.Context) ([]string, error) {
 		}
 	}
 	return clients, nil
+}
+
+// ListClientNodes lists online node identities under one client IP.
+func ListClientNodes(ctx context.Context, clientIP string) ([]string, error) {
+	clientIP = strings.TrimSpace(clientIP)
+	if clientIP == "" {
+		return ListOnlineClients(ctx)
+	}
+
+	result, err := g.Redis().Do(ctx, "SMEMBERS", clientNodesKey(clientIP))
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := make([]string, 0)
+	for _, nodeID := range gconv.Strings(result.Val()) {
+		nodeID = strings.TrimSpace(nodeID)
+		if nodeID != "" && IsClientOnline(ctx, nodeID) {
+			nodes = append(nodes, nodeID)
+		}
+	}
+	if len(nodes) > 0 {
+		sort.Strings(nodes)
+		return nodes, nil
+	}
+
+	onlineNodes, err := ListOnlineClients(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, nodeID := range onlineNodes {
+		node, ok, nodeErr := GetOnlineNode(ctx, nodeID)
+		if nodeErr != nil {
+			return nil, nodeErr
+		}
+		if ok && (node.ClientIP == clientIP || nodeID == clientIP || strings.HasPrefix(nodeID, clientIP+"|")) {
+			nodes = append(nodes, nodeID)
+		}
+	}
+	sort.Strings(nodes)
+	return nodes, nil
 }
 
 // IsClientOnline checks node online status.
@@ -284,6 +348,39 @@ func ListClientWorkflows(ctx context.Context, clientIP string) ([]WorkflowItem, 
 		return items[i].UpdatedAtAutoma > items[j].UpdatedAtAutoma
 	})
 	return items, nil
+}
+
+// ListClientWorkflowIDs lists workflow ids reported by one node.
+func ListClientWorkflowIDs(ctx context.Context, clientIP string) ([]string, error) {
+	clientIP = strings.TrimSpace(clientIP)
+	if clientIP == "" {
+		return []string{}, nil
+	}
+	result, err := g.Redis().Do(ctx, "SMEMBERS", clientWorkflowIDsKey(clientIP))
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0)
+	for _, workflowID := range gconv.Strings(result.Val()) {
+		workflowID = strings.TrimSpace(workflowID)
+		if workflowID != "" {
+			ids = append(ids, workflowID)
+		}
+	}
+	if len(ids) == 0 {
+		keyResult, keyErr := g.Redis().Do(ctx, "HKEYS", clientWorkflowsKey(clientIP))
+		if keyErr != nil {
+			return nil, keyErr
+		}
+		for _, workflowID := range gconv.Strings(keyResult.Val()) {
+			workflowID = strings.TrimSpace(workflowID)
+			if workflowID != "" {
+				ids = append(ids, workflowID)
+			}
+		}
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
 // GetClientWorkflowInventoryUpdatedAt gets inventory update time.
@@ -429,23 +526,60 @@ func saveOnlineNode(ctx context.Context, node OnlineNode) error {
 	if node.NodeID == "" {
 		return nil
 	}
+	identity := normalizeNodeIdentity(node.NodeID, node.ClientIP)
+	node.NodeID = firstNonEmpty(normalizeNodeID(node.ClientIP, node.NodeID), identity)
 	body, err := json.Marshal(node)
 	if err != nil {
 		return err
 	}
-	if _, err = g.Redis().Do(ctx, "SET", clientOnlineKey(node.NodeID), string(body), "EX", int(onlineTTL.Seconds())); err != nil {
+	if _, err = g.Redis().Do(ctx, "SET", clientOnlineKey(identity), string(body), "EX", int(onlineTTL.Seconds())); err != nil {
 		return err
 	}
-	_, err = g.Redis().Do(ctx, "SADD", onlineClientsKey(), node.NodeID)
+	if _, err = g.Redis().Do(ctx, "SADD", onlineClientsKey(), identity); err != nil {
+		return err
+	}
+	if node.ClientIP != "" {
+		if _, err = g.Redis().Do(ctx, "SADD", clientNodesKey(node.ClientIP), identity); err != nil {
+			return err
+		}
+		_, _ = g.Redis().Do(ctx, "EXPIRE", clientNodesKey(node.ClientIP), int(inventoryTTL.Seconds()))
+	}
 	return err
 }
 
 func normalizeNodeIdentity(nodeID string, clientIP string) string {
-	nodeID = strings.TrimSpace(nodeID)
-	if nodeID != "" {
+	clientIP = strings.TrimSpace(clientIP)
+	nodeID = normalizeNodeID(clientIP, nodeID)
+	if clientIP == "" {
 		return nodeID
 	}
-	return strings.TrimSpace(clientIP)
+	if nodeID == "" || nodeID == clientIP {
+		return clientIP
+	}
+	return clientIP + "|" + nodeID
+}
+
+func normalizeNodeID(clientIP string, nodeID string) string {
+	clientIP = strings.TrimSpace(clientIP)
+	nodeID = strings.TrimSpace(nodeID)
+	if clientIP == "" || nodeID == "" {
+		return nodeID
+	}
+
+	prefix := clientIP + "|"
+	for strings.HasPrefix(nodeID, prefix) {
+		nodeID = strings.TrimSpace(strings.TrimPrefix(nodeID, prefix))
+	}
+	return nodeID
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func resolveWorkflowID(workflow g.Map, contentHash string) string {
@@ -536,6 +670,14 @@ func clientWorkflowPayloadKey(clientIP string) string {
 
 func clientWorkflowInventoryUpdatedKey(clientIP string) string {
 	return "browserflow:client:workflow:inventory-updated:" + clientIP
+}
+
+func clientNodesKey(clientIP string) string {
+	return "browserflow:client:nodes:" + clientIP
+}
+
+func clientWorkflowIDsKey(clientIP string) string {
+	return "browserflow:client:workflow-ids:" + clientIP
 }
 
 func workflowClientsKey(automaID string) string {

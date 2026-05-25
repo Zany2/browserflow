@@ -49,7 +49,8 @@ func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	result, err := g.Redis().Do(ctx, "SET", clientLockKey(lockIdentity(info)), string(body), "NX", "EX", int(LeaseTTL.Seconds()))
+	identity := lockIdentity(info)
+	result, err := g.Redis().Do(ctx, "SET", clientLockKey(identity), string(body), "NX", "EX", int(LeaseTTL.Seconds()))
 	if err != nil {
 		return false, nil, err
 	}
@@ -57,7 +58,7 @@ func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
 		return true, &info, nil
 	}
 
-	current, ok, err := Get(ctx, lockIdentity(info))
+	current, ok, err := Get(ctx, identity)
 	if err != nil {
 		return false, nil, err
 	}
@@ -90,7 +91,7 @@ return 0
 
 // RenewNode extends a lease for node identity, falling back to client ip.
 func RenewNode(ctx context.Context, nodeID string, clientIP string, commandID string) (bool, error) {
-	return Renew(ctx, firstNonEmpty(nodeID, clientIP), commandID)
+	return Renew(ctx, nodeLockIdentity(nodeID, clientIP), commandID)
 }
 
 // Release deletes a lease only when the command still owns it.
@@ -113,7 +114,7 @@ return 0
 
 // ReleaseNode deletes a lease for node identity, falling back to client ip.
 func ReleaseNode(ctx context.Context, nodeID string, clientIP string, commandID string) error {
-	return Release(ctx, firstNonEmpty(nodeID, clientIP), commandID)
+	return Release(ctx, nodeLockIdentity(nodeID, clientIP), commandID)
 }
 
 // Get returns the active client lease.
@@ -136,7 +137,7 @@ func Get(ctx context.Context, clientIP string) (LockInfo, bool, error) {
 
 // GetNode returns an active node lease, falling back to client ip.
 func GetNode(ctx context.Context, nodeID string, clientIP string) (LockInfo, bool, error) {
-	return Get(ctx, firstNonEmpty(nodeID, clientIP))
+	return Get(ctx, nodeLockIdentity(nodeID, clientIP))
 }
 
 // List scans active client execution leases.
@@ -199,7 +200,19 @@ func clientLockKey(clientIP string) string {
 }
 
 func lockIdentity(info LockInfo) string {
-	return firstNonEmpty(info.NodeID, info.ClientIP)
+	return nodeLockIdentity(info.NodeID, info.ClientIP)
+}
+
+func nodeLockIdentity(nodeID string, clientIP string) string {
+	clientIP = strings.TrimSpace(clientIP)
+	nodeID = strings.TrimSpace(nodeID)
+	if clientIP == "" {
+		return nodeID
+	}
+	if nodeID == "" || nodeID == clientIP {
+		return clientIP
+	}
+	return clientIP + "|" + nodeID
 }
 
 func firstNonEmpty(values ...string) string {

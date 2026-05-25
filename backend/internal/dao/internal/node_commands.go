@@ -23,8 +23,8 @@ type NodeCommandsDao struct {
 type NodeCommandsColumns struct {
 	Id             string // 自增 ID
 	CommandId      string // 服务端命令唯一 ID，用于客户端回调和幂等处理
+	ClientIp       string // 目标客户端 IP
 	NodeId         string // 目标执行节点 ID
-	MachineId      string // 目标机器 ID
 	CommandType    string // 命令类型：install_workflow、delete_workflow、sync_inventory、install_package、restart_node、execute_workflow 等
 	Status         string // 命令状态：pending、sent、running、success、failed、cancelled、timeout
 	PayloadJson    string // 命令参数 JSON
@@ -44,8 +44,8 @@ type NodeCommandsColumns struct {
 var nodeCommandsColumns = NodeCommandsColumns{
 	Id:             "id",
 	CommandId:      "command_id",
+	ClientIp:       "client_ip",
 	NodeId:         "node_id",
-	MachineId:      "machine_id",
 	CommandType:    "command_type",
 	Status:         "status",
 	PayloadJson:    "payload_json",

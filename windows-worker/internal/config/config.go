@@ -21,6 +21,7 @@ type Config struct {
 	MachineID           string `json:"machine_id"`
 	MachineName         string `json:"machine_name"`
 	DataDir             string `json:"data_dir"`
+	DownloadDir         string `json:"download_dir"`
 	AutomaExtensionDir  string `json:"automa_extension_dir"`
 	RequireAutomaFolder bool   `json:"require_automa_folder"`
 }
@@ -89,6 +90,10 @@ func DefaultAutomaExtensionDir() string {
 	return filepath.Join(DefaultAppDir(), "extensions", "automa")
 }
 
+func DefaultDownloadDir() string {
+	return filepath.Join(DefaultAppDir(), "downloads")
+}
+
 func (c *Config) Validate() error {
 	if c.ServerURL == "" {
 		return errors.New("请先填写服务端地址")
@@ -98,9 +103,6 @@ func (c *Config) Validate() error {
 	}
 	if c.NodeCount > 8 {
 		return errors.New("执行节点数不能超过 8")
-	}
-	if c.MachineID == "" {
-		return errors.New("当前电脑标识不能为空，请重启软件后再试")
 	}
 	return nil
 }
@@ -114,6 +116,7 @@ func (c *Config) normalize() {
 	c.MachineID = strings.TrimSpace(c.MachineID)
 	c.MachineName = strings.TrimSpace(c.MachineName)
 	c.DataDir = strings.TrimSpace(c.DataDir)
+	c.DownloadDir = strings.TrimSpace(c.DownloadDir)
 	c.AutomaExtensionDir = strings.TrimSpace(c.AutomaExtensionDir)
 	if c.NodeCount <= 0 {
 		c.NodeCount = 1
@@ -137,6 +140,7 @@ func defaultConfig() Config {
 		MachineID:           "bfw-" + randomHex(6),
 		MachineName:         hostname,
 		DataDir:             DefaultDataDir(),
+		DownloadDir:         DefaultDownloadDir(),
 		AutomaExtensionDir:  DefaultAutomaExtensionDir(),
 		RequireAutomaFolder: false,
 	}

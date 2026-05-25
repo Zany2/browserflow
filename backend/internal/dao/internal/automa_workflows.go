@@ -26,8 +26,7 @@ type AutomaWorkflowsColumns struct {
 	Name              string // 服务端自定义工作流名称
 	Description       string // 服务端自定义工作流描述
 	Source            string // 来源：1 页面导入，2 客户端同步，3 服务端生成
-	SourceIp          string // 最后同步来源 IP，仅用于展示和兼容旧逻辑
-	SourceMachineId   string // 最后同步来源机器 ID
+	SourceIp          string // 最后同步来源客户端 IP
 	SourceNodeId      string // 最后同步来源执行节点 ID
 	SourceUserAgent   string // 最后同步来源浏览器 User-Agent
 	AutomaVersion     string // 工作流保存时的 Automa 插件版本
@@ -59,7 +58,6 @@ var automaWorkflowsColumns = AutomaWorkflowsColumns{
 	Description:       "description",
 	Source:            "source",
 	SourceIp:          "source_ip",
-	SourceMachineId:   "source_machine_id",
 	SourceNodeId:      "source_node_id",
 	SourceUserAgent:   "source_user_agent",
 	AutomaVersion:     "automa_version",

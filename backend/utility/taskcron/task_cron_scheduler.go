@@ -4,18 +4,11 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Zany2/browserflow/backend/api/tasks/v1"
 	taskcontroller "github.com/Zany2/browserflow/backend/internal/controller/tasks"
-	"github.com/Zany2/browserflow/backend/internal/dao"
-	"github.com/Zany2/browserflow/backend/internal/model/do"
-	"github.com/Zany2/browserflow/backend/utility/cronexpr"
-	"github.com/Zany2/browserflow/backend/utility/tasklock"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcron"
-	"github.com/gogf/gf/v2/os/gtime"
-	"github.com/gogf/gf/v2/util/gconv"
 )
 
 const (
@@ -23,7 +16,6 @@ const (
 	taskCronSyncPattern    = "*/30 * * * * *"
 	taskRecordSweepName    = "task-record-stale-sweep"
 	taskRecordSweepPattern = "0 * * * * *"
-	taskCronSyncBatchSize  = 500
 )
 
 var cronScheduler = struct {
@@ -38,7 +30,7 @@ var cronScheduler = struct {
 func StartCronScheduler(ctx context.Context) {
 	cronScheduler.once.Do(func() {
 		syncCronTasks(ctx)
-		sweepStaleTaskRecords(ctx)
+		taskcontroller.SweepStaleTaskRecords(ctx)
 
 		if _, err := gcron.AddSingleton(ctx, taskCronSyncPattern, func(ctx context.Context) {
 			syncCronTasks(ctx)
@@ -47,7 +39,7 @@ func StartCronScheduler(ctx context.Context) {
 			return
 		}
 		if _, err := gcron.AddSingleton(ctx, taskRecordSweepPattern, func(ctx context.Context) {
-			sweepStaleTaskRecords(ctx)
+			taskcontroller.SweepStaleTaskRecords(ctx)
 		}, taskRecordSweepName); err != nil {
 			g.Log().Line().Errorf(ctx, "start stale task record sweep failed: %+v", err)
 			return
@@ -70,9 +62,8 @@ func StopCronScheduler() {
 	cronScheduler.tasks = make(map[string]string)
 }
 
-// syncCronTasks syncs database cron tasks into gcron.
 func syncCronTasks(ctx context.Context) {
-	nextTasks, err := loadCronTaskMap(ctx)
+	nextTasks, err := taskcontroller.LoadCronTaskMap(ctx)
 	if err != nil {
 		g.Log().Line().Errorf(ctx, "query cron tasks failed: %+v", err)
 		return
@@ -106,44 +97,6 @@ func syncCronTasks(ctx context.Context) {
 	}
 }
 
-func loadCronTaskMap(ctx context.Context) (map[string]string, error) {
-	columns := dao.Tasks.Columns()
-	result := make(map[string]string)
-	lastID := int64(0)
-
-	for {
-		records, err := dao.Tasks.Ctx(ctx).
-			Fields(columns.Id, columns.CronExpression).
-			Where(columns.Enabled, true).
-			Where(columns.CronExpression+" IS NOT NULL").
-			Where(columns.CronExpression+" <> ?", "").
-			WhereGT(columns.Id, lastID).
-			OrderAsc(columns.Id).
-			Limit(taskCronSyncBatchSize).
-			All()
-		if err != nil {
-			return nil, err
-		}
-		if len(records) == 0 {
-			return result, nil
-		}
-
-		for _, record := range records {
-			lastID = gconv.Int64(record[columns.Id])
-			taskID := gconv.String(record[columns.Id])
-			cronExpression := cronexpr.Normalize(gconv.String(record[columns.CronExpression]))
-			if taskID == "" || cronExpression == "" {
-				continue
-			}
-			result[cronTaskName(taskID)] = cronExpression
-		}
-		if len(records) < taskCronSyncBatchSize {
-			return result, nil
-		}
-	}
-}
-
-// executeCronTask executes one due cron task.
 func executeCronTask(ctx context.Context, taskID string) {
 	_, err := (&taskcontroller.ControllerV1{}).TaskExecute(ctx, &v1.TaskExecuteReq{
 		ID:          taskID,
@@ -152,60 +105,4 @@ func executeCronTask(ctx context.Context, taskID string) {
 	if err != nil {
 		g.Log().Line().Warningf(ctx, "execute cron task failed: task_id=%s err=%+v", taskID, err)
 	}
-}
-
-// sweepStaleTaskRecords marks stuck pending/queued/running task records failed.
-func sweepStaleTaskRecords(ctx context.Context) {
-	columns := dao.TaskRecords.Columns()
-	cutoff := gtime.New(time.Now().Add(-tasklock.StaleAfter))
-	records, err := dao.TaskRecords.Ctx(ctx).
-		WhereIn(columns.Status, []string{"pending", "queued", "running"}).
-		Where("COALESCE("+columns.StartedAt+", "+columns.CreatedAt+") < ?", cutoff).
-		Limit(100).
-		All()
-	if err != nil {
-		g.Log().Line().Warningf(ctx, "scan stale task records failed: %+v", err)
-		return
-	}
-
-	for _, record := range records {
-		recordID := gconv.Int64(record[columns.Id])
-		clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
-		nodeID := strings.TrimSpace(gconv.String(record[columns.NodeId]))
-		if recordID <= 0 {
-			continue
-		}
-
-		commandID := "task-record-" + gconv.String(recordID)
-		lockInfo, hasLock, lockErr := tasklock.GetNode(ctx, nodeID, clientIP)
-		if lockErr != nil {
-			g.Log().Line().Warningf(ctx, "read client task lock failed: record_id=%d node_id=%s client_ip=%s err=%+v", recordID, nodeID, clientIP, lockErr)
-			continue
-		}
-		if hasLock && lockInfo.CommandID == commandID {
-			continue
-		}
-
-		_, err = dao.TaskRecords.Ctx(ctx).
-			WherePri(recordID).
-			WhereIn(columns.Status, []string{"pending", "queued", "running"}).
-			Data(do.TaskRecords{
-				Status:       "failed",
-				ErrorMessage: "client task execution timed out and was automatically ended",
-				FinishedAt:   gtime.Now(),
-			}).
-			Update()
-		if err != nil {
-			g.Log().Line().Warningf(ctx, "mark stale task record failed: record_id=%d err=%+v", recordID, err)
-			continue
-		}
-		if err = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID); err != nil {
-			g.Log().Line().Warningf(ctx, "release stale task lock failed: record_id=%d node_id=%s client_ip=%s err=%+v", recordID, nodeID, clientIP, err)
-		}
-	}
-}
-
-// cronTaskName builds cron job name.
-func cronTaskName(taskID string) string {
-	return "task-cron-" + taskID
 }
