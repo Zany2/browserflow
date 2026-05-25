@@ -33,6 +33,9 @@ type TaskQueueColumns struct {
 	Status                    string // 队列状态：pending、reserved、running、success、failed、cancelled、skipped
 	AttemptCount              string // 已尝试次数
 	MaxAttempts               string // 最大尝试次数
+	QueueWaitSeconds          string // 本次排队最大等待时间快照，单位秒
+	QueueRetryIntervalSeconds string // 本次排队重试间隔快照，单位秒
+	QueueDeadlineAt           string // 本次排队等待截止时间
 	ParamsJson                string // 本次排队任务参数快照
 	LastError                 string // 最近一次失败原因
 	ScheduledAt               string // 计划执行时间
@@ -42,9 +45,6 @@ type TaskQueueColumns struct {
 	CreatedAt                 string // 记录创建时间
 	UpdatedAt                 string // 记录更新时间
 	DeletedAt                 string // 软删除时间
-	QueueWaitSeconds          string // 本次排队最大等待时间快照，单位秒
-	QueueRetryIntervalSeconds string // 本次排队重试间隔快照，单位秒
-	QueueDeadlineAt           string // 本次排队等待截止时间
 }
 
 // taskQueueColumns holds the columns for the table task_queue.
@@ -61,6 +61,9 @@ var taskQueueColumns = TaskQueueColumns{
 	Status:                    "status",
 	AttemptCount:              "attempt_count",
 	MaxAttempts:               "max_attempts",
+	QueueWaitSeconds:          "queue_wait_seconds",
+	QueueRetryIntervalSeconds: "queue_retry_interval_seconds",
+	QueueDeadlineAt:           "queue_deadline_at",
 	ParamsJson:                "params_json",
 	LastError:                 "last_error",
 	ScheduledAt:               "scheduled_at",
@@ -70,9 +73,6 @@ var taskQueueColumns = TaskQueueColumns{
 	CreatedAt:                 "created_at",
 	UpdatedAt:                 "updated_at",
 	DeletedAt:                 "deleted_at",
-	QueueWaitSeconds:          "queue_wait_seconds",
-	QueueRetryIntervalSeconds: "queue_retry_interval_seconds",
-	QueueDeadlineAt:           "queue_deadline_at",
 }
 
 // NewTaskQueueDao creates and returns a new DAO object for table data access.

@@ -24,6 +24,9 @@ type TaskQueue struct {
 	Status                    interface{} // 队列状态：pending、reserved、running、success、failed、cancelled、skipped
 	AttemptCount              interface{} // 已尝试次数
 	MaxAttempts               interface{} // 最大尝试次数
+	QueueWaitSeconds          interface{} // 本次排队最大等待时间快照，单位秒
+	QueueRetryIntervalSeconds interface{} // 本次排队重试间隔快照，单位秒
+	QueueDeadlineAt           *gtime.Time // 本次排队等待截止时间
 	ParamsJson                interface{} // 本次排队任务参数快照
 	LastError                 interface{} // 最近一次失败原因
 	ScheduledAt               *gtime.Time // 计划执行时间
@@ -33,7 +36,4 @@ type TaskQueue struct {
 	CreatedAt                 *gtime.Time // 记录创建时间
 	UpdatedAt                 *gtime.Time // 记录更新时间
 	DeletedAt                 *gtime.Time // 软删除时间
-	QueueWaitSeconds          interface{} // 本次排队最大等待时间快照，单位秒
-	QueueRetryIntervalSeconds interface{} // 本次排队重试间隔快照，单位秒
-	QueueDeadlineAt           *gtime.Time // 本次排队等待截止时间
 }

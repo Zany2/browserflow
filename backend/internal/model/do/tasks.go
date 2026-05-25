@@ -24,12 +24,12 @@ type Tasks struct {
 	ConflictWindowSeconds     interface{} // 创建或编辑定时任务时用于冲突提醒的时间窗口秒数
 	MaxAttempts               interface{} // 任务最多尝试次数
 	TimeoutSeconds            interface{} // 任务执行超时时间，单位秒
+	QueueWaitSeconds          interface{} // 等待可用最大等待时间，单位秒，仅 queue_policy=queue 时生效
+	QueueRetryIntervalSeconds interface{} // 等待可用重试间隔，单位秒，仅 queue_policy=queue 时生效
 	CronExpression            interface{} // Cron 表达式，为空表示立即执行
 	ParamsJson                interface{} // 任务自定义参数快照，JSONB 存储
 	Enabled                   interface{} // 是否启用
 	CreatedAt                 *gtime.Time // 创建时间
 	UpdatedAt                 *gtime.Time // 更新时间
 	DeletedAt                 *gtime.Time // 软删除时间
-	QueueWaitSeconds          interface{} // 等待可用最大等待时间，单位秒，仅 queue_policy=queue 时生效
-	QueueRetryIntervalSeconds interface{} // 等待可用重试间隔，单位秒，仅 queue_policy=queue 时生效
 }

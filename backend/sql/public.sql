@@ -12,7 +12,7 @@
  Target Server Version : 160010 (160010)
  File Encoding         : 65001
 
- Date: 25/05/2026 23:11:44
+ Date: 25/05/2026 23:48:39
 */
 
 
@@ -21,6 +21,17 @@
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."automa_packages_id_seq";
 CREATE SEQUENCE "public"."automa_packages_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for automa_packages_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."automa_packages_id_seq1";
+CREATE SEQUENCE "public"."automa_packages_id_seq1" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -39,10 +50,32 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for automa_workflows_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."automa_workflows_id_seq1";
+CREATE SEQUENCE "public"."automa_workflows_id_seq1" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for clients_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."clients_id_seq";
 CREATE SEQUENCE "public"."clients_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for clients_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."clients_id_seq1";
+CREATE SEQUENCE "public"."clients_id_seq1" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -61,10 +94,32 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for node_commands_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."node_commands_id_seq1";
+CREATE SEQUENCE "public"."node_commands_id_seq1" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for node_events_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."node_events_id_seq";
 CREATE SEQUENCE "public"."node_events_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for node_events_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."node_events_id_seq1";
+CREATE SEQUENCE "public"."node_events_id_seq1" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -83,10 +138,32 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for node_group_members_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."node_group_members_id_seq1";
+CREATE SEQUENCE "public"."node_group_members_id_seq1" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for node_groups_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."node_groups_id_seq";
 CREATE SEQUENCE "public"."node_groups_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for node_groups_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."node_groups_id_seq1";
+CREATE SEQUENCE "public"."node_groups_id_seq1" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -105,10 +182,32 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for node_packages_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."node_packages_id_seq1";
+CREATE SEQUENCE "public"."node_packages_id_seq1" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for node_workflows_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."node_workflows_id_seq";
 CREATE SEQUENCE "public"."node_workflows_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for node_workflows_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."node_workflows_id_seq1";
+CREATE SEQUENCE "public"."node_workflows_id_seq1" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -127,10 +226,32 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for task_attempts_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."task_attempts_id_seq1";
+CREATE SEQUENCE "public"."task_attempts_id_seq1" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for task_queue_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."task_queue_id_seq";
 CREATE SEQUENCE "public"."task_queue_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for task_queue_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."task_queue_id_seq1";
+CREATE SEQUENCE "public"."task_queue_id_seq1" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -149,6 +270,17 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for task_record_files_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."task_record_files_id_seq1";
+CREATE SEQUENCE "public"."task_record_files_id_seq1" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for task_records_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."task_records_id_seq";
@@ -160,10 +292,32 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for task_records_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."task_records_id_seq1";
+CREATE SEQUENCE "public"."task_records_id_seq1" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for tasks_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."tasks_id_seq";
 CREATE SEQUENCE "public"."tasks_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for tasks_id_seq1
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."tasks_id_seq1";
+CREATE SEQUENCE "public"."tasks_id_seq1" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -880,9 +1034,23 @@ SELECT setval('"public"."automa_packages_id_seq"', 1, false);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
+ALTER SEQUENCE "public"."automa_packages_id_seq1"
+OWNED BY "public"."automa_packages"."id";
+SELECT setval('"public"."automa_packages_id_seq1"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
 ALTER SEQUENCE "public"."automa_workflows_id_seq"
 OWNED BY "public"."automa_workflows"."id";
 SELECT setval('"public"."automa_workflows_id_seq"', 10, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+ALTER SEQUENCE "public"."automa_workflows_id_seq1"
+OWNED BY "public"."automa_workflows"."id";
+SELECT setval('"public"."automa_workflows_id_seq1"', 1, false);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -894,9 +1062,23 @@ SELECT setval('"public"."clients_id_seq"', 3, true);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
+ALTER SEQUENCE "public"."clients_id_seq1"
+OWNED BY "public"."clients"."id";
+SELECT setval('"public"."clients_id_seq1"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
 ALTER SEQUENCE "public"."node_commands_id_seq"
 OWNED BY "public"."node_commands"."id";
 SELECT setval('"public"."node_commands_id_seq"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+ALTER SEQUENCE "public"."node_commands_id_seq1"
+OWNED BY "public"."node_commands"."id";
+SELECT setval('"public"."node_commands_id_seq1"', 1, false);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -908,9 +1090,23 @@ SELECT setval('"public"."node_events_id_seq"', 1, false);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
+ALTER SEQUENCE "public"."node_events_id_seq1"
+OWNED BY "public"."node_events"."id";
+SELECT setval('"public"."node_events_id_seq1"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
 ALTER SEQUENCE "public"."node_group_members_id_seq"
 OWNED BY "public"."node_group_members"."id";
 SELECT setval('"public"."node_group_members_id_seq"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+ALTER SEQUENCE "public"."node_group_members_id_seq1"
+OWNED BY "public"."node_group_members"."id";
+SELECT setval('"public"."node_group_members_id_seq1"', 1, false);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -922,9 +1118,23 @@ SELECT setval('"public"."node_groups_id_seq"', 1, false);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
+ALTER SEQUENCE "public"."node_groups_id_seq1"
+OWNED BY "public"."node_groups"."id";
+SELECT setval('"public"."node_groups_id_seq1"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
 ALTER SEQUENCE "public"."node_packages_id_seq"
 OWNED BY "public"."node_packages"."id";
 SELECT setval('"public"."node_packages_id_seq"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+ALTER SEQUENCE "public"."node_packages_id_seq1"
+OWNED BY "public"."node_packages"."id";
+SELECT setval('"public"."node_packages_id_seq1"', 1, false);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -936,9 +1146,23 @@ SELECT setval('"public"."node_workflows_id_seq"', 1, false);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
+ALTER SEQUENCE "public"."node_workflows_id_seq1"
+OWNED BY "public"."node_workflows"."id";
+SELECT setval('"public"."node_workflows_id_seq1"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
 ALTER SEQUENCE "public"."task_attempts_id_seq"
 OWNED BY "public"."task_attempts"."id";
 SELECT setval('"public"."task_attempts_id_seq"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+ALTER SEQUENCE "public"."task_attempts_id_seq1"
+OWNED BY "public"."task_attempts"."id";
+SELECT setval('"public"."task_attempts_id_seq1"', 1, false);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -950,9 +1174,23 @@ SELECT setval('"public"."task_queue_id_seq"', 1, false);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
+ALTER SEQUENCE "public"."task_queue_id_seq1"
+OWNED BY "public"."task_queue"."id";
+SELECT setval('"public"."task_queue_id_seq1"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
 ALTER SEQUENCE "public"."task_record_files_id_seq"
 OWNED BY "public"."task_record_files"."id";
 SELECT setval('"public"."task_record_files_id_seq"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+ALTER SEQUENCE "public"."task_record_files_id_seq1"
+OWNED BY "public"."task_record_files"."id";
+SELECT setval('"public"."task_record_files_id_seq1"', 1, false);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -964,9 +1202,23 @@ SELECT setval('"public"."task_records_id_seq"', 1, false);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
+ALTER SEQUENCE "public"."task_records_id_seq1"
+OWNED BY "public"."task_records"."id";
+SELECT setval('"public"."task_records_id_seq1"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
 ALTER SEQUENCE "public"."tasks_id_seq"
 OWNED BY "public"."tasks"."id";
 SELECT setval('"public"."tasks_id_seq"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+ALTER SEQUENCE "public"."tasks_id_seq1"
+OWNED BY "public"."tasks"."id";
+SELECT setval('"public"."tasks_id_seq1"', 1, false);
 
 -- ----------------------------
 -- Indexes structure for table automa_packages

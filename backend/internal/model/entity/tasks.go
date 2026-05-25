@@ -22,12 +22,12 @@ type Tasks struct {
 	ConflictWindowSeconds     int         `json:"conflict_window_seconds"      orm:"conflict_window_seconds"      ` // 创建或编辑定时任务时用于冲突提醒的时间窗口秒数
 	MaxAttempts               int         `json:"max_attempts"                 orm:"max_attempts"                 ` // 任务最多尝试次数
 	TimeoutSeconds            int         `json:"timeout_seconds"              orm:"timeout_seconds"              ` // 任务执行超时时间，单位秒
+	QueueWaitSeconds          int         `json:"queue_wait_seconds"           orm:"queue_wait_seconds"           ` // 等待可用最大等待时间，单位秒，仅 queue_policy=queue 时生效
+	QueueRetryIntervalSeconds int         `json:"queue_retry_interval_seconds" orm:"queue_retry_interval_seconds" ` // 等待可用重试间隔，单位秒，仅 queue_policy=queue 时生效
 	CronExpression            string      `json:"cron_expression"              orm:"cron_expression"              ` // Cron 表达式，为空表示立即执行
 	ParamsJson                string      `json:"params_json"                  orm:"params_json"                  ` // 任务自定义参数快照，JSONB 存储
 	Enabled                   bool        `json:"enabled"                      orm:"enabled"                      ` // 是否启用
 	CreatedAt                 *gtime.Time `json:"created_at"                   orm:"created_at"                   ` // 创建时间
 	UpdatedAt                 *gtime.Time `json:"updated_at"                   orm:"updated_at"                   ` // 更新时间
 	DeletedAt                 *gtime.Time `json:"deleted_at"                   orm:"deleted_at"                   ` // 软删除时间
-	QueueWaitSeconds          int         `json:"queue_wait_seconds"           orm:"queue_wait_seconds"           ` // 等待可用最大等待时间，单位秒，仅 queue_policy=queue 时生效
-	QueueRetryIntervalSeconds int         `json:"queue_retry_interval_seconds" orm:"queue_retry_interval_seconds" ` // 等待可用重试间隔，单位秒，仅 queue_policy=queue 时生效
 }

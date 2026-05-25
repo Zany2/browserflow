@@ -22,6 +22,9 @@ type TaskQueue struct {
 	Status                    string      `json:"status"                       orm:"status"                       ` // 队列状态：pending、reserved、running、success、failed、cancelled、skipped
 	AttemptCount              int         `json:"attempt_count"                orm:"attempt_count"                ` // 已尝试次数
 	MaxAttempts               int         `json:"max_attempts"                 orm:"max_attempts"                 ` // 最大尝试次数
+	QueueWaitSeconds          int         `json:"queue_wait_seconds"           orm:"queue_wait_seconds"           ` // 本次排队最大等待时间快照，单位秒
+	QueueRetryIntervalSeconds int         `json:"queue_retry_interval_seconds" orm:"queue_retry_interval_seconds" ` // 本次排队重试间隔快照，单位秒
+	QueueDeadlineAt           *gtime.Time `json:"queue_deadline_at"            orm:"queue_deadline_at"            ` // 本次排队等待截止时间
 	ParamsJson                string      `json:"params_json"                  orm:"params_json"                  ` // 本次排队任务参数快照
 	LastError                 string      `json:"last_error"                   orm:"last_error"                   ` // 最近一次失败原因
 	ScheduledAt               *gtime.Time `json:"scheduled_at"                 orm:"scheduled_at"                 ` // 计划执行时间
@@ -31,7 +34,4 @@ type TaskQueue struct {
 	CreatedAt                 *gtime.Time `json:"created_at"                   orm:"created_at"                   ` // 记录创建时间
 	UpdatedAt                 *gtime.Time `json:"updated_at"                   orm:"updated_at"                   ` // 记录更新时间
 	DeletedAt                 *gtime.Time `json:"deleted_at"                   orm:"deleted_at"                   ` // 软删除时间
-	QueueWaitSeconds          int         `json:"queue_wait_seconds"           orm:"queue_wait_seconds"           ` // 本次排队最大等待时间快照，单位秒
-	QueueRetryIntervalSeconds int         `json:"queue_retry_interval_seconds" orm:"queue_retry_interval_seconds" ` // 本次排队重试间隔快照，单位秒
-	QueueDeadlineAt           *gtime.Time `json:"queue_deadline_at"            orm:"queue_deadline_at"            ` // 本次排队等待截止时间
 }
