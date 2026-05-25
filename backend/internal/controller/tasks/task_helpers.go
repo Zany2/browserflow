@@ -65,33 +65,34 @@ func buildTaskMap(ctx context.Context, record gdb.Record) (*model.TaskResModel, 
 		if !clientRecord.IsEmpty() {
 			clientID = strings.TrimSpace(gconv.String(clientRecord[clientColumns.Id]))
 			clientName = strings.TrimSpace(gconv.String(clientRecord[clientColumns.ClientIp]))
-			if nodeID == "" {
-				nodeID = strings.TrimSpace(gconv.String(clientRecord[clientColumns.NodeId]))
-			}
 		}
 	}
 
 	return &model.TaskResModel{
-		ID:             gconv.Int64(record[columns.Id]),
-		Name:           strings.TrimSpace(gconv.String(record[columns.Name])),
-		Description:    strings.TrimSpace(gconv.String(record[columns.Description])),
-		AutomaID:       workflowID,
-		WorkflowID:     workflowID,
-		WorkflowName:   workflowName,
-		ClientID:       clientID,
-		ClientName:     clientName,
-		ClientIP:       clientIP,
-		NodeID:         nodeID,
-		NodeName:       nodeID,
-		TargetGroupID:  gconv.Int64(record[columns.TargetGroupId]),
-		DispatchMode:   strings.TrimSpace(gconv.String(record[columns.DispatchMode])),
-		QueuePolicy:    strings.TrimSpace(gconv.String(record[columns.QueuePolicy])),
-		CronExpression: strings.TrimSpace(gconv.String(record[columns.CronExpression])),
-		Params:         params,
-		Enabled:        gconv.Bool(record[columns.Enabled]),
-		CreatedAt:      taskdata.RecordTime(record[columns.CreatedAt]),
-		UpdatedAt:      taskdata.RecordTime(record[columns.UpdatedAt]),
-		DeletedAt:      taskdata.RecordTime(record[columns.DeletedAt]),
+		ID:                        gconv.Int64(record[columns.Id]),
+		Name:                      strings.TrimSpace(gconv.String(record[columns.Name])),
+		Description:               strings.TrimSpace(gconv.String(record[columns.Description])),
+		AutomaID:                  workflowID,
+		WorkflowID:                workflowID,
+		WorkflowName:              workflowName,
+		ClientID:                  clientID,
+		ClientName:                clientName,
+		ClientIP:                  clientIP,
+		NodeID:                    nodeID,
+		NodeName:                  nodeID,
+		TargetGroupID:             gconv.Int64(record[columns.TargetGroupId]),
+		DispatchMode:              strings.TrimSpace(gconv.String(record[columns.DispatchMode])),
+		QueuePolicy:               strings.TrimSpace(gconv.String(record[columns.QueuePolicy])),
+		MaxAttempts:               gconv.Int(record[columns.MaxAttempts]),
+		TimeoutSeconds:            gconv.Int(record[columns.TimeoutSeconds]),
+		QueueWaitSeconds:          gconv.Int(record[columns.QueueWaitSeconds]),
+		QueueRetryIntervalSeconds: gconv.Int(record[columns.QueueRetryIntervalSeconds]),
+		CronExpression:            strings.TrimSpace(gconv.String(record[columns.CronExpression])),
+		Params:                    params,
+		Enabled:                   gconv.Bool(record[columns.Enabled]),
+		CreatedAt:                 taskdata.RecordTime(record[columns.CreatedAt]),
+		UpdatedAt:                 taskdata.RecordTime(record[columns.UpdatedAt]),
+		DeletedAt:                 taskdata.RecordTime(record[columns.DeletedAt]),
 	}, nil
 }
 

@@ -11,28 +11,32 @@ type JSONMap map[string]json.RawMessage
 
 // TaskResModel task response item.
 type TaskResModel struct {
-	ID             int64       `json:"id" dc:"任务ID"`
-	Name           string      `json:"name" dc:"任务名称"`
-	Description    string      `json:"description" dc:"任务描述"`
-	AutomaID       string      `json:"automa_id" dc:"Automa工作流ID"`
-	WorkflowID     string      `json:"workflow_id" dc:"工作流ID"`
-	WorkflowName   string      `json:"workflow_name" dc:"工作流名称"`
-	ClientID       string      `json:"client_id" dc:"客户端ID"`
-	ClientName     string      `json:"client_name" dc:"客户端名称"`
-	ClientIP       string      `json:"client_ip" dc:"客户端IP"`
-	MachineID      string      `json:"machine_id" dc:"机器ID"`
-	NodeID         string      `json:"node_id" dc:"执行节点ID"`
-	NodeName       string      `json:"node_name" dc:"执行节点名称"`
-	TargetGroupID  int64       `json:"target_group_id" dc:"目标节点分组ID"`
-	DispatchMode   string      `json:"dispatch_mode" dc:"调度模式"`
-	QueuePolicy    string      `json:"queue_policy" dc:"繁忙策略"`
-	CronExpression string      `json:"cron_expression" dc:"Cron表达式"`
-	Params         JSONMap     `json:"params" dc:"任务参数"`
-	Enabled        bool        `json:"enabled" dc:"是否启用"`
-	CreatedAt      *gtime.Time `json:"created_at" dc:"创建时间"`
-	LastExecutedAt *gtime.Time `json:"last_executed_at" dc:"最近执行时间"`
-	UpdatedAt      *gtime.Time `json:"updated_at" dc:"更新时间"`
-	DeletedAt      *gtime.Time `json:"deleted_at" dc:"删除时间"`
+	ID                        int64       `json:"id" dc:"任务ID"`
+	Name                      string      `json:"name" dc:"任务名称"`
+	Description               string      `json:"description" dc:"任务描述"`
+	AutomaID                  string      `json:"automa_id" dc:"Automa工作流ID"`
+	WorkflowID                string      `json:"workflow_id" dc:"工作流ID"`
+	WorkflowName              string      `json:"workflow_name" dc:"工作流名称"`
+	ClientID                  string      `json:"client_id" dc:"客户端ID"`
+	ClientName                string      `json:"client_name" dc:"客户端名称"`
+	ClientIP                  string      `json:"client_ip" dc:"客户端IP"`
+	MachineID                 string      `json:"machine_id" dc:"机器ID"`
+	NodeID                    string      `json:"node_id" dc:"执行节点ID"`
+	NodeName                  string      `json:"node_name" dc:"执行节点名称"`
+	TargetGroupID             int64       `json:"target_group_id" dc:"目标节点分组ID"`
+	DispatchMode              string      `json:"dispatch_mode" dc:"调度模式"`
+	QueuePolicy               string      `json:"queue_policy" dc:"繁忙策略"`
+	MaxAttempts               int         `json:"max_attempts" dc:"任务最多尝试次数"`
+	TimeoutSeconds            int         `json:"timeout_seconds" dc:"任务执行超时时间，单位秒"`
+	QueueWaitSeconds          int         `json:"queue_wait_seconds" dc:"等待可用最大等待时间，单位秒"`
+	QueueRetryIntervalSeconds int         `json:"queue_retry_interval_seconds" dc:"等待可用重试间隔，单位秒"`
+	CronExpression            string      `json:"cron_expression" dc:"Cron表达式"`
+	Params                    JSONMap     `json:"params" dc:"任务参数"`
+	Enabled                   bool        `json:"enabled" dc:"是否启用"`
+	CreatedAt                 *gtime.Time `json:"created_at" dc:"创建时间"`
+	LastExecutedAt            *gtime.Time `json:"last_executed_at" dc:"最近执行时间"`
+	UpdatedAt                 *gtime.Time `json:"updated_at" dc:"更新时间"`
+	DeletedAt                 *gtime.Time `json:"deleted_at" dc:"删除时间"`
 }
 
 // TaskRecordResModel task execution record response item.

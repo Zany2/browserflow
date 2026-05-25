@@ -184,7 +184,8 @@
                 class="client-select"
                 clearable
                 filterable
-                placeholder="执行节点（可选，不选则自动匹配节点）"
+                placeholder="执行节点（可选，不选则按客户端自动匹配）"
+                :disabled="!taskForm.client_ip"
                 :loading="clientLoading"
                 @change="handleNodeChange"
                 @clear="handleNodeClear"
@@ -207,16 +208,11 @@
             </div>
 
             <div class="client-selection-summary">
-              <template v-if="hasDispatchTarget">
-                <el-tag effect="plain">IP：{{ taskForm.client_ip || '自动匹配' }}</el-tag>
-                <el-tag effect="plain">节点：{{ taskForm.node_id || '自动匹配' }}</el-tag>
-                <span class="client-selection-text">{{ selectedTargetText }}</span>
-                <span v-if="clientWorkflowStatusText" :class="clientWorkflowStatusClass">
-                  {{ clientWorkflowStatusText }}
-                </span>
-              </template>
-              <span v-else class="client-selection-empty">
-                未选择时，后端会匹配拥有该工作流的在线执行节点
+              <el-tag effect="plain">IP：{{ taskForm.client_ip || '自动匹配' }}</el-tag>
+              <el-tag effect="plain">节点：{{ taskForm.node_id || '自动匹配' }}</el-tag>
+              <span class="client-selection-text">{{ selectedTargetText }}</span>
+              <span v-if="clientWorkflowStatusText" :class="clientWorkflowStatusClass">
+                {{ clientWorkflowStatusText }}
               </span>
             </div>
           </div>
@@ -318,8 +314,55 @@
               <el-radio-button label="fail">直接失败</el-radio-button>
               <el-radio-button label="skip">跳过本次</el-radio-button>
             </el-radio-group>
+            <div class="policy-number-row">
+              <el-form-item label="执行超时" label-width="80px">
+                <el-input-number
+                  v-model="taskForm.timeout_seconds"
+                  :min="30"
+                  :max="86400"
+                  :step="30"
+                  controls-position="right"
+                />
+                <span class="policy-unit">秒</span>
+              </el-form-item>
+              <el-form-item label="最大尝试" label-width="80px">
+                <el-input-number
+                  v-model="taskForm.max_attempts"
+                  :min="1"
+                  :max="20"
+                  :step="1"
+                  controls-position="right"
+                />
+                <span class="policy-unit">次</span>
+              </el-form-item>
+            </div>
+            <div v-if="taskForm.queue_policy === 'queue'" class="policy-number-row">
+              <el-form-item label="最大等待" label-width="80px">
+                <el-input-number
+                  v-model="taskForm.queue_wait_seconds"
+                  :min="10"
+                  :max="86400"
+                  :step="30"
+                  controls-position="right"
+                />
+                <span class="policy-unit">秒</span>
+              </el-form-item>
+              <el-form-item label="重试间隔" label-width="80px">
+                <el-input-number
+                  v-model="taskForm.queue_retry_interval_seconds"
+                  :min="1"
+                  :max="3600"
+                  :step="1"
+                  controls-position="right"
+                />
+                <span class="policy-unit">秒</span>
+              </el-form-item>
+            </div>
             <span class="form-help">
-              所有匹配节点都繁忙时的处理方式；当前版本不会长期阻塞等待。
+              执行超时是下发到节点后的运行等待时间；等待可用只在所有匹配节点繁忙时生效。
+            </span>
+            <span class="form-help">
+              范围：执行超时 30-86400 秒；最大尝试 1-20 次；最大等待 10-86400 秒；重试间隔 1-3600 秒。
             </span>
           </div>
         </el-form-item>
@@ -494,23 +537,25 @@ const clientIpOptions = computed(() => {
 })
 const filteredNodeOptions = computed(() => {
   const clientIP = taskForm.client_ip.trim()
-  return clientOptions.value.filter((client) => !clientIP || getClientIp(client) === clientIP)
+  if (!clientIP) return []
+  return clientOptions.value.filter((client) => getClientIp(client) === clientIP)
 })
 const selectedClient = computed(() => findClientById(taskForm.client_id))
-const hasDispatchTarget = computed(() => Boolean(taskForm.client_ip || taskForm.node_id))
 const selectedTargetText = computed(() => {
-  if (selectedClient.value) return getClientDetailMeta(selectedClient.value)
-  if (taskForm.client_ip && !taskForm.node_id) return '将在该 IP 下自动匹配拥有工作流的在线执行节点'
-  return ''
+  if (selectedClient.value) return `固定调度到该执行节点：${getClientDetailMeta(selectedClient.value)}`
+  if (taskForm.client_ip) return '将在该客户端下自动匹配拥有此工作流的节点执行'
+  return '自由调度：选择拥有此工作流的客户端节点执行'
 })
 const clientWorkflowStatusText = computed(() => {
-  if (!taskForm.workflow_id || !hasDispatchTarget.value) return ''
+  if (!taskForm.workflow_id || (!taskForm.client_ip && !taskForm.node_id)) return ''
   if (clientWorkflowChecking.value) return '正在检测当前调度目标是否拥有该工作流...'
-  if (selectedClientHasWorkflow.value === true) return '当前执行节点已拥有该工作流'
+  if (selectedClientHasWorkflow.value === true) {
+    return taskForm.node_id ? '当前执行节点已拥有该工作流' : '该客户端存在拥有此工作流的节点'
+  }
   if (selectedClientHasWorkflow.value === false) {
     return taskForm.node_id
-      ? '当前执行节点没有上报该工作流，保存后执行会直接失败'
-      : '该 IP 下没有在线节点上报该工作流，保存后执行会直接失败'
+      ? '当前执行节点没有上报该工作流，执行时可能失败'
+      : '该客户端当前未发现拥有此工作流的节点，执行时可能失败'
   }
   return ''
 })
@@ -636,6 +681,10 @@ async function editTask(row) {
     node_name: row.node_name || '',
     dispatch_mode: row.dispatch_mode || '',
     queue_policy: row.queue_policy || 'queue',
+    max_attempts: normalizeInteger(row.max_attempts, 3),
+    timeout_seconds: normalizeInteger(row.timeout_seconds, 300),
+    queue_wait_seconds: normalizeInteger(row.queue_wait_seconds, 60),
+    queue_retry_interval_seconds: normalizeInteger(row.queue_retry_interval_seconds, 5),
     cron_expression: row.cron_expression || row.cron || '',
     enabled: row.enabled !== false,
   })
@@ -945,6 +994,10 @@ function buildTaskPayload() {
     node_name: taskForm.node_name.trim(),
     dispatch_mode: getTaskDispatchMode(taskForm),
     queue_policy: taskForm.queue_policy,
+    max_attempts: normalizeInteger(taskForm.max_attempts, 3),
+    timeout_seconds: normalizeInteger(taskForm.timeout_seconds, 300),
+    queue_wait_seconds: normalizeInteger(taskForm.queue_wait_seconds, 60),
+    queue_retry_interval_seconds: normalizeInteger(taskForm.queue_retry_interval_seconds, 5),
     cron_expression: cronExpression,
     run_once_after_create: false,
     params,
@@ -1011,6 +1064,12 @@ function parseCronPartValue(value, range) {
   return numberValue >= range.min && numberValue <= range.max ? numberValue : null
 }
 
+function normalizeInteger(value, fallback) {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return fallback
+  return Math.floor(numberValue)
+}
+
 function buildTaskPayloadFromRow(row, overrides = {}) {
   return {
     name: String(row?.name || '').trim(),
@@ -1025,6 +1084,10 @@ function buildTaskPayloadFromRow(row, overrides = {}) {
     node_name: String(row?.node_name || '').trim(),
     dispatch_mode: String(row?.dispatch_mode || row?.dispatchMode || '').trim(),
     queue_policy: String(row?.queue_policy || row?.queuePolicy || 'queue').trim(),
+    max_attempts: normalizeInteger(row?.max_attempts, 3),
+    timeout_seconds: normalizeInteger(row?.timeout_seconds, 300),
+    queue_wait_seconds: normalizeInteger(row?.queue_wait_seconds, 60),
+    queue_retry_interval_seconds: normalizeInteger(row?.queue_retry_interval_seconds, 5),
     cron_expression: String(row?.cron_expression || row?.cron || '').trim(),
     run_once_after_create: false,
     params: normalizeTaskParams(row?.params),
@@ -1388,13 +1451,12 @@ function getTaskClientIp(row) {
 }
 
 function getTaskClientIpValue(row) {
-  const client = findClientById(row?.node_id || row?.client_id)
+  const client = row?.node_id ? findClientById(row?.node_id || row?.client_id) : null
   return String(row?.client_ip || (client ? getClientIp(client) : '') || '').trim()
 }
 
 function getTaskNodeId(row) {
-  const client = findClientById(row?.node_id || row?.client_id)
-  return String(row?.node_id || row?.nodeId || (client ? getClientNodeId(client) : '') || '').trim() || '自动匹配'
+  return String(row?.node_id || row?.nodeId || '').trim() || '自动匹配'
 }
 
 function getTaskDispatchMode(row) {
@@ -1436,6 +1498,10 @@ function createEmptyTaskForm() {
     node_name: '',
     dispatch_mode: 'auto',
     queue_policy: 'queue',
+    max_attempts: 3,
+    timeout_seconds: 300,
+    queue_wait_seconds: 60,
+    queue_retry_interval_seconds: 5,
     cron_expression: '',
     enabled: true,
   }
@@ -1525,6 +1591,30 @@ function createEmptyTaskForm() {
   flex-direction: column;
   gap: 12px;
   width: 100%;
+}
+
+.policy-number-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.policy-number-row :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.policy-number-row :deep(.el-form-item__content) {
+  flex-wrap: nowrap;
+}
+
+.policy-number-row :deep(.el-input-number) {
+  width: 160px;
+}
+
+.policy-unit {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 13px;
 }
 
 .client-select-row {

@@ -21,52 +21,58 @@ type TaskQueueDao struct {
 
 // TaskQueueColumns defines and stores column names for the table task_queue.
 type TaskQueueColumns struct {
-	Id            string // 自增 ID
-	TaskId        string // 关联任务配置 ID
-	WorkflowId    string // 待执行 Automa 工作流 ID
-	DispatchMode  string // 调度模式快照：auto、group、node、ip
-	ClientIp      string // 目标客户端 IP 快照
-	NodeId        string // 目标节点 ID
-	TargetGroupId string // 目标节点分组 ID
-	TriggerType   string // 触发类型
-	Priority      string // 优先级，数字越大优先级越高
-	Status        string // 队列状态：pending、reserved、running、success、failed、cancelled、skipped
-	AttemptCount  string // 已尝试次数
-	MaxAttempts   string // 最大尝试次数
-	ParamsJson    string // 本次排队任务参数快照
-	LastError     string // 最近一次失败原因
-	ScheduledAt   string // 计划执行时间
-	ReservedAt    string // 被调度器占用时间
-	StartedAt     string // 开始执行时间
-	FinishedAt    string // 执行完成时间
-	CreatedAt     string // 记录创建时间
-	UpdatedAt     string // 记录更新时间
-	DeletedAt     string // 软删除时间
+	Id                        string // 自增 ID
+	TaskId                    string // 关联任务配置 ID
+	WorkflowId                string // 待执行 Automa 工作流 ID
+	DispatchMode              string // 调度模式快照：auto、group、node、ip
+	ClientIp                  string // 目标客户端 IP 快照
+	NodeId                    string // 目标节点 ID
+	TargetGroupId             string // 目标节点分组 ID
+	TriggerType               string // 触发类型
+	Priority                  string // 优先级，数字越大优先级越高
+	Status                    string // 队列状态：pending、reserved、running、success、failed、cancelled、skipped
+	AttemptCount              string // 已尝试次数
+	MaxAttempts               string // 最大尝试次数
+	ParamsJson                string // 本次排队任务参数快照
+	LastError                 string // 最近一次失败原因
+	ScheduledAt               string // 计划执行时间
+	ReservedAt                string // 被调度器占用时间
+	StartedAt                 string // 开始执行时间
+	FinishedAt                string // 执行完成时间
+	CreatedAt                 string // 记录创建时间
+	UpdatedAt                 string // 记录更新时间
+	DeletedAt                 string // 软删除时间
+	QueueWaitSeconds          string // 本次排队最大等待时间快照，单位秒
+	QueueRetryIntervalSeconds string // 本次排队重试间隔快照，单位秒
+	QueueDeadlineAt           string // 本次排队等待截止时间
 }
 
 // taskQueueColumns holds the columns for the table task_queue.
 var taskQueueColumns = TaskQueueColumns{
-	Id:            "id",
-	TaskId:        "task_id",
-	WorkflowId:    "workflow_id",
-	DispatchMode:  "dispatch_mode",
-	ClientIp:      "client_ip",
-	NodeId:        "node_id",
-	TargetGroupId: "target_group_id",
-	TriggerType:   "trigger_type",
-	Priority:      "priority",
-	Status:        "status",
-	AttemptCount:  "attempt_count",
-	MaxAttempts:   "max_attempts",
-	ParamsJson:    "params_json",
-	LastError:     "last_error",
-	ScheduledAt:   "scheduled_at",
-	ReservedAt:    "reserved_at",
-	StartedAt:     "started_at",
-	FinishedAt:    "finished_at",
-	CreatedAt:     "created_at",
-	UpdatedAt:     "updated_at",
-	DeletedAt:     "deleted_at",
+	Id:                        "id",
+	TaskId:                    "task_id",
+	WorkflowId:                "workflow_id",
+	DispatchMode:              "dispatch_mode",
+	ClientIp:                  "client_ip",
+	NodeId:                    "node_id",
+	TargetGroupId:             "target_group_id",
+	TriggerType:               "trigger_type",
+	Priority:                  "priority",
+	Status:                    "status",
+	AttemptCount:              "attempt_count",
+	MaxAttempts:               "max_attempts",
+	ParamsJson:                "params_json",
+	LastError:                 "last_error",
+	ScheduledAt:               "scheduled_at",
+	ReservedAt:                "reserved_at",
+	StartedAt:                 "started_at",
+	FinishedAt:                "finished_at",
+	CreatedAt:                 "created_at",
+	UpdatedAt:                 "updated_at",
+	DeletedAt:                 "deleted_at",
+	QueueWaitSeconds:          "queue_wait_seconds",
+	QueueRetryIntervalSeconds: "queue_retry_interval_seconds",
+	QueueDeadlineAt:           "queue_deadline_at",
 }
 
 // NewTaskQueueDao creates and returns a new DAO object for table data access.

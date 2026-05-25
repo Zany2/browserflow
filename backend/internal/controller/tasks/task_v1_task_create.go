@@ -88,17 +88,21 @@ func (c *ControllerV1) TaskCreate(ctx context.Context, req *v1.TaskCreateReq) (r
 	}
 
 	taskID, err := dao.Tasks.Ctx(ctx).Data(do.Tasks{
-		Name:           name,
-		Description:    description,
-		AutomaId:       workflowID,
-		ClientIp:       clientIP,
-		NodeId:         nodeID,
-		TargetGroupId:  req.TargetGroupID,
-		DispatchMode:   normalizeDispatchMode(req.DispatchMode, nodeID, req.TargetGroupID, clientIP),
-		QueuePolicy:    normalizeQueuePolicy(req.QueuePolicy),
-		CronExpression: cronExpression,
-		ParamsJson:     paramsJSON,
-		Enabled:        enabled,
+		Name:                      name,
+		Description:               description,
+		AutomaId:                  workflowID,
+		ClientIp:                  clientIP,
+		NodeId:                    nodeID,
+		TargetGroupId:             req.TargetGroupID,
+		DispatchMode:              normalizeDispatchMode(req.DispatchMode, nodeID, req.TargetGroupID, clientIP),
+		QueuePolicy:               normalizeQueuePolicy(req.QueuePolicy),
+		MaxAttempts:               normalizeMaxAttempts(req.MaxAttempts),
+		TimeoutSeconds:            normalizeTimeoutSeconds(req.TimeoutSeconds),
+		QueueWaitSeconds:          normalizeQueueWaitSeconds(req.QueueWaitSeconds),
+		QueueRetryIntervalSeconds: normalizeQueueRetryIntervalSeconds(req.QueueRetryIntervalSeconds),
+		CronExpression:            cronExpression,
+		ParamsJson:                paramsJSON,
+		Enabled:                   enabled,
 	}).InsertAndGetId()
 	if err != nil {
 		return nil, err

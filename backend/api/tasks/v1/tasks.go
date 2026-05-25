@@ -8,22 +8,26 @@ import (
 
 // TaskPayload 任务配置载荷
 type TaskPayload struct {
-	Name               string        `json:"name" dc:"任务名称"`
-	Description        string        `json:"description,omitempty" dc:"任务描述"`
-	WorkflowID         string        `json:"workflow_id" dc:"工作流ID"`
-	WorkflowName       string        `json:"workflow_name,omitempty" dc:"工作流名称"`
-	ClientID           string        `json:"client_id,omitempty" dc:"客户端ID"`
-	ClientName         string        `json:"client_name,omitempty" dc:"客户端名称"`
-	ClientIP           string        `json:"client_ip,omitempty" dc:"客户端IP"`
-	MachineID          string        `json:"machine_id,omitempty" dc:"机器ID"`
-	NodeID             string        `json:"node_id,omitempty" dc:"执行节点ID"`
-	TargetGroupID      int64         `json:"target_group_id,omitempty" dc:"目标节点分组ID"`
-	DispatchMode       string        `json:"dispatch_mode,omitempty" dc:"调度模式"`
-	QueuePolicy        string        `json:"queue_policy,omitempty" dc:"繁忙策略"`
-	CronExpression     string        `json:"cron_expression,omitempty" dc:"Cron 表达式"`
-	RunOnceAfterCreate *bool         `json:"run_once_after_create,omitempty" dc:"创建后是否立即运行一次"`
-	Params             model.JSONMap `json:"params,omitempty" dc:"任务参数"`
-	Enabled            *bool         `json:"enabled,omitempty" dc:"是否启用"`
+	Name                      string        `json:"name" dc:"任务名称"`
+	Description               string        `json:"description,omitempty" dc:"任务描述"`
+	WorkflowID                string        `json:"workflow_id" dc:"工作流ID"`
+	WorkflowName              string        `json:"workflow_name,omitempty" dc:"工作流名称"`
+	ClientID                  string        `json:"client_id,omitempty" dc:"客户端ID"`
+	ClientName                string        `json:"client_name,omitempty" dc:"客户端名称"`
+	ClientIP                  string        `json:"client_ip,omitempty" dc:"客户端IP"`
+	MachineID                 string        `json:"machine_id,omitempty" dc:"机器ID"`
+	NodeID                    string        `json:"node_id,omitempty" dc:"执行节点ID"`
+	TargetGroupID             int64         `json:"target_group_id,omitempty" dc:"目标节点分组ID"`
+	DispatchMode              string        `json:"dispatch_mode,omitempty" dc:"调度模式"`
+	QueuePolicy               string        `json:"queue_policy,omitempty" dc:"繁忙策略"`
+	MaxAttempts               int           `json:"max_attempts,omitempty" dc:"任务最多尝试次数"`
+	TimeoutSeconds            int           `json:"timeout_seconds,omitempty" dc:"任务执行超时时间，单位秒"`
+	QueueWaitSeconds          int           `json:"queue_wait_seconds,omitempty" dc:"等待可用最大等待时间，单位秒"`
+	QueueRetryIntervalSeconds int           `json:"queue_retry_interval_seconds,omitempty" dc:"等待可用重试间隔，单位秒"`
+	CronExpression            string        `json:"cron_expression,omitempty" dc:"Cron 表达式"`
+	RunOnceAfterCreate        *bool         `json:"run_once_after_create,omitempty" dc:"创建后是否立即运行一次"`
+	Params                    model.JSONMap `json:"params,omitempty" dc:"任务参数"`
+	Enabled                   *bool         `json:"enabled,omitempty" dc:"是否启用"`
 }
 
 // TaskListReq 任务列表请求

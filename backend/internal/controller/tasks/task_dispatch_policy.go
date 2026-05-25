@@ -42,6 +42,55 @@ func normalizeQueuePolicy(value string) string {
 	}
 }
 
+func normalizeMaxAttempts(value int) int {
+	if value <= 0 {
+		return 3
+	}
+	if value > 20 {
+		return 20
+	}
+	return value
+}
+
+func normalizeTimeoutSeconds(value int) int {
+	if value <= 0 {
+		return 300
+	}
+	if value < 30 {
+		return 30
+	}
+	if value > 86400 {
+		return 86400
+	}
+	return value
+}
+
+func normalizeQueueWaitSeconds(value int) int {
+	if value <= 0 {
+		return 60
+	}
+	if value < 10 {
+		return 10
+	}
+	if value > 86400 {
+		return 86400
+	}
+	return value
+}
+
+func normalizeQueueRetryIntervalSeconds(value int) int {
+	if value <= 0 {
+		return 5
+	}
+	if value < 1 {
+		return 1
+	}
+	if value > 3600 {
+		return 3600
+	}
+	return value
+}
+
 func buildDispatchTargets(ctx context.Context, workflowID string, dispatchMode string, clientIP string, nodeID string, targetGroupID int64) ([]dispatchTarget, string, error) {
 	workflowID = strings.TrimSpace(workflowID)
 	dispatchMode = normalizeDispatchMode(dispatchMode, nodeID, targetGroupID, clientIP)
