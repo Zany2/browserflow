@@ -15,11 +15,15 @@ const (
 	LeaseTTL = 10 * time.Minute
 	// StaleAfter gives the timeout scanner a small buffer after the Redis lease can expire.
 	StaleAfter = LeaseTTL + 2*time.Minute
+	// KeyPrefix is the Redis prefix for client execution locks.
+	KeyPrefix = "browserflow:client:task-lock:"
 )
 
 // LockInfo describes one client execution lease.
 type LockInfo struct {
 	ClientIP   string `json:"client_ip"`
+	MachineID  string `json:"machine_id,omitempty"`
+	NodeID     string `json:"node_id,omitempty"`
 	TaskID     int64  `json:"task_id"`
 	RecordID   int64  `json:"record_id"`
 	WorkflowID string `json:"workflow_id"`
@@ -30,9 +34,11 @@ type LockInfo struct {
 // Acquire creates a per-client task lease.
 func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
 	info.ClientIP = strings.TrimSpace(info.ClientIP)
+	info.MachineID = strings.TrimSpace(info.MachineID)
+	info.NodeID = strings.TrimSpace(info.NodeID)
 	info.WorkflowID = strings.TrimSpace(info.WorkflowID)
 	info.CommandID = strings.TrimSpace(info.CommandID)
-	if info.ClientIP == "" || info.CommandID == "" {
+	if lockIdentity(info) == "" || info.CommandID == "" {
 		return false, nil, nil
 	}
 	if info.AcquiredAt <= 0 {
@@ -43,7 +49,8 @@ func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	result, err := g.Redis().Do(ctx, "SET", clientLockKey(info.ClientIP), string(body), "NX", "EX", int(LeaseTTL.Seconds()))
+	identity := lockIdentity(info)
+	result, err := g.Redis().Do(ctx, "SET", clientLockKey(identity), string(body), "NX", "EX", int(LeaseTTL.Seconds()))
 	if err != nil {
 		return false, nil, err
 	}
@@ -51,7 +58,7 @@ func Acquire(ctx context.Context, info LockInfo) (bool, *LockInfo, error) {
 		return true, &info, nil
 	}
 
-	current, ok, err := Get(ctx, info.ClientIP)
+	current, ok, err := Get(ctx, identity)
 	if err != nil {
 		return false, nil, err
 	}
@@ -82,6 +89,11 @@ return 0
 	return result.Int() > 0, nil
 }
 
+// RenewNode extends a lease for node identity, falling back to client ip.
+func RenewNode(ctx context.Context, nodeID string, clientIP string, commandID string) (bool, error) {
+	return Renew(ctx, nodeLockIdentity(nodeID, clientIP), commandID)
+}
+
 // Release deletes a lease only when the command still owns it.
 func Release(ctx context.Context, clientIP string, commandID string) error {
 	commandID = strings.TrimSpace(commandID)
@@ -98,6 +110,11 @@ end
 return 0
 `, 1, clientLockKey(clientIP), commandID)
 	return err
+}
+
+// ReleaseNode deletes a lease for node identity, falling back to client ip.
+func ReleaseNode(ctx context.Context, nodeID string, clientIP string, commandID string) error {
+	return Release(ctx, nodeLockIdentity(nodeID, clientIP), commandID)
 }
 
 // Get returns the active client lease.
@@ -118,11 +135,91 @@ func Get(ctx context.Context, clientIP string) (LockInfo, bool, error) {
 	return info, true, nil
 }
 
+// GetNode returns an active node lease, falling back to client ip.
+func GetNode(ctx context.Context, nodeID string, clientIP string) (LockInfo, bool, error) {
+	return Get(ctx, nodeLockIdentity(nodeID, clientIP))
+}
+
+// List scans active client execution leases.
+func List(ctx context.Context) ([]LockInfo, error) {
+	var (
+		cursor = "0"
+		locks  []LockInfo
+	)
+
+	for {
+		result, err := g.Redis().Do(ctx, "SCAN", cursor, "MATCH", KeyPrefix+"*", "COUNT", 200)
+		if err != nil {
+			return nil, err
+		}
+
+		values := result.Array()
+		if len(values) < 2 {
+			return locks, nil
+		}
+
+		cursor = gconv.String(values[0])
+		keys := gconv.Strings(values[1])
+		for _, key := range keys {
+			value, err := g.Redis().Do(ctx, "GET", key)
+			if err != nil {
+				return nil, err
+			}
+			text := strings.TrimSpace(value.String())
+			if text == "" {
+				continue
+			}
+
+			var info LockInfo
+			if err = json.Unmarshal([]byte(text), &info); err != nil {
+				return nil, err
+			}
+			identity := strings.TrimPrefix(key, KeyPrefix)
+			if info.NodeID == "" && strings.HasPrefix(identity, "node") {
+				info.NodeID = identity
+			}
+			if info.ClientIP == "" {
+				info.ClientIP = identity
+			}
+			locks = append(locks, info)
+		}
+
+		if cursor == "0" {
+			return locks, nil
+		}
+	}
+}
+
 // RecordIDFromCommand extracts task record id from a task-record command id.
 func RecordIDFromCommand(commandID string) int64 {
 	return gconv.Int64(strings.TrimPrefix(strings.TrimSpace(commandID), "task-record-"))
 }
 
 func clientLockKey(clientIP string) string {
-	return "browserflow:client:task-lock:" + strings.TrimSpace(clientIP)
+	return KeyPrefix + strings.TrimSpace(clientIP)
+}
+
+func lockIdentity(info LockInfo) string {
+	return nodeLockIdentity(info.NodeID, info.ClientIP)
+}
+
+func nodeLockIdentity(nodeID string, clientIP string) string {
+	clientIP = strings.TrimSpace(clientIP)
+	nodeID = strings.TrimSpace(nodeID)
+	if clientIP == "" {
+		return nodeID
+	}
+	if nodeID == "" || nodeID == clientIP {
+		return clientIP
+	}
+	return clientIP + "|" + nodeID
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }

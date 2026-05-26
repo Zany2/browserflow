@@ -22,6 +22,7 @@ import (
 func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq) (res *v1.WorkflowListRes, err error) {
 	keyword := strings.ToLower(strings.TrimSpace(req.Keyword))
 	sourceIP := strings.TrimSpace(req.SourceIP)
+	sourceNodeID := strings.TrimSpace(req.SourceNodeID)
 	pageNum := req.PageNum
 	if pageNum <= 0 {
 		pageNum = 1
@@ -48,6 +49,9 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		if sourceIP != "" {
 			dbModel = dbModel.Where(columns.SourceIp, sourceIP)
 		}
+		if sourceNodeID != "" {
+			dbModel = dbModel.Where(columns.SourceNodeId, sourceNodeID)
+		}
 		if req.Syncable == 1 {
 			dbModel = dbModel.Where(columns.IsProtected, false)
 		}
@@ -66,7 +70,9 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 					"LOWER("+columns.Description+") LIKE ? OR "+
 					"LOWER("+columns.AutomaName+") LIKE ? OR "+
 					"LOWER("+columns.AutomaDescription+") LIKE ? OR "+
-					"LOWER("+columns.SourceIp+") LIKE ?)",
+					"LOWER("+columns.SourceIp+") LIKE ? OR "+
+					"LOWER("+columns.SourceNodeId+") LIKE ?)",
+				likeKeyword,
 				likeKeyword,
 				likeKeyword,
 				likeKeyword,
@@ -82,7 +88,7 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		}
 
 		items := []entity.AutomaWorkflows{}
-		if err = dbModel.OrderDesc(columns.UpdatedAt).Limit(start, pageSize).Scan(&items); err != nil {
+		if err = dbModel.OrderDesc(columns.CreatedAt).OrderDesc(columns.Id).Limit(start, pageSize).Scan(&items); err != nil {
 			return nil, err
 		}
 
@@ -104,7 +110,7 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 			if automaDescription == "" {
 				automaDescription = item.Description
 			}
-			listItem := v1.WorkflowListResModel{Id: item.Id, AutomaId: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: automaName, AutomaDescription: automaDescription, Source: sourceText, SourceIp: item.SourceIp, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, ContentHash: item.ContentHash, Revision: item.Revision}
+			listItem := v1.WorkflowListResModel{Id: item.Id, AutomaId: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: automaName, AutomaDescription: automaDescription, Source: sourceText, SourceIp: item.SourceIp, SourceNodeId: item.SourceNodeId, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, ContentHash: item.ContentHash, Revision: item.Revision}
 			if item.CreatedAt != nil && !item.CreatedAt.IsZero() {
 				listItem.CreatedAt = item.CreatedAt
 			}
@@ -148,6 +154,9 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		if sourceIP != "" && record.SourceIP != sourceIP {
 			continue
 		}
+		if sourceNodeID != "" && record.SourceNodeID != sourceNodeID {
+			continue
+		}
 		if req.Syncable == 1 && record.IsProtected {
 			continue
 		}
@@ -155,7 +164,7 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 			continue
 		}
 		if keyword != "" {
-			text := strings.ToLower(strings.Join([]string{record.AutomaID, record.Name, record.Description, record.AutomaName, record.AutomaDescription, record.SourceIP}, " "))
+			text := strings.ToLower(strings.Join([]string{record.AutomaID, record.Name, record.Description, record.AutomaName, record.AutomaDescription, record.SourceIP, record.SourceNodeID}, " "))
 			if !strings.Contains(text, keyword) {
 				continue
 			}
@@ -189,7 +198,7 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		if automaDescription == "" {
 			automaDescription = record.Description
 		}
-		item := v1.WorkflowListResModel{Id: record.ID, AutomaId: record.AutomaID, Name: record.Name, Description: record.Description, AutomaName: automaName, AutomaDescription: automaDescription, Source: sourceText, SourceIp: record.SourceIP, CreatedAtAutoma: record.CreatedAtAutoma, UpdatedAtAutoma: record.UpdatedAtAutoma, IsDisabled: record.IsDisabled, IsProtected: record.IsProtected, NodeCount: record.NodeCount, EdgeCount: record.EdgeCount, ContentHash: record.ContentHash, Revision: record.Revision}
+		item := v1.WorkflowListResModel{Id: record.ID, AutomaId: record.AutomaID, Name: record.Name, Description: record.Description, AutomaName: automaName, AutomaDescription: automaDescription, Source: sourceText, SourceIp: record.SourceIP, SourceNodeId: record.SourceNodeID, CreatedAtAutoma: record.CreatedAtAutoma, UpdatedAtAutoma: record.UpdatedAtAutoma, IsDisabled: record.IsDisabled, IsProtected: record.IsProtected, NodeCount: record.NodeCount, EdgeCount: record.EdgeCount, ContentHash: record.ContentHash, Revision: record.Revision}
 		if !record.CreatedAt.IsZero() {
 			item.CreatedAt = gtime.NewFromTime(record.CreatedAt)
 		}

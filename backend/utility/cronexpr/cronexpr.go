@@ -47,6 +47,7 @@ type fieldRange struct {
 	max           int
 	names         map[string]int
 	allowQuestion bool
+	allowHash     bool
 }
 
 // Normalize adapts five-field cron expressions to GoFrame gcron seconds-first format.
@@ -89,7 +90,7 @@ func Validate(expression string) error {
 	}
 
 	ranges := []fieldRange{
-		{min: 0, max: 59},
+		{min: 0, max: 59, allowHash: true},
 		{min: 0, max: 59},
 		{min: 0, max: 23},
 		{min: 1, max: 31, allowQuestion: true},
@@ -110,6 +111,9 @@ func validateField(part string, field fieldRange) bool {
 		return false
 	}
 	if part == "*" {
+		return true
+	}
+	if field.allowHash && part == "#" {
 		return true
 	}
 	if field.allowQuestion && part == "?" {

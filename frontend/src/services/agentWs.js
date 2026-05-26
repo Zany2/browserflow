@@ -13,11 +13,22 @@ const WORKFLOW_INVENTORY_REFRESH_COMMAND = 'automa.workflow.inventory.refresh'
 const AUTOMA_WORKFLOW_RESULT_EVENT = '__browserflow_automa_workflow_result__'
 const WORKFLOW_RUN_COMMANDS = new Set(['automa.workflow.run', 'task.execute', 'task.run'])
 const TASK_LOCK_STORAGE_KEY = 'browserflow_client_task_lock'
+const TASK_EXECUTION_STORAGE_KEY = 'browserflow_client_task_executions'
 const TASK_LOCK_TTL_MS = 10 * 60 * 1000
+const TASK_EXECUTION_RETENTION_MS = 24 * 60 * 60 * 1000
+const TASK_EXECUTION_MAX_ITEMS = 100
 
 // createAgentSocket creates websocket channel 创建客户端 websocket 通道
 export function createAgentSocket({
   browserId,
+  machineId = '',
+  machineName = '',
+  nodeId = '',
+  nodeName = '',
+  nodeIndex = 0,
+  workerVersion = '',
+  profileDir = '',
+  extensionDir = '',
   token,
   role = 'browser_agent',
   wsUrl,
@@ -65,6 +76,16 @@ export function createAgentSocket({
   // workflowCommandPayloads keeps command context for final result logs 保存命令上下文用于最终结果展示
   let workflowCommandPayloads = new Map()
   let activeExecutionId = ''
+  const nodeIdentity = {
+    machine_id: String(machineId || '').trim(),
+    machine_name: String(machineName || '').trim(),
+    node_id: String(nodeId || '').trim(),
+    node_name: String(nodeName || '').trim(),
+    node_index: Number(nodeIndex || 0),
+    worker_version: String(workerVersion || '').trim(),
+    profile_dir: String(profileDir || '').trim(),
+    extension_dir: String(extensionDir || '').trim(),
+  }
 
   const getCurrentAutomaInstalled = () => Boolean(getAutomaInstalled?.() || lastKnownAutomaInstalled)
 
@@ -136,6 +157,7 @@ export function createAgentSocket({
       role,
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
+      ...nodeIdentity,
       ...clientInfo,
       token,
       automa_installed: automaInfo.installed,
@@ -153,6 +175,7 @@ export function createAgentSocket({
       type: 'agent_status_update',
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
+      ...nodeIdentity,
       automa_installed: automaInfo.installed,
       automa_version: automaInfo.version,
     })
@@ -197,6 +220,7 @@ export function createAgentSocket({
       type: 'heartbeat',
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
+      ...nodeIdentity,
       client_ip: currentClientIp,
       execution_id: activeExecutionId || undefined,
       client_time: Date.now(),
@@ -207,7 +231,18 @@ export function createAgentSocket({
     sendJSON({
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
+      ...nodeIdentity,
       ...payload,
+    })
+  }
+
+  const sendTaskStatusResult = (payload, success, data, error = '') => {
+    sendResult({
+      type: 'agent_result',
+      command_id: payload.command_id,
+      success,
+      data,
+      error: success ? undefined : error,
     })
   }
 
@@ -256,6 +291,7 @@ export function createAgentSocket({
       execution_id: executionId,
       command_id: String(payload.command_id || '').trim(),
       command: payload.command,
+      task_record_id: data.task_record_id || data.taskRecordId || '',
       task_id: data.task_id || data.taskId || '',
       task_name: data.task_name || data.taskName || '',
       workflow_id: data.workflow_id || data.workflowId || data.id || '',
@@ -264,6 +300,17 @@ export function createAgentSocket({
       expires_at: Date.now() + TASK_LOCK_TTL_MS,
     })
     activeExecutionId = executionId
+    saveTaskExecution({
+      execution_id: executionId,
+      command_id: String(payload.command_id || '').trim(),
+      task_record_id: data.task_record_id || data.taskRecordId || '',
+      task_id: data.task_id || data.taskId || '',
+      workflow_id: data.workflow_id || data.workflowId || data.id || '',
+      status: 'running',
+      result: null,
+      error: '',
+      updated_at: Date.now(),
+    })
   }
 
   const clearFinishedLocalTaskLock = (payload, data) => {
@@ -290,6 +337,19 @@ export function createAgentSocket({
     clearLocalTaskLock(executionId)
     if (activeExecutionId === executionId) activeExecutionId = ''
     const success = detail.ok !== false && detail.status !== 'error'
+    const finalStatus = success ? normalizeExecutionStatus(detail.status, 'success') : 'failed'
+    saveTaskExecution({
+      execution_id: executionId,
+      command_id: commandContext.commandId,
+      task_record_id: commandPayload.task_record_id || commandPayload.taskRecordId || '',
+      task_id: commandPayload.task_id || commandPayload.taskId || '',
+      workflow_id: commandPayload.workflow_id || commandPayload.workflowId || commandPayload.id || '',
+      status: finalStatus,
+      result: detail,
+      error: success ? '' : String(detail.message || detail.error || '').trim(),
+      automa_execution_id: resolveAutomaExecutionId(detail),
+      updated_at: Date.now(),
+    })
     onCommandResult?.({
       command: commandContext.command,
       payload: commandPayload,
@@ -341,6 +401,7 @@ export function createAgentSocket({
         type: 'workflow_inventory',
         browser_id: activeBrowserId,
         client_id: activeBrowserId,
+        ...nodeIdentity,
         workflows: workflowList,
         client_time: Date.now(),
       })
@@ -405,7 +466,17 @@ export function createAgentSocket({
       return
     }
 
+    if (payload.type === 'agent_result_ack') {
+      clearAckedTaskExecution(payload.command_id)
+      return
+    }
+
     if (payload.type !== 'agent_command') return
+
+    if (payload.command === 'task.status.query') {
+      handleTaskStatusQuery(payload)
+      return
+    }
 
     try {
       ensureLocalTaskLock(payload)
@@ -448,10 +519,40 @@ export function createAgentSocket({
         success: true,
         data,
       })
+      if (WORKFLOW_RUN_COMMANDS.has(payload.command)) {
+        const executionId = resolveWorkflowExecutionId(payload.payload || {}, String(payload.command_id || '').trim())
+        const normalizedStatus = normalizeExecutionStatus(data?.status, 'success')
+        saveTaskExecution({
+          execution_id: executionId,
+          command_id: String(payload.command_id || '').trim(),
+          task_record_id: payload.payload?.task_record_id || payload.payload?.taskRecordId || '',
+          task_id: payload.payload?.task_id || payload.payload?.taskId || '',
+          workflow_id: payload.payload?.workflow_id || payload.payload?.workflowId || payload.payload?.id || '',
+          status: normalizedStatus,
+          result: data,
+          error: '',
+          automa_execution_id: resolveAutomaExecutionId(data),
+          updated_at: Date.now(),
+        })
+      }
       clearFinishedLocalTaskLock(payload, data)
     } catch (error) {
       untrackWorkflowCommand(payload)
-      clearLocalTaskLock(resolveWorkflowExecutionId(payload?.payload || {}, String(payload?.command_id || '').trim()))
+      const executionId = resolveWorkflowExecutionId(payload?.payload || {}, String(payload?.command_id || '').trim())
+      clearLocalTaskLock(executionId)
+      if (WORKFLOW_RUN_COMMANDS.has(payload.command)) {
+        saveTaskExecution({
+          execution_id: executionId,
+          command_id: String(payload.command_id || '').trim(),
+          task_record_id: payload.payload?.task_record_id || payload.payload?.taskRecordId || '',
+          task_id: payload.payload?.task_id || payload.payload?.taskId || '',
+          workflow_id: payload.payload?.workflow_id || payload.payload?.workflowId || payload.payload?.id || '',
+          status: 'failed',
+          result: null,
+          error: error.message,
+          updated_at: Date.now(),
+        })
+      }
       onCommandResult?.({
         command: payload.command,
         payload: payload.payload || {},
@@ -467,6 +568,55 @@ export function createAgentSocket({
         error: error.message,
       })
     }
+  }
+
+  const handleTaskStatusQuery = (payload) => {
+    const data = payload.payload || {}
+    const commandId = String(data.command_id || payload.command_id || '').trim()
+    const executionId = resolveWorkflowExecutionId(data, commandId)
+    const cached = readTaskExecution(executionId, commandId)
+    if (cached) {
+      const status = normalizeExecutionStatus(cached.status, 'unknown')
+      sendTaskStatusResult(
+        payload,
+        !['failed', 'unknown', 'not_found', 'missing', 'lost'].includes(status),
+        buildTaskStatusQueryData(cached, status),
+        cached.error || '',
+      )
+      return
+    }
+
+    const currentLock = readLocalTaskLock()
+    if (currentLock && (currentLock.execution_id === executionId || currentLock.command_id === commandId)) {
+      renewLocalTaskLock(currentLock.execution_id)
+      sendTaskStatusResult(payload, true, {
+        status: 'running',
+        execution_id: currentLock.execution_id,
+        command_id: currentLock.command_id,
+        task_record_id: currentLock.task_record_id || data.task_record_id || '',
+        task_id: currentLock.task_id || data.task_id || '',
+        workflow_id: currentLock.workflow_id || data.workflow_id || '',
+        updated_at: Date.now(),
+      })
+      return
+    }
+
+    const message = 'client has no local execution state for this task'
+    sendTaskStatusResult(
+      payload,
+      false,
+      {
+        status: 'unknown',
+        execution_id: executionId,
+        command_id: commandId,
+        task_record_id: data.task_record_id || '',
+        task_id: data.task_id || '',
+        workflow_id: data.workflow_id || '',
+        message,
+        updated_at: Date.now(),
+      },
+      message,
+    )
   }
 
   // updateCurrentClientIp stores backend observed ip 保存后端识别到的客户端 IP
@@ -538,7 +688,7 @@ export function createAgentSocket({
 
     if (stopped) return
 
-    socket = new WebSocket(wsUrl || getWSURL())
+    socket = new WebSocket(wsUrl || getWSURL(nodeIdentity))
 
     socket.addEventListener('open', async () => {
       reconnectCount = 0
@@ -649,6 +799,114 @@ function clearLocalTaskLock(executionId = '') {
 }
 
 // getClientInfo collects browser client metadata 采集浏览器客户端信息
+function readTaskExecution(executionId = '', commandId = '') {
+  const executions = readTaskExecutions()
+  const normalizedExecutionId = String(executionId || '').trim()
+  const normalizedCommandId = String(commandId || '').trim()
+  return executions.find((item) => {
+    return (
+      (normalizedExecutionId && item.execution_id === normalizedExecutionId) ||
+      (normalizedCommandId && item.command_id === normalizedCommandId)
+    )
+  })
+}
+
+function saveTaskExecution(execution) {
+  const nextExecution = {
+    execution_id: String(execution.execution_id || '').trim(),
+    command_id: String(execution.command_id || '').trim(),
+    task_record_id: execution.task_record_id || '',
+    task_id: execution.task_id || '',
+    workflow_id: execution.workflow_id || '',
+    status: normalizeExecutionStatus(execution.status, 'unknown'),
+    result: execution.result ?? null,
+    error: execution.error || '',
+    automa_execution_id: execution.automa_execution_id || '',
+    updated_at: Number(execution.updated_at || Date.now()),
+  }
+  if (!nextExecution.execution_id && !nextExecution.command_id) return
+
+  const executions = readTaskExecutions().filter((item) => {
+    return item.execution_id !== nextExecution.execution_id && item.command_id !== nextExecution.command_id
+  })
+  executions.unshift(nextExecution)
+  writeTaskExecutions(executions)
+}
+
+function clearAckedTaskExecution(commandId = '') {
+  commandId = String(commandId || '').trim()
+  if (!commandId) return
+
+  const executions = readTaskExecutions()
+  const nextExecutions = executions.filter((item) => {
+    if (item.command_id !== commandId) return true
+    return ['queued', 'submitted', 'pending', 'running'].includes(normalizeExecutionStatus(item.status, 'unknown'))
+  })
+  if (nextExecutions.length !== executions.length) {
+    writeTaskExecutions(nextExecutions)
+  }
+}
+
+function readTaskExecutions() {
+  try {
+    const rawValue = window.localStorage.getItem(TASK_EXECUTION_STORAGE_KEY)
+    const parsed = rawValue ? JSON.parse(rawValue) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item) => {
+      return Date.now() - Number(item?.updated_at || 0) <= TASK_EXECUTION_RETENTION_MS
+    })
+  } catch {
+    return []
+  }
+}
+
+function writeTaskExecutions(executions) {
+  try {
+    const trimmed = executions
+      .filter((item) => Date.now() - Number(item?.updated_at || 0) <= TASK_EXECUTION_RETENTION_MS)
+      .slice(0, TASK_EXECUTION_MAX_ITEMS)
+    window.localStorage.setItem(TASK_EXECUTION_STORAGE_KEY, JSON.stringify(trimmed))
+  } catch {
+    // localStorage may be unavailable in restricted browser contexts.
+  }
+}
+
+function buildTaskStatusQueryData(cached, status) {
+  return {
+    status,
+    execution_id: cached.execution_id,
+    command_id: cached.command_id,
+    task_record_id: cached.task_record_id || '',
+    task_id: cached.task_id || '',
+    workflow_id: cached.workflow_id || '',
+    result: cached.result ?? null,
+    error: cached.error || '',
+    automa_execution_id: cached.automa_execution_id || '',
+    updated_at: cached.updated_at || Date.now(),
+  }
+}
+
+function normalizeExecutionStatus(status, fallback = 'unknown') {
+  const value = String(status || '').trim().toLowerCase()
+  if (['queued', 'submitted', 'pending', 'running'].includes(value)) return 'running'
+  if (['success', 'finished', 'done', 'completed'].includes(value)) return 'success'
+  if (['error', 'failed', 'fail', 'timeout', 'stopped', 'cancelled', 'canceled'].includes(value)) return 'failed'
+  if (['unknown', 'not_found', 'missing', 'lost'].includes(value)) return value
+  return fallback
+}
+
+function resolveAutomaExecutionId(data = {}) {
+  return String(
+    data.automa_execution_id ||
+      data.automaExecutionId ||
+      data.automa_run_id ||
+      data.automaRunId ||
+      data.history_id ||
+      data.historyId ||
+      '',
+  ).trim()
+}
+
 function getClientInfo() {
   const userAgent = navigator.userAgent || ''
   const browser = getBrowserInfo(userAgent)
@@ -734,16 +992,25 @@ function getOSInfo(userAgent) {
   return { name: 'Unknown', version: '' }
 }
 
-export function getWSURL() {
+export function getWSURL(identity = {}) {
+  const query = new URLSearchParams()
+  if (identity.node_id) query.set('node_id', identity.node_id)
+  const queryString = query.toString()
+
   if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL
+    return appendQuery(import.meta.env.VITE_WS_URL, queryString)
   }
 
   const baseURL = API_BASE_URL.replace(/\/$/, '')
   if (baseURL.startsWith('http')) {
-    return `${baseURL.replace(/^http/, 'ws')}/ws`
+    return appendQuery(`${baseURL.replace(/^http/, 'ws')}/ws`, queryString)
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}${baseURL}/ws`
+  return appendQuery(`${protocol}//${window.location.host}${baseURL}/ws`, queryString)
+}
+
+function appendQuery(url, queryString) {
+  if (!queryString) return url
+  return `${url}${url.includes('?') ? '&' : '?'}${queryString}`
 }

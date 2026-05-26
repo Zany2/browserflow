@@ -21,7 +21,7 @@ func (c *ControllerV1) WorkflowCache(ctx context.Context, req *v1.WorkflowCacheR
 	if consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer {
 		columns := dao.AutomaWorkflows.Columns()
 		records := []entity.AutomaWorkflows{}
-		if err = dao.AutomaWorkflows.Ctx(ctx).OrderDesc(columns.UpdatedAt).Scan(&records); err != nil {
+		if err = dao.AutomaWorkflows.Ctx(ctx).OrderDesc(columns.CreatedAt).OrderDesc(columns.Id).Scan(&records); err != nil {
 			return nil, err
 		}
 		workflows := make([]json.RawMessage, 0, len(records))

@@ -61,6 +61,24 @@ type WSRequest struct {
 	ClientID string `json:"client_id,omitempty"`
 	// ClientName client display name 客户端显示名称
 	ClientName string `json:"client_name,omitempty"`
+	// MachineID physical worker machine id 物理机器标识
+	MachineID string `json:"machine_id,omitempty"`
+	// MachineName physical worker machine name 物理机器名称
+	MachineName string `json:"machine_name,omitempty"`
+	// NodeID execution node id 执行节点标识
+	NodeID string `json:"node_id,omitempty"`
+	// NodeName execution node name 执行节点名称
+	NodeName string `json:"node_name,omitempty"`
+	// NodeIndex execution node index 执行节点序号
+	NodeIndex int `json:"node_index,omitempty"`
+	// WorkerVersion BrowserFlow Worker version Worker 版本
+	WorkerVersion string `json:"worker_version,omitempty"`
+	// ProfileDir Chrome profile directory Chrome 用户数据目录
+	ProfileDir string `json:"profile_dir,omitempty"`
+	// ExtensionDir Automa extension directory Automa 插件目录
+	ExtensionDir string `json:"extension_dir,omitempty"`
+	// Capabilities node capabilities 节点能力
+	Capabilities map[string]any `json:"capabilities,omitempty"`
 	// Token client token 客户端令牌
 	Token string `json:"token,omitempty"`
 	// UserAgent browser user agent 浏览器 User-Agent
@@ -119,6 +137,14 @@ type WSResponse struct {
 	ClientID string `json:"client_id,omitempty"`
 	// ClientIP client ip 客户端 IP
 	ClientIP string `json:"client_ip,omitempty"`
+	// MachineID physical worker machine id 物理机器标识
+	MachineID string `json:"machine_id,omitempty"`
+	// MachineName physical worker machine name 物理机器名称
+	MachineName string `json:"machine_name,omitempty"`
+	// NodeID execution node id 执行节点标识
+	NodeID string `json:"node_id,omitempty"`
+	// NodeName execution node name 执行节点名称
+	NodeName string `json:"node_name,omitempty"`
 	// Role client role 客户端角色
 	Role string `json:"role,omitempty"`
 	// AutomaInstalled Automa installed flag Automa 插件安装状态

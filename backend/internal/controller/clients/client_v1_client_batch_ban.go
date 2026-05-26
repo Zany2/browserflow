@@ -5,25 +5,18 @@ import (
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
-	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/utility/clientops"
 	"github.com/gogf/gf/v2/os/gtime"
-	"github.com/gogf/gf/v2/util/gconv"
 )
 
-// ClientBatchBan bans clients in batch 批量拉黑客户端
+// ClientBatchBan bans client nodes in batch. 批量拉黑客户端节点
 func (c *ControllerV1) ClientBatchBan(ctx context.Context, req *v1.ClientBatchBanReq) (res *v1.ClientBatchBanRes, err error) {
-	// Stats 统计批量拉黑处理结果
-	stats := v1.ClientBatchActionRes{
-		Total: len(req.IDs),
-	}
-	columns := dao.Clients.Columns()
+	stats := v1.ClientBatchActionRes{Total: len(req.IDs)}
 	reason := strings.TrimSpace(req.Reason)
 
 	for _, id := range req.IDs {
-		// Query client 按选择的客户端标识查询记录
-		record, queryErr := clientops.QueryRecord(ctx, id)
+		record, queryErr := queryClientRecord(ctx, id)
 		if queryErr != nil {
 			return nil, queryErr
 		}
@@ -32,11 +25,10 @@ func (c *ControllerV1) ClientBatchBan(ctx context.Context, req *v1.ClientBatchBa
 			continue
 		}
 
-		// Persist ban state 保存拉黑状态
-		clientID := strings.TrimSpace(gconv.String(record[columns.ClientId]))
-		clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
-		if _, err = dao.Clients.Ctx(ctx).
-			Where(columns.ClientIp, clientIP).
+		clientID := clientPrimaryIDFromRecord(record)
+		clientIP := clientIPFromRecord(record)
+		nodeID := clientNodeIDFromRecord(record)
+		if _, err = scopedClientModel(ctx, record).
 			Data(do.Clients{
 				IsBanned:       true,
 				BanReason:      reason,
@@ -48,10 +40,8 @@ func (c *ControllerV1) ClientBatchBan(ctx context.Context, req *v1.ClientBatchBa
 		}
 
 		stats.Success++
-		stats.Notified += clientops.NotifyBanned(ctx, clientIP, clientID, reason)
+		stats.Notified += clientops.NotifyBanned(ctx, clientIP, nodeID, clientID, reason)
 	}
 
-	return &v1.ClientBatchBanRes{
-		ClientBatchActionRes: stats,
-	}, nil
+	return &v1.ClientBatchBanRes{ClientBatchActionRes: stats}, nil
 }

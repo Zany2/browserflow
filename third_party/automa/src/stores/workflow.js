@@ -1,5 +1,4 @@
 import { fetchApi } from '@/utils/api';
-import firstWorkflows from '@/utils/firstWorkflows';
 import { tasks } from '@/utils/shared';
 import {
   cleanWorkflowTriggers,
@@ -121,9 +120,9 @@ export const useWorkflowStore = defineStore('workflow', {
       let localWorkflows = workflows || {};
 
       if (isFirstTime) {
-        localWorkflows = firstWorkflows.map((workflow) =>
-          defaultWorkflow(workflow)
-        );
+        // BrowserFlow local change start: skip bundled sample workflows 不安装内置示例工作流
+        localWorkflows = [];
+        // BrowserFlow local change end
         await browser.storage.local.set({
           isFirstTime: false,
           workflows: localWorkflows,

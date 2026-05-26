@@ -5,6 +5,7 @@
         <el-button @click="createDialogVisible = true">新增</el-button>
         <el-button @click="importDialogVisible = true">导入</el-button>
         <el-button type="primary" @click="syncDialogVisible = true">客户端同步</el-button>
+        <el-button type="success" @click="maintenanceDialogVisible = true">客户端维护</el-button>
         <el-button
           :icon="Download"
           :loading="skillExporting"
@@ -34,12 +35,12 @@
         </div>
 
         <div class="filter-item filter-item--ip">
-          <span class="filter-label">客户端 IP</span>
-          <el-select v-model="filters.source_ip" clearable filterable placeholder="选择或检索客户端 IP"
+          <span class="filter-label">来源节点</span>
+          <el-select v-model="filters.source_node_key" clearable filterable placeholder="选择或检索来源节点"
             :loading="clientIpLoading" :value-on-clear="''" @clear="handleClientIpClear"
             @visible-change="handleClientIpSelectVisible">
             <el-option label="全部" value="" />
-            <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
+            <el-option v-for="client in clientOptions" :key="client.key" :label="client.label" :value="client.key" />
           </el-select>
         </div>
 
@@ -75,6 +76,12 @@
         <el-table-column label="客户端 IP" width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.source_ip || '' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="来源节点 ID" width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.source_node_id || '' }}
           </template>
         </el-table-column>
 
@@ -123,13 +130,14 @@
     <AutomaJsonDialog v-model="createDialogVisible" :loading="saving" @submit="handleCreateWorkflows" />
     <AutomaImportDialog v-model="importDialogVisible" :loading="importing" @submit="handleImportFiles" />
     <AutomaSyncDialog v-model="syncDialogVisible" :workflows="workflows" @synced="loadWorkflows" />
+    <AutomaClientMaintenanceDialog v-model="maintenanceDialogVisible" :workflows="workflows" @changed="loadWorkflows" />
 
     <AppDialog v-model="detailVisible" title="工作流详情" width="720px" class="workflow-detail-dialog" confirm-text="保存"
       :loading="detailSaving" :confirm-disabled="detailLoading" @confirm="handleSaveDetail">
-      <div v-loading="detailLoading" class="detail-form">
-        <div v-for="field in detailFields" :key="field.key" class="detail-field">
-          <span class="detail-label">{{ field.label }}</span>
-          <div class="detail-control">
+      <div v-loading="detailLoading" class="detail-form server-detail-form">
+        <div v-for="field in detailFields" :key="field.key" class="detail-field server-detail-field">
+          <span class="detail-label server-detail-label">{{ field.label }}</span>
+          <div class="detail-control server-detail-control">
             <el-input v-if="field.type === 'textarea'" v-model="detailForm[field.key]" clearable type="textarea"
               :rows="3" />
             <el-switch v-else-if="field.type === 'syncable-switch'" :model-value="!detailForm.is_protected"
@@ -176,6 +184,7 @@ import { listClients } from '@/services/client'
 import { downloadBlob } from '@/utils/browser'
 import AutomaImportDialog from './components/AutomaImportDialog.vue'
 import AutomaJsonDialog from './components/AutomaJsonDialog.vue'
+import AutomaClientMaintenanceDialog from './components/AutomaClientMaintenanceDialog.vue'
 import AutomaSyncDialog from './components/AutomaSyncDialog.vue'
 
 const workflows = ref([])
@@ -193,15 +202,18 @@ const detailForm = reactive(createDetailForm())
 const workflowTableRef = ref(null)
 const skillExporting = ref(false)
 const clientIpLoading = ref(false)
-const clientIpOptions = ref([])
+const clientOptions = ref([])
 const createDialogVisible = ref(false)
 const importDialogVisible = ref(false)
 const syncDialogVisible = ref(false)
+const maintenanceDialogVisible = ref(false)
 
 const filters = reactive({
   keyword: '',
   source: '',
   source_ip: '',
+  source_node_id: '',
+  source_node_key: '',
 })
 
 const pagedWorkflows = computed(() => {
@@ -232,6 +244,7 @@ const detailFields = computed(() => [
   { key: 'is_protected', label: '是否可同步', type: 'syncable-switch', editable: true },
   { key: 'source', label: '来源', value: formatSource(detailForm.source) },
   { key: 'source_ip', label: '客户端 IP', value: formatEmpty(detailForm.source_ip) },
+  { key: 'source_node_id', label: '来源节点 ID', value: formatEmpty(detailForm.source_node_id) },
   { key: 'source_user_agent', label: 'User-Agent', value: formatEmpty(detailForm.source_user_agent) },
   { key: 'automa_version', label: 'Automa 版本', value: formatEmpty(detailForm.automa_version) },
   { key: 'ext_version', label: '扩展版本', value: formatEmpty(detailForm.ext_version) },
@@ -260,8 +273,9 @@ watch(() => filters.source, () => {
   loadWorkflows()
 })
 
-watch(() => filters.source_ip, () => {
+watch(() => filters.source_node_key, () => {
   clearFilterSearchTimer()
+  syncSourceNodeFilter()
   currentPage.value = 1
   loadWorkflows()
 })
@@ -289,6 +303,7 @@ async function loadWorkflows() {
       keyword: filters.keyword.trim(),
       source: filters.source,
       source_ip: normalizeText(filters.source_ip),
+      source_node_id: normalizeText(filters.source_node_id),
       page_num: 1,
       page_size: 60,
     })
@@ -303,10 +318,25 @@ async function loadClientIpOptions() {
   clientIpLoading.value = true
   try {
     const data = await listClients()
-    clientIpOptions.value = normalizeList(data, 'clients')
-      .map(getClientIp)
-      .filter(Boolean)
-      .filter((clientIp, index, list) => list.indexOf(clientIp) === index)
+    const seen = new Set()
+    clientOptions.value = normalizeList(data, 'clients')
+      .map((client) => {
+        const clientIp = getClientIp(client)
+        const nodeId = normalizeText(client?.node_id || client?.nodeId)
+        const key = buildNodeIdentity(clientIp, nodeId)
+        return {
+          key,
+          source_ip: clientIp,
+          source_node_id: nodeId,
+          label: nodeId ? `${clientIp} / ${nodeId}` : clientIp,
+        }
+      })
+      .filter((client) => client.key)
+      .filter((client) => {
+        if (seen.has(client.key)) return false
+        seen.add(client.key)
+        return true
+      })
   } finally {
     clientIpLoading.value = false
   }
@@ -318,6 +348,8 @@ function handleClientIpSelectVisible(opened) {
 
 function handleClientIpClear() {
   filters.source_ip = ''
+  filters.source_node_id = ''
+  filters.source_node_key = ''
   searchFiltersNow()
 }
 
@@ -439,7 +471,7 @@ async function handleExportSkill() {
       scope: workflowIds.length > 0 ? 'selected' : 'all',
       workflowIds,
     })
-    downloadBlob(blob, 'SKILL_AUTOMA.md')
+    downloadBlob(blob, 'SKILL.md')
     showSuccessMessage('Skill 已导出')
   } catch (error) {
     appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message || '导出 Skill 失败' })
@@ -452,6 +484,8 @@ function resetFilters() {
   filters.keyword = ''
   filters.source = ''
   filters.source_ip = ''
+  filters.source_node_id = ''
+  filters.source_node_key = ''
 }
 
 function createDetailForm() {
@@ -464,6 +498,7 @@ function createDetailForm() {
     automa_description: '',
     source: 1,
     source_ip: '',
+    source_node_id: '',
     source_user_agent: '',
     automa_version: '',
     ext_version: '',
@@ -503,6 +538,26 @@ function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
 }
 
+function syncSourceNodeFilter() {
+  const key = normalizeText(filters.source_node_key)
+  const selectedClient = clientOptions.value.find((client) => client.key === key)
+  if (selectedClient) {
+    filters.source_ip = selectedClient.source_ip
+    filters.source_node_id = selectedClient.source_node_id
+    return
+  }
+  filters.source_ip = key.includes('|') ? key.split('|')[0] : key
+  filters.source_node_id = key.includes('|') ? key.split('|').slice(1).join('|') : ''
+}
+
+function buildNodeIdentity(clientIp, nodeId) {
+  clientIp = normalizeText(clientIp)
+  nodeId = normalizeText(nodeId)
+  if (!clientIp) return nodeId
+  if (!nodeId || nodeId === clientIp) return clientIp
+  return `${clientIp}|${nodeId}`
+}
+
 function formatWorkflowGraphSize(row) {
   const nodeCount = row?.node_count ?? ''
   const edgeCount = row?.edge_count ?? ''
@@ -510,7 +565,7 @@ function formatWorkflowGraphSize(row) {
 }
 
 function normalizeSourceValue(source, fallback = 1) {
-  if (source === 1 || source === '1' || source === '导入' || source === '新增/导入') return 1
+  if (source === 1 || source === '1' || source === '导入' || source === '页面导入' || source === '新增/导入') return 1
   if (source === 2 || source === '2' || source === '同步' || source === '客户端同步') return 2
   return Number(source) || fallback
 }
@@ -625,34 +680,8 @@ function formatListDate(value) {
   white-space: nowrap;
 }
 
-.detail-form {
-  display: grid;
-  gap: 12px;
-  max-height: 62vh;
-  overflow: auto;
-  padding-right: 4px;
-}
-
 .detail-field {
-  display: grid;
   grid-template-columns: 148px minmax(0, 1fr);
-  align-items: start;
-  gap: 6px;
-  min-width: 0;
-}
-
-.detail-label {
-  padding-top: 7px;
-  color: #606266;
-  font-size: 13px;
-  text-align: right;
-}
-
-.detail-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 70px;
-  gap: 6px;
-  min-width: 0;
 }
 
 @media (max-width: 1100px) {

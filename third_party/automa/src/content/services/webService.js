@@ -1,5 +1,8 @@
 import { objectHasKey, parseJSON } from '@/utils/helper';
 import { sendMessage } from '@/utils/message';
+// BrowserFlow local change start: clean triggers after managed delete 管理端删除后清理触发器
+import { cleanWorkflowTriggers } from '@/utils/workflowTrigger';
+// BrowserFlow local change end
 import { openDB } from 'idb';
 import deepmerge from 'lodash.merge';
 import { nanoid } from 'nanoid';
@@ -85,7 +88,7 @@ async function initWebServiceBridge() {
       sendMessage('open:dashboard', `/workflows/${workflowId}`, 'background');
     });
     // BrowserFlow local change start: import server workflow with stable id and ack 带稳定 ID 导入服务端工作流并回执
-    webListener.on('add-workflow', async ({ workflow, requestId }) => {
+    webListener.on('add-workflow', async ({ workflow, requestId, silent }) => {
       try {
         const { workflows: storedWorkflows } = await browser.storage.local.get(
           'workflows'
@@ -123,11 +126,13 @@ async function initWebServiceBridge() {
         }
 
         await browser.storage.local.set({ workflows: workflowsStorage });
-        sendMessage(
-          'workflow:added',
-          { workflowId, workflowData },
-          'background'
-        );
+        if (!silent) {
+          sendMessage(
+            'workflow:added',
+            { workflowId, workflowData },
+            'background'
+          );
+        }
         sendMessageBack('add-workflow', {
           ok: true,
           requestId,
@@ -138,6 +143,66 @@ async function initWebServiceBridge() {
       } catch (error) {
         console.error(error);
         sendMessageBack('add-workflow', {
+          ok: false,
+          requestId,
+          error: error.message,
+        });
+      }
+    });
+    // BrowserFlow local change end
+    // BrowserFlow local change start: delete local workflows from BrowserFlow 管理端删除本地工作流
+    webListener.on('delete-workflow', async ({ workflowIds, requestId }) => {
+      try {
+        const ids = (Array.isArray(workflowIds) ? workflowIds : [workflowIds])
+          .map((id) => String(id || '').trim())
+          .filter(Boolean);
+        const { workflows: storedWorkflows, pinnedWorkflows } =
+          await browser.storage.local.get(['workflows', 'pinnedWorkflows']);
+        const workflowsStorage = storedWorkflows || {};
+        let deletedCount = 0;
+
+        ids.forEach((workflowId) => {
+          if (Array.isArray(workflowsStorage)) {
+            const workflowIndex = workflowsStorage.findIndex(
+              (item) => item.id === workflowId
+            );
+            if (workflowIndex !== -1) {
+              workflowsStorage.splice(workflowIndex, 1);
+              deletedCount += 1;
+            }
+          } else if (workflowsStorage[workflowId]) {
+            delete workflowsStorage[workflowId];
+            deletedCount += 1;
+          }
+        });
+
+        await browser.storage.local.set({ workflows: workflowsStorage });
+        await Promise.allSettled(ids.map((workflowId) => cleanWorkflowTriggers(workflowId)));
+        await browser.storage.local.remove(
+          ids.flatMap((workflowId) => [
+            `state:${workflowId}`,
+            `draft:${workflowId}`,
+            `draft-team:${workflowId}`,
+          ])
+        );
+
+        if (Array.isArray(pinnedWorkflows)) {
+          await browser.storage.local.set({
+            pinnedWorkflows: pinnedWorkflows.filter((id) => !ids.includes(id)),
+          });
+        }
+
+        sendMessageBack('delete-workflow', {
+          ok: true,
+          requestId,
+          submitted: ids.length,
+          succeeded: deletedCount,
+          failed: ids.length - deletedCount,
+          workflow_ids: ids,
+        });
+      } catch (error) {
+        console.error(error);
+        sendMessageBack('delete-workflow', {
           ok: false,
           requestId,
           error: error.message,

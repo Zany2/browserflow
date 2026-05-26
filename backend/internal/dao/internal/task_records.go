@@ -21,38 +21,50 @@ type TaskRecordsDao struct {
 
 // TaskRecordsColumns defines and stores column names for the table task_records.
 type TaskRecordsColumns struct {
-	Id           string // 自增ID
-	TaskId       string // 关联的任务配置ID
-	WorkflowId   string // 执行时使用的 Automa 工作流 ID
-	ClientIp     string // 执行目标客户端 IP
-	TriggerType  string // 触发类型：manual 手动触发，cron 定时触发，task_create 创建任务触发，skill Skill触发，system 系统触发
-	Status       string // 执行状态：pending、queued、running、success、failed、cancelled
-	ParamsJson   string // 本次执行使用的参数快照
-	ResultJson   string // 本次执行结果内容
-	ErrorMessage string // 执行失败时的错误信息
-	StartedAt    string // 开始执行时间
-	FinishedAt   string // 执行结束时间
-	CreatedAt    string // 记录创建时间
-	UpdatedAt    string // 记录更新时间
-	DeletedAt    string // 软删除时间
+	Id                string // 自增 ID
+	TaskId            string // 关联的任务配置 ID
+	WorkflowId        string // 执行时使用的 Automa 工作流 ID
+	ClientIp          string // 执行客户端 IP
+	NodeId            string // 执行目标节点 ID
+	ExecutionId       string // 后端本次执行标识，用于客户端回调和状态恢复，例如 task-record-{id}
+	AutomaExecutionId string // Automa 客户端侧本次执行实例 ID，例如 stateId 或 historyId
+	CommandId         string // 对应下发给节点的命令 ID
+	QueueId           string // 对应的任务队列记录 ID
+	AttemptNo         string // 第几次执行尝试
+	TriggerType       string // 触发类型：manual 手动触发，cron 定时触发，task_create 创建任务触发，skill Skill 触发，system 系统触发
+	Status            string // 执行状态：pending、queued、running、success、failed、cancelled、timeout
+	ParamsJson        string // 本次执行使用的参数快照
+	ResultJson        string // 本次执行结果内容
+	ErrorMessage      string // 执行失败时的错误信息
+	StartedAt         string // 开始执行时间
+	FinishedAt        string // 执行结束时间
+	CreatedAt         string // 记录创建时间
+	UpdatedAt         string // 记录更新时间
+	DeletedAt         string // 软删除时间
 }
 
 // taskRecordsColumns holds the columns for the table task_records.
 var taskRecordsColumns = TaskRecordsColumns{
-	Id:           "id",
-	TaskId:       "task_id",
-	WorkflowId:   "workflow_id",
-	ClientIp:     "client_ip",
-	TriggerType:  "trigger_type",
-	Status:       "status",
-	ParamsJson:   "params_json",
-	ResultJson:   "result_json",
-	ErrorMessage: "error_message",
-	StartedAt:    "started_at",
-	FinishedAt:   "finished_at",
-	CreatedAt:    "created_at",
-	UpdatedAt:    "updated_at",
-	DeletedAt:    "deleted_at",
+	Id:                "id",
+	TaskId:            "task_id",
+	WorkflowId:        "workflow_id",
+	ClientIp:          "client_ip",
+	NodeId:            "node_id",
+	ExecutionId:       "execution_id",
+	AutomaExecutionId: "automa_execution_id",
+	CommandId:         "command_id",
+	QueueId:           "queue_id",
+	AttemptNo:         "attempt_no",
+	TriggerType:       "trigger_type",
+	Status:            "status",
+	ParamsJson:        "params_json",
+	ResultJson:        "result_json",
+	ErrorMessage:      "error_message",
+	StartedAt:         "started_at",
+	FinishedAt:        "finished_at",
+	CreatedAt:         "created_at",
+	UpdatedAt:         "updated_at",
+	DeletedAt:         "deleted_at",
 }
 
 // NewTaskRecordsDao creates and returns a new DAO object for table data access.

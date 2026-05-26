@@ -1,0 +1,7 @@
+*.exe
+config.json
+data/
+extensions/automa/
+extracted*/
+rsrc*.syso
+cmd/browserflow-worker/*.syso

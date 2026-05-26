@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppDialog
     v-model="visible"
     title="客户端同步"
@@ -17,12 +17,12 @@
       <div class="sync-toolbar">
         <template v-if="activeMode === 'client'">
           <el-select
-            v-model="selectedIp"
-            class="query-input"
+            v-model="selectedClientIp"
+            class="client-ip-select"
             clearable
             filterable
             :loading="clientLoading"
-            placeholder="选择在线客户端 IP"
+            placeholder="选择客户端 IP"
             @visible-change="handleClientSelectVisible"
             @change="handleClientIpChange"
             @clear="handleClientIpClear"
@@ -32,6 +32,24 @@
               :key="clientIp"
               :label="clientIp"
               :value="clientIp"
+            />
+          </el-select>
+          <el-select
+            v-model="selectedNodeId"
+            class="node-select"
+            clearable
+            filterable
+            :disabled="!selectedClientIp"
+            placeholder="全部执行节点"
+            @change="handleNodeChange"
+            @clear="handleNodeClear"
+          >
+            <el-option label="全部执行节点" value="" />
+            <el-option
+              v-for="node in selectedClientNodes"
+              :key="node.node_id"
+              :label="node.node_id"
+              :value="node.node_id"
             />
           </el-select>
         </template>
@@ -65,14 +83,68 @@
               </div>
             </el-option>
           </el-select>
+          <el-select
+            v-model="selectedClientIp"
+            class="client-ip-select"
+            clearable
+            filterable
+            :loading="clientLoading"
+            placeholder="全部客户端 IP"
+            @visible-change="handleClientSelectVisible"
+            @change="handleClientIpChange"
+            @clear="handleClientIpClear"
+          >
+            <el-option label="全部客户端 IP" value="" />
+            <el-option
+              v-for="clientIp in onlineClientIps"
+              :key="clientIp"
+              :label="clientIp"
+              :value="clientIp"
+            />
+          </el-select>
+          <el-select
+            v-model="selectedNodeId"
+            class="node-select"
+            clearable
+            filterable
+            :disabled="!selectedClientIp"
+            placeholder="全部执行节点"
+            @change="handleNodeChange"
+            @clear="handleNodeClear"
+          >
+            <el-option label="全部执行节点" value="" />
+            <el-option
+              v-for="node in selectedClientNodes"
+              :key="node.node_id"
+              :label="node.node_id"
+              :value="node.node_id"
+            />
+          </el-select>
         </template>
 
+        <el-select
+          v-model="syncStatusFilter"
+          class="status-select"
+          clearable
+          placeholder="全部同步状态"
+          @change="handleCandidateFilterChange"
+          @clear="handleCandidateFilterClear"
+        >
+          <el-option label="全部同步状态" value="" />
+          <el-option label="可同步" value="syncable" />
+          <el-option label="已同步" value="synced" />
+          <el-option label="未同步" value="not_synced" />
+          <el-option label="客户端缺失" value="client_missing" />
+          <el-option label="客户端较新" value="client_newer" />
+          <el-option label="数据库较新" value="server_newer" />
+        </el-select>
         <el-input
           v-model="keyword"
           class="keyword-input"
           clearable
           :placeholder="keywordPlaceholder"
         />
+        <el-button @click="handleResetCurrentMode">重置</el-button>
       </div>
 
       <el-table
@@ -89,9 +161,15 @@
       >
         <el-table-column type="selection" width="40" reserve-selection :selectable="isSelectable" />
 
-        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="96" show-overflow-tooltip>
+        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="136" class-name="nowrap-column">
           <template #default="{ row }">
             {{ row.source_ip || '' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column v-if="activeMode === 'workflow'" label="执行节点 ID" width="128" class-name="nowrap-column">
+          <template #default="{ row }">
+            {{ row.node_id || '' }}
           </template>
         </el-table-column>
 
@@ -140,7 +218,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="同步状态" width="86" header-align="center">
+        <el-table-column label="同步状态" width="116" header-align="center">
           <template #default="{ row }">
             <div class="center-cell">
               <el-tag :type="getSyncTagType(row)" effect="plain">
@@ -150,7 +228,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流状态" width="96" header-align="center">
+        <el-table-column label="工作流状态" width="132" header-align="center">
           <template #default="{ row }">
             <div class="center-cell">
               <el-tag class="workflow-status-tag" :type="getWorkflowTagType(row)" effect="plain">
@@ -214,6 +292,7 @@ import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { listClients } from '@/services/client'
 import {
+  listAutomaWorkflows,
   listAutomaSyncCandidates,
   listAutomaSyncCandidatesByWorkflow,
   syncAutomaWorkflowsByIp,
@@ -221,7 +300,7 @@ import {
 import { formatDate } from '@/utils/format'
 import { DEFAULT_PAGE_SIZES, normalizeList, normalizeText } from '@/utils/list'
 
-const props = defineProps({
+defineProps({
   workflows: {
     type: Array,
     default: () => [],
@@ -237,14 +316,16 @@ const emit = defineEmits(['synced'])
 
 const tableRef = ref(null)
 const activeMode = ref('client')
-const selectedIp = ref('')
+const selectedClientIp = ref('')
+const selectedNodeId = ref('')
 const selectedAutomaId = ref('')
 const keyword = ref('')
+const syncStatusFilter = ref('')
 const candidates = ref([])
 const candidateLoading = ref(false)
 const clientLoading = ref(false)
 const workflowOptionLoading = ref(false)
-const onlineClientIps = ref([])
+const onlineClients = ref([])
 const onlineWorkflowOptions = ref([])
 const syncing = ref(false)
 const refreshCandidates = ref(false)
@@ -252,6 +333,12 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const pageSizes = DEFAULT_PAGE_SIZES
 const candidateTotal = ref(0)
+const lastActiveMode = ref('client')
+const restoringModeState = ref(false)
+const modeStateCache = {
+  client: createModeState(),
+  workflow: createModeState(),
+}
 let candidateRequestSeq = 0
 const {
   selectedRows,
@@ -271,24 +358,44 @@ const {
 
 const selectableCount = computed(() => candidates.value.filter(isSelectable).length)
 const workflowSelectOptions = computed(() => onlineWorkflowOptions.value)
+const onlineClientIps = computed(() => {
+  const seen = new Set()
+  const ips = []
+  onlineClients.value.forEach((client) => {
+    if (!client.source_ip || seen.has(client.source_ip)) return
+    seen.add(client.source_ip)
+    ips.push(client.source_ip)
+  })
+  return ips
+})
+const selectedClientNodes = computed(() => {
+  const clientIp = normalizeText(selectedClientIp.value)
+  if (!clientIp) return []
+  return onlineClients.value.filter((client) => client.source_ip === clientIp && client.node_id)
+})
 const canLoad = computed(() => {
-  return activeMode.value === 'client' ? Boolean(normalizeText(selectedIp.value)) : Boolean(selectedAutomaId.value)
+  return activeMode.value === 'client' ? Boolean(normalizeText(selectedClientIp.value)) : Boolean(selectedAutomaId.value)
 })
 const keywordPlaceholder = computed(() => {
-  return activeMode.value === 'client' ? '检索客户端工作流' : '检索客户端 IP'
+  return activeMode.value === 'client' ? '检索客户端工作流名称 / ID / 描述' : '检索客户端 IP / 执行节点 ID'
 })
 
 watch(visible, (nextVisible) => {
   if (nextVisible) {
+    lastActiveMode.value = activeMode.value
     loadOnlineClientIps()
     return
   }
 
   clearKeywordSearchTimer()
+  resetModeStateCache()
   activeMode.value = 'client'
-  selectedIp.value = ''
+  lastActiveMode.value = 'client'
+  selectedClientIp.value = ''
+  selectedNodeId.value = ''
   selectedAutomaId.value = ''
   keyword.value = ''
+  syncStatusFilter.value = ''
   refreshCandidates.value = false
   onlineWorkflowOptions.value = []
   resetCandidatePage()
@@ -296,16 +403,19 @@ watch(visible, (nextVisible) => {
 })
 
 watch(keyword, () => {
+  if (restoringModeState.value) return
   resetSelection(tableRef)
   scheduleKeywordSearch()
 })
 
 watch(currentPage, () => {
+  if (restoringModeState.value) return
   if (!visible.value || !canLoad.value) return
   loadCandidates()
 })
 
 watch(pageSize, () => {
+  if (restoringModeState.value) return
   if (!visible.value || !canLoad.value) return
   loadFirstCandidatePage()
 })
@@ -321,24 +431,29 @@ async function loadCandidates() {
   refreshCandidates.value = false
   candidateLoading.value = true
   try {
+    const selectedClient = getSelectedClient()
     const params = {
       keyword: keyword.value.trim(),
+      sync_status: syncStatusFilter.value,
+      source_node_id: selectedClient.node_id,
       page_num: currentPage.value,
       page_size: pageSize.value,
       refresh: shouldRefresh ? 1 : 0,
     }
-    const selectedClientIp = normalizeText(selectedIp.value)
     const data =
       activeMode.value === 'client'
-        ? await listAutomaSyncCandidates(selectedClientIp, params)
-        : await listAutomaSyncCandidatesByWorkflow(selectedAutomaId.value, params)
+        ? await listAutomaSyncCandidates(selectedClient.source_ip, params)
+        : await listAutomaSyncCandidatesByWorkflow(selectedAutomaId.value, {
+            ...params,
+            source_ip: selectedClient.source_ip,
+          })
     if (requestSeq !== candidateRequestSeq) return
 
     const candidateList = normalizeList(data, 'workflows')
     candidateTotal.value = Number(data?.total ?? candidateList.length)
     candidates.value = candidateList.map((item) => ({
       ...item,
-      row_key: `${normalizeText(item.source_ip || selectedClientIp)}_${getWorkflowId(item)}`,
+      row_key: `${buildNodeIdentity(item.source_ip || selectedClient.source_ip, item.node_id || selectedClient.node_id)}_${getWorkflowId(item)}`,
     }))
     await restoreSelection(tableRef)
   } finally {
@@ -354,13 +469,33 @@ async function loadOnlineClientIps() {
     const data = await listClients({
       status: 'online',
     })
-    onlineClientIps.value = normalizeList(data, 'clients')
-      .map(getClientIp)
-      .filter(Boolean)
-      .filter((clientIp, index, list) => list.indexOf(clientIp) === index)
-    if (selectedIp.value && !onlineClientIps.value.includes(selectedIp.value)) {
-      selectedIp.value = ''
+    const seen = new Set()
+    onlineClients.value = normalizeList(data, 'clients')
+      .map((client) => {
+        const clientIp = getClientIp(client)
+        const nodeId = normalizeNodeId(clientIp, client?.node_id || client?.nodeId)
+        const identity = buildNodeIdentity(clientIp, nodeId)
+        return {
+          key: identity,
+          identity,
+          source_ip: clientIp,
+          node_id: nodeId,
+          label: nodeId ? `${clientIp} / ${nodeId}` : clientIp,
+        }
+      })
+      .filter((client) => client.identity)
+      .filter((client) => {
+        if (seen.has(client.identity)) return false
+        seen.add(client.identity)
+        return true
+      })
+    if (selectedClientIp.value && !onlineClientIps.value.includes(selectedClientIp.value)) {
+      selectedClientIp.value = ''
+      selectedNodeId.value = ''
       resetCandidates()
+    }
+    if (selectedNodeId.value && !selectedClientNodes.value.some((node) => node.node_id === selectedNodeId.value)) {
+      selectedNodeId.value = ''
     }
   } finally {
     clientLoading.value = false
@@ -376,39 +511,31 @@ async function loadOnlineWorkflowOptions() {
   try {
     let pageNum = 1
     let total = 0
-    const allWorkflowCandidates = []
+    const allDbWorkflows = []
 
     do {
-      const data = await listAutomaSyncCandidatesByWorkflow('', {
+      const data = await listAutomaWorkflows({
         page_num: pageNum,
         page_size: 60,
-        refresh: pageNum === 1 ? 1 : 0,
       })
       const pageList = normalizeList(data, 'workflows')
       total = Number(data?.total || pageList.length)
-      allWorkflowCandidates.push(...pageList)
+      allDbWorkflows.push(...pageList)
       if (pageList.length === 0) break
       pageNum += 1
-    } while (allWorkflowCandidates.length < total)
+    } while (allDbWorkflows.length < total)
 
     const workflowMap = new Map()
-    const dbWorkflowMap = new Map(
-      normalizeList(props.workflows)
-        .map((workflow) => [workflow.automa_id || getWorkflowId(workflow), workflow])
-        .filter(([workflowId]) => Boolean(workflowId)),
-    )
 
-    allWorkflowCandidates.forEach((item) => {
-      const workflowId = item.automa_id || getWorkflowId(item)
+    allDbWorkflows.forEach((workflow) => {
+      const workflowId = workflow.automa_id || getWorkflowId(workflow)
       if (!workflowId || workflowMap.has(workflowId)) return
 
-      const dbWorkflow = dbWorkflowMap.get(workflowId) || {}
       workflowMap.set(workflowId, {
-        ...item,
-        ...dbWorkflow,
+        ...workflow,
         automa_id: workflowId,
-        name: dbWorkflow.name || item.server_name || item.name || '',
-        automa_name: dbWorkflow.automa_name || item.automa_name || item.name || '',
+        name: workflow.name || '',
+        automa_name: workflow.automa_name || workflow.automa_id || workflowId,
       })
     })
 
@@ -427,18 +554,47 @@ function handleWorkflowSelectVisible(opened) {
 }
 
 function handleClientIpChange(value) {
-  selectedIp.value = normalizeText(value)
+  selectedClientIp.value = normalizeText(value)
+  selectedNodeId.value = ''
   refreshCandidates.value = true
   resetCandidates()
-  if (selectedIp.value) loadFirstCandidatePage()
+  if (activeMode.value === 'workflow' || selectedClientIp.value) loadFirstCandidatePage()
 }
 
 function handleClientIpClear() {
   clearKeywordSearchTimer()
-  selectedIp.value = ''
-  refreshCandidates.value = false
+  selectedClientIp.value = ''
+  selectedNodeId.value = ''
+  refreshCandidates.value = activeMode.value === 'workflow'
   resetCandidatePage()
+  if (activeMode.value === 'workflow' && selectedAutomaId.value) {
+    loadFirstCandidatePage()
+    return
+  }
   resetCandidates()
+}
+
+function handleNodeChange(value) {
+  selectedNodeId.value = normalizeText(value)
+  refreshCandidates.value = true
+  resetCandidates()
+  if (canLoad.value) loadFirstCandidatePage()
+}
+
+function handleNodeClear() {
+  selectedNodeId.value = ''
+  refreshCandidates.value = true
+  resetCandidates()
+  if (canLoad.value) loadFirstCandidatePage()
+}
+
+function handleCandidateFilterChange() {
+  resetSelection(tableRef)
+  if (canLoad.value) loadFirstCandidatePage()
+}
+
+function handleCandidateFilterClear() {
+  handleCandidateFilterChange()
 }
 
 function handleWorkflowChange(value) {
@@ -456,19 +612,35 @@ function handleWorkflowClear() {
   resetCandidates()
 }
 
-function handleModeChange() {
-  if (activeMode.value === 'client') {
-    selectedAutomaId.value = ''
-    loadOnlineClientIps()
-  } else {
-    selectedIp.value = ''
-    loadOnlineWorkflowOptions()
-  }
+function handleResetCurrentMode() {
   clearKeywordSearchTimer()
-  keyword.value = ''
+  modeStateCache[activeMode.value] = createModeState()
+  restoreModeState(activeMode.value)
   refreshCandidates.value = false
   resetCandidatePage()
   resetCandidates()
+}
+
+function handleModeChange() {
+  const nextMode = activeMode.value
+  const previousMode = lastActiveMode.value
+  if (previousMode === nextMode) return
+
+  saveModeState(previousMode)
+  clearKeywordSearchTimer()
+  resetCandidates()
+  restoreModeState(nextMode)
+  lastActiveMode.value = nextMode
+
+  if (activeMode.value === 'client') {
+    loadOnlineClientIps()
+  } else {
+    loadOnlineWorkflowOptions()
+    loadOnlineClientIps()
+  }
+
+  refreshCandidates.value = canLoad.value
+  if (canLoad.value) loadCandidates()
 }
 
 function scheduleKeywordSearch() {
@@ -479,7 +651,7 @@ function scheduleKeywordSearch() {
 }
 
 async function handleSync() {
-  const groups = groupSelectedRowsByIp()
+  const groups = groupSelectedRowsByNode()
   if (groups.size === 0) {
     showWarningMessage('请选择可同步的工作流')
     return
@@ -487,8 +659,8 @@ async function handleSync() {
 
   syncing.value = true
   try {
-    for (const [sourceIp, workflowIds] of groups) {
-      await syncAutomaWorkflowsByIp(sourceIp, workflowIds)
+    for (const [, group] of groups) {
+      await syncAutomaWorkflowsByIp(group.source_ip, group.workflow_ids, [], group.source_node_id)
     }
     showSuccessMessage('同步完成')
     visible.value = false
@@ -498,16 +670,23 @@ async function handleSync() {
   }
 }
 
-function groupSelectedRowsByIp() {
+function groupSelectedRowsByNode() {
   const groups = new Map()
   selectedRows.value.forEach((row) => {
-    const sourceIp = normalizeText(row.source_ip || selectedIp.value)
+    const selectedClient = getSelectedClient()
+    const sourceIp = normalizeText(row.source_ip || selectedClient.source_ip)
+    const sourceNodeId = normalizeText(row.node_id || selectedClient.node_id)
+    const identity = buildNodeIdentity(sourceIp, sourceNodeId)
     const workflowId = getWorkflowId(row)
-    if (!sourceIp || !workflowId) return
+    if (!identity || !sourceIp || !workflowId) return
 
-    const current = groups.get(sourceIp) || []
-    current.push(workflowId)
-    groups.set(sourceIp, current)
+    const current = groups.get(identity) || {
+      source_ip: sourceIp,
+      source_node_id: sourceNodeId,
+      workflow_ids: [],
+    }
+    current.workflow_ids.push(workflowId)
+    groups.set(identity, current)
   })
   return groups
 }
@@ -538,6 +717,50 @@ function resetCandidatePage() {
   currentPage.value = 1
 }
 
+function createModeState() {
+  return {
+    selectedClientIp: '',
+    selectedNodeId: '',
+    selectedAutomaId: '',
+    keyword: '',
+    syncStatusFilter: '',
+    currentPage: 1,
+    pageSize: 10,
+  }
+}
+
+function saveModeState(mode = activeMode.value) {
+  if (!modeStateCache[mode]) return
+
+  modeStateCache[mode] = {
+    selectedClientIp: selectedClientIp.value,
+    selectedNodeId: selectedNodeId.value,
+    selectedAutomaId: selectedAutomaId.value,
+    keyword: keyword.value,
+    syncStatusFilter: syncStatusFilter.value,
+    currentPage: currentPage.value,
+    pageSize: pageSize.value,
+  }
+}
+
+function restoreModeState(mode = activeMode.value) {
+  const state = modeStateCache[mode] || createModeState()
+  restoringModeState.value = true
+  selectedClientIp.value = state.selectedClientIp
+  selectedNodeId.value = state.selectedNodeId
+  selectedAutomaId.value = state.selectedAutomaId
+  keyword.value = state.keyword
+  syncStatusFilter.value = state.syncStatusFilter || ''
+  currentPage.value = state.currentPage || 1
+  pageSize.value = state.pageSize || 10
+  restoringModeState.value = false
+}
+
+function resetModeStateCache() {
+  modeStateCache.client = createModeState()
+  modeStateCache.workflow = createModeState()
+}
+
 function loadFirstCandidatePage() {
   if (currentPage.value === 1) {
     loadCandidates()
@@ -548,11 +771,13 @@ function loadFirstCandidatePage() {
 }
 
 function isSelectable(row) {
+  if (row.sync_status === 'client_missing') return false
   if (row.sync_status === 'server_newer') return false
   return Boolean(row.has_update ?? row.hasUpdate ?? !row.synced)
 }
 
 function getSyncText(row) {
+  if (row.sync_status === 'client_missing') return '客户端缺失'
   if (row.sync_status === 'server_newer') return '不可同步'
   if (row.has_update || row.hasUpdate) return '可同步'
   if (row.synced) return '已同步'
@@ -567,6 +792,7 @@ function getSyncTagType(row) {
 }
 
 function getWorkflowText(row) {
+  if (row.sync_status === 'client_missing') return '客户端无此工作流'
   if (row.sync_status === 'not_synced') return '数据库无记录'
   if (row.sync_status === 'client_newer') return '客户端较新'
   if (row.sync_status === 'server_newer') return '数据库较新'
@@ -577,6 +803,7 @@ function getWorkflowText(row) {
 
 function getWorkflowTagType(row) {
   if (row.synced) return 'success'
+  if (row.sync_status === 'client_missing') return 'info'
   if (row.sync_status === 'server_newer') return 'danger'
   if (row.has_update || row.hasUpdate) return 'warning'
   return 'info'
@@ -587,11 +814,43 @@ function getWorkflowId(row) {
 }
 
 function getSelectionKey(row) {
-  return row?.row_key || `${normalizeText(row?.source_ip || selectedIp.value)}_${getWorkflowId(row)}`
+  const selectedClient = getSelectedClient()
+  return row?.row_key || `${buildNodeIdentity(row?.source_ip || selectedClient.source_ip, row?.node_id || selectedClient.node_id)}_${getWorkflowId(row)}`
 }
 
 function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
+}
+
+function getSelectedClient() {
+  const clientIp = normalizeText(selectedClientIp.value)
+  const nodeId = normalizeNodeId(clientIp, selectedNodeId.value)
+  return {
+    key: buildNodeIdentity(clientIp, nodeId),
+    identity: buildNodeIdentity(clientIp, nodeId),
+    source_ip: clientIp,
+    node_id: nodeId,
+  }
+}
+
+function normalizeNodeId(clientIp, nodeId) {
+  clientIp = normalizeText(clientIp)
+  nodeId = normalizeText(nodeId)
+  if (!clientIp || !nodeId) return nodeId
+
+  const prefix = `${clientIp}|`
+  while (nodeId.startsWith(prefix)) {
+    nodeId = nodeId.slice(prefix.length)
+  }
+  return nodeId
+}
+
+function buildNodeIdentity(clientIp, nodeId) {
+  clientIp = normalizeText(clientIp)
+  nodeId = normalizeNodeId(clientIp, nodeId)
+  if (!clientIp) return nodeId
+  if (!nodeId || nodeId === clientIp) return clientIp
+  return `${clientIp}|${nodeId}`
 }
 
 function formatOptionalDate(value) {
@@ -600,7 +859,7 @@ function formatOptionalDate(value) {
 }
 
 function formatCompareText(clientValue, serverValue) {
-  return `客户端：${clientValue || ''} 数据库：${serverValue || ''}`.trim()
+  return `瀹㈡埛绔細${clientValue || ''} 鏁版嵁搴擄細${serverValue || ''}`.trim()
 }
 </script>
 
@@ -619,6 +878,18 @@ function formatCompareText(clientValue, serverValue) {
 
 .query-input {
   width: 360px;
+}
+
+.client-ip-select {
+  width: 220px;
+}
+
+.node-select {
+  width: 180px;
+}
+
+.status-select {
+  width: 150px;
 }
 
 .keyword-input {
@@ -738,16 +1009,9 @@ function formatCompareText(clientValue, serverValue) {
 }
 
 .center-cell :deep(.el-tag) {
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workflow-status-tag {
-  min-width: 0;
-  justify-content: center;
+  max-width: none;
+  min-width: 72px;
+  padding-inline: 8px;
   white-space: nowrap;
 }
 
@@ -765,9 +1029,11 @@ function formatCompareText(clientValue, serverValue) {
 
 .sync-summary {
   display: flex;
+  align-items: center;
   flex: 0 0 auto;
   gap: 16px;
   color: #606266;
+  line-height: 24px;
   white-space: nowrap;
 }
 
@@ -787,6 +1053,9 @@ function formatCompareText(clientValue, serverValue) {
   }
 
   .query-input,
+  .client-ip-select,
+  .node-select,
+  .status-select,
   .keyword-input {
     width: 100%;
   }

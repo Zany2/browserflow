@@ -56,6 +56,8 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 
 	if len(req.WorkflowJsonDataList) == 0 {
 		sourceIP := strings.TrimSpace(req.SourceIP)
+		sourceNodeID := websockets.NormalizeNodeID(sourceIP, req.SourceNodeID)
+		sourceIdentity := websockets.NodeConnectionID(sourceIP, sourceNodeID)
 		selectedIDs := make([]string, 0, len(req.WorkflowIds))
 		for _, workflowID := range req.WorkflowIds {
 			workflowID = strings.TrimSpace(workflowID)
@@ -68,13 +70,13 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "Windows mode does not read Server client workflow cache")
 				return nil, nil
 			}
-			if !workflowcache.IsClientOnline(ctx, sourceIP) {
-				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("客户端 %s 不在线或 WebSocket 未连接", sourceIP))
+			if !workflowcache.IsClientOnline(ctx, sourceIdentity) {
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("客户端 %s 不在线或 WebSocket 未连接", sourceIdentity))
 				return nil, nil
 			}
 			cachedWorkflows := make([]localmodel.JSONMap, 0, len(selectedIDs))
 			for _, workflowID := range selectedIDs {
-				payload, ok, loadErr := workflowcache.GetClientWorkflowPayload(ctx, sourceIP, workflowID)
+				payload, ok, loadErr := workflowcache.GetClientWorkflowPayload(ctx, sourceIdentity, workflowID)
 				if loadErr != nil {
 					return nil, loadErr
 				}
@@ -245,7 +247,9 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 		}
 		automaName := strings.TrimSpace(gconv.String(payload["name"]))
 		automaDescription := strings.TrimSpace(gconv.String(payload["description"]))
-		parsed := &localmodel.AutomaWorkflowRecord{AutomaID: automaID, Name: automaName, Description: automaDescription, AutomaName: automaName, AutomaDescription: automaDescription, Source: 2, SourceIP: strings.TrimSpace(req.SourceIP), AutomaVersion: strings.TrimSpace(gconv.String(payload["version"])), ExtVersion: strings.TrimSpace(gconv.String(payload["extVersion"])), CreatedAtAutoma: gconv.Int64(payload["createdAt"]), UpdatedAtAutoma: gconv.Int64(payload["updatedAt"]), IsDisabled: gconv.Bool(payload["isDisabled"]), NodeCount: nodeCount, EdgeCount: edgeCount, RawJSON: string(rawBytes), NormalizedJSON: string(rawBytes), ContentHash: contentHash}
+		sourceIP := strings.TrimSpace(req.SourceIP)
+		sourceNodeID := websockets.NormalizeNodeID(sourceIP, req.SourceNodeID)
+		parsed := &localmodel.AutomaWorkflowRecord{AutomaID: automaID, Name: automaName, Description: automaDescription, AutomaName: automaName, AutomaDescription: automaDescription, Source: 2, SourceIP: sourceIP, SourceNodeID: sourceNodeID, AutomaVersion: strings.TrimSpace(gconv.String(payload["version"])), ExtVersion: strings.TrimSpace(gconv.String(payload["extVersion"])), CreatedAtAutoma: gconv.Int64(payload["createdAt"]), UpdatedAtAutoma: gconv.Int64(payload["updatedAt"]), IsDisabled: gconv.Bool(payload["isDisabled"]), NodeCount: nodeCount, EdgeCount: edgeCount, RawJSON: string(rawBytes), NormalizedJSON: string(rawBytes), ContentHash: contentHash}
 		var existing *localmodel.AutomaWorkflowRecord
 		var getErr error
 		if serverMode {
@@ -253,7 +257,7 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 			item := entity.AutomaWorkflows{}
 			getErr = dao.AutomaWorkflows.Ctx(ctx).Where(columns.AutomaId, parsed.AutomaID).Scan(&item)
 			if getErr == nil && item.Id > 0 {
-				existing = &localmodel.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
+				existing = &localmodel.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceNodeID: item.SourceNodeId, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
 				if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {
 					existing.FirstSyncedAt = item.FirstSyncedAt.Time
 				}
@@ -296,7 +300,7 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 		}
 		parsed.LastSyncedAt = syncTime
 		if serverMode {
-			saveData := do.AutomaWorkflows{AutomaId: parsed.AutomaID, Name: parsed.Name, Description: parsed.Description, AutomaName: parsed.AutomaName, AutomaDescription: parsed.AutomaDescription, Source: parsed.Source, SourceIp: parsed.SourceIP, SourceUserAgent: parsed.SourceUserAgent, AutomaVersion: parsed.AutomaVersion, ExtVersion: parsed.ExtVersion, CreatedAtAutoma: parsed.CreatedAtAutoma, UpdatedAtAutoma: parsed.UpdatedAtAutoma, IsDisabled: parsed.IsDisabled, IsProtected: parsed.IsProtected, NodeCount: parsed.NodeCount, EdgeCount: parsed.EdgeCount, RawJson: parsed.RawJSON, NormalizedJson: parsed.NormalizedJSON, ContentHash: parsed.ContentHash, Revision: parsed.Revision}
+			saveData := do.AutomaWorkflows{AutomaId: parsed.AutomaID, Name: parsed.Name, Description: parsed.Description, AutomaName: parsed.AutomaName, AutomaDescription: parsed.AutomaDescription, Source: parsed.Source, SourceIp: parsed.SourceIP, SourceNodeId: parsed.SourceNodeID, SourceUserAgent: parsed.SourceUserAgent, AutomaVersion: parsed.AutomaVersion, ExtVersion: parsed.ExtVersion, CreatedAtAutoma: parsed.CreatedAtAutoma, UpdatedAtAutoma: parsed.UpdatedAtAutoma, IsDisabled: parsed.IsDisabled, IsProtected: parsed.IsProtected, NodeCount: parsed.NodeCount, EdgeCount: parsed.EdgeCount, RawJson: parsed.RawJSON, NormalizedJson: parsed.NormalizedJSON, ContentHash: parsed.ContentHash, Revision: parsed.Revision}
 			if !parsed.FirstSyncedAt.IsZero() {
 				saveData.FirstSyncedAt = gtime.NewFromTime(parsed.FirstSyncedAt)
 			}

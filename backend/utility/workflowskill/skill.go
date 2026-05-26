@@ -7,10 +7,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // FileName is the exported Skill filename. ??? Skill ????
-const FileName = "SKILL_AUTOMA.md"
+const FileName = "SKILL.md"
 
 // FilterWorkflows keeps workflows by export scope. ???????????
 func FilterWorkflows(workflows []map[string]any, scope string, workflowIDs []string) []map[string]any {
@@ -40,6 +43,11 @@ func ContentDisposition(fileName string) string {
 // BaseURL builds api base url. ?? API ?????
 func BaseURL(host string, tls bool) string {
 	return agentSkillBaseURL(host, tls)
+}
+
+// BaseURLFromFrontendURL builds api base url from configured frontend url.
+func BaseURLFromFrontendURL(frontendURL string) string {
+	return agentSkillBaseURLFromFrontendURL(frontendURL)
 }
 
 // filterAgentSkillWorkflows keeps workflows by export scope 按导出范围保留工作流
@@ -106,7 +114,7 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 
 	sb.WriteString("---\n")
 	sb.WriteString("name: browserflow-automa-workflows\n")
-	sb.WriteString("description: " + strconv.Quote(buildAgentSkillDescription(workflows)) + "\n")
+	sb.WriteString("description: " + strconv.Quote(markdownLine(buildAgentSkillDescription(workflows))) + "\n")
 	sb.WriteString("---\n\n")
 
 	sb.WriteString("# BrowserFlow Automa Workflows\n\n")
@@ -132,6 +140,15 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("Find an agent whose `browser_id` matches the Browser Instance ID in this skill. It must be online. If it is missing or offline, ask the user to start that exact browser instance and keep the browser-agent page connected.\n\n")
 	sb.WriteString("After confirming the agent is online, verify that its Automa plugin status reports `automa_installed: true`. If Automa is not installed or not available, ask the user to install or enable the Automa extension in that browser instance, then refresh the browser-agent page before continuing.\n\n")
 	sb.WriteString("Do not replace the exported `browser_id` with the current browser unless the user explicitly confirms that the workflow exists in the new browser instance.\n\n")
+
+	sb.WriteString("## Required Step-By-Step Procedure\n\n")
+	sb.WriteString("Always work in this order. Do not run or open a workflow until the checks are complete.\n\n")
+	sb.WriteString("1. Detect runtime: call `/app/runtime` and confirm the BrowserFlow backend is reachable.\n")
+	sb.WriteString("2. Detect client: call `/agents/status`, find the exported `browser_id`, confirm it is online, and confirm `automa_installed: true`.\n")
+	sb.WriteString("3. Detect workflow and parameters: choose the matching workflow from this Skill, inspect its `Parameters`, and ask the user for any missing required values.\n")
+	sb.WriteString("4. Decide execution mode: use async for action-only requests, sync for requests that need returned data or final completion.\n")
+	sb.WriteString("5. Execute only after steps 1-4 pass. If any check fails, stop and report the exact reason instead of calling the run API.\n")
+	sb.WriteString("6. For sync runs, inspect the execution result before answering. For async runs, return the `execution_id` and explain that status can be queried later.\n\n")
 
 	sb.WriteString("## Parameter Rules\n\n")
 	sb.WriteString("Before running a workflow, inspect its `Parameters` section. If a required parameter has no value, ask the user for it before calling the API. If an optional parameter has a default value, use the default unless the user provides another value. Pass parameters through the `variables` object, and keep parameter names exactly as listed in this skill. BrowserFlow treats this `variables` object as the completed parameter set and instructs Automa not to open its own parameter input page.\n\n")
@@ -282,11 +299,11 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 
 	sb.WriteString("---\n")
 	sb.WriteString("name: browserflow-server-automa-workflows\n")
-	sb.WriteString("description: " + strconv.Quote(buildServerSkillDescription(workflows)) + "\n")
+	sb.WriteString("description: " + strconv.Quote(markdownLine(buildServerSkillDescription(workflows))) + "\n")
 	sb.WriteString("---\n\n")
 	sb.WriteString("# BrowserFlow Server Automa Workflows\n\n")
 	sb.WriteString("## Overview\n\n")
-	sb.WriteString("This skill describes Automa workflows stored in BrowserFlow Server mode. Use the BrowserFlow task APIs to create or run server-side tasks. The server dispatches each task to an online Windows client that owns the target workflow.\n\n")
+	sb.WriteString("This skill describes Automa workflows stored in BrowserFlow Server mode. Use the BrowserFlow task APIs to create or run server-side tasks. The server dispatches each task to an online Windows client node that owns the target workflow. A client node is identified by `client_ip` plus `node_id`.\n\n")
 	sb.WriteString(fmt.Sprintf("**Total Workflows Available:** %d\n\n", len(workflows)))
 	sb.WriteString(fmt.Sprintf("**Recommended Filename:** `%s`\n\n", FileName))
 	sb.WriteString(fmt.Sprintf("**API Base URL:** `%s`\n\n", baseURL))
@@ -296,24 +313,60 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString(fmt.Sprintf("curl '%s/app/runtime'\n", baseURL))
 	sb.WriteString("```\n\n")
 	sb.WriteString("If the request fails or the mode is not `server`, ask the user to start BrowserFlow in Server mode before continuing.\n\n")
-	sb.WriteString("Then verify that at least one client is online and has the target workflow. If a task does not specify a client, BrowserFlow scans online clients that own the workflow and chooses an unlocked client.\n\n")
+	sb.WriteString("Then verify that at least one client node is online and has the target workflow. If a task does not specify a client node, BrowserFlow scans online nodes that own the workflow and chooses an unlocked node.\n\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("curl '%s/clients'\n", baseURL))
 	sb.WriteString("```\n\n")
+	sb.WriteString("## Required Step-By-Step Procedure\n\n")
+	sb.WriteString("Always work in this order. Do not create or execute a task until the checks are complete.\n\n")
+	sb.WriteString("1. Detect runtime: call `/app/runtime` and confirm BrowserFlow is reachable and running in `server` mode.\n")
+	sb.WriteString("2. Detect client nodes: call `/clients`, confirm there is at least one online node, and confirm the target workflow can be dispatched to an online node.\n")
+	sb.WriteString("3. Detect workflow and parameters: choose the matching workflow from this Skill, inspect its `Parameters`, and ask the user for any missing required values.\n")
+	sb.WriteString("4. Find reusable tasks: query `/tasks?workflow_id={workflow_id}&page_num=1&page_size=10`. Reuse an enabled task when it matches the workflow and parameters, unless the user asks to create a new task.\n")
+	sb.WriteString("5. Decide dispatch target: keep both `client_ip` and `node_id` empty for automatic dispatch, or set both fields when the user explicitly requires a specific node.\n")
+	sb.WriteString("6. Decide execution mode: use async for action-only requests, sync for requests that need returned data or final completion.\n")
+	sb.WriteString("7. Execute only after steps 1-6 pass. If any check fails, stop and report the exact reason instead of creating or executing a task.\n")
+	sb.WriteString("8. After execution, inspect the response or task record before answering. For async runs, return the task record or execution identifier available in the response.\n\n")
+
 	sb.WriteString("## Parameter Rules\n\n")
 	sb.WriteString("Before creating or executing a task, inspect the workflow's `Parameters` section. If a required parameter has no value, ask the user for it. Pass values through the task `params` object and keep parameter names exactly as listed.\n\n")
+	sb.WriteString("## Parameter Type Rules\n\n")
+	sb.WriteString("- `string`: pass a string value.\n")
+	sb.WriteString("- `number`: pass a JSON number, not a quoted string, when the user provides a numeric value.\n")
+	sb.WriteString("- `json`: pass a valid JSON object or array. If the user provides plain text, ask them to confirm the JSON structure before executing.\n")
+	sb.WriteString("- `checkbox`: pass a boolean `true` or `false`.\n")
+	sb.WriteString("- Example values like `\"\"` are placeholders. Replace required placeholders with real user-provided values before executing.\n\n")
 	sb.WriteString("## Dispatch Rules\n\n")
-	sb.WriteString("- If `client_ip` is provided, BrowserFlow dispatches only to that client.\n")
-	sb.WriteString("- If `client_ip` is omitted, BrowserFlow scans online clients that own the workflow and dispatches to the first unlocked client.\n")
-	sb.WriteString("- If the target client is busy, offline, or does not own the workflow, the API creates a failed execution record with a readable reason.\n")
-	sb.WriteString("- Per-client Redis locks prevent the same client from running multiple Automa workflows concurrently.\n")
+	sb.WriteString("- Leave both `client_ip` and `node_id` empty when any online node that owns the workflow may execute it.\n")
+	sb.WriteString("- Set both `client_ip` and `node_id` when the user explicitly wants a specific execution node.\n")
+	sb.WriteString("- Avoid setting only one of `client_ip` or `node_id`; BrowserFlow Server mode identifies execution targets by the pair.\n")
+	sb.WriteString("- If the target node is busy, offline, or does not own the workflow, the API creates a failed execution record with a readable reason.\n")
+	sb.WriteString("- Per-node Redis locks prevent the same browser node from running multiple Automa workflows concurrently.\n")
 	sb.WriteString("- Use `trigger_type: \"skill\"` when executing tasks from this skill so execution records are easy to filter.\n\n")
 	sb.WriteString("## Execution Mode Rules\n\n")
 	sb.WriteString("- Use asynchronous execution when the user only asks to start, trigger, submit, launch, run, or execute a task and does not ask for returned data or final completion. Set `wait_result` to `false`.\n")
 	sb.WriteString("- Use synchronous waiting when the user asks to get, query, search, extract, collect, return, fetch, read, wait for completion, or confirm final success/failure. Set `wait_result` to `true`, set a reasonable `timeout`, and request returned data if needed.\n")
 	sb.WriteString("- For variable results, request `return_data.variables: [\"browserflow_output\"]` and read `result.data.variables.browserflow_output` first. If it is missing, report that the workflow completed but did not provide a BrowserFlow output variable.\n")
 	sb.WriteString("- For table results, set `return_data.include_table` to `true`. BrowserFlow stores larger table payloads as task record files and returns the execution record for follow-up inspection.\n\n")
+	sb.WriteString("## Result Reading Rules\n\n")
+	sb.WriteString("- First read the execute response. It may contain `record` for the task record and `result` for the immediate client result.\n")
+	sb.WriteString("- If the response contains `record.id`, call `/task-records/{record_id}` before giving the final answer when the user needs status, errors, returned variables, table files, or detailed output.\n")
+	sb.WriteString("- For variable output, check `result.data.variables.browserflow_output`, then `record.result.data.variables.browserflow_output`, then the task record detail.\n")
+	sb.WriteString("- For table output, inspect the task record detail `files` array. Use the file download endpoint when the table is stored as a file.\n")
+	sb.WriteString("- Treat `queued` and `running` as incomplete states. Query the task record again later instead of reporting final success.\n\n")
+	sb.WriteString("## Failure Handling Rules\n\n")
+	sb.WriteString("- Backend unreachable: ask the user to start BrowserFlow Server and do not execute.\n")
+	sb.WriteString("- Runtime mode is not `server`: ask the user to start or switch to Server mode and do not execute.\n")
+	sb.WriteString("- No online nodes: ask the user to open a Windows client browser-agent page and keep it connected.\n")
+	sb.WriteString("- No online node owns the workflow: ask the user to install or sync the workflow to a client node, or choose another workflow.\n")
+	sb.WriteString("- Target node is busy or locked: report the busy reason and suggest retrying later or choosing another node.\n")
+	sb.WriteString("- Missing required parameters: ask for the missing values before creating or executing a task.\n")
+	sb.WriteString("- API returns a failed task record: report `record.error_message` or the readable failure reason from the response.\n\n")
 	sb.WriteString("## API Endpoints\n\n")
+	sb.WriteString("### Query Existing Tasks\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl '%s/tasks?workflow_id=%s&page_num=1&page_size=10'\n", baseURL, url.QueryEscape(firstWorkflowID)))
+	sb.WriteString("```\n\n")
 	sb.WriteString("### Create Task\n\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("curl -X POST '%s/tasks' \\\n", baseURL))
@@ -323,6 +376,7 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 		"description":           "Created by BrowserFlow exported Skill",
 		"workflow_id":           firstWorkflowID,
 		"client_ip":             "",
+		"node_id":               "",
 		"cron_expression":       "",
 		"params":                firstVariables,
 		"enabled":               true,
@@ -336,6 +390,7 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
 		"trigger_type": "skill",
 		"client_ip":    "",
+		"node_id":      "",
 		"params":       firstVariables,
 	}))))
 	sb.WriteString("```\n\n")
@@ -346,6 +401,7 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
 		"trigger_type": "skill",
 		"client_ip":    "",
+		"node_id":      "",
 		"params":       firstVariables,
 		"wait_result":  true,
 		"timeout":      300,
@@ -361,6 +417,14 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("curl '%s/task-records?workflow_id=%s&page_num=1&page_size=10'\n", baseURL, url.QueryEscape(firstWorkflowID)))
 	sb.WriteString("```\n\n")
+	sb.WriteString("### Query Task Record Detail\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl '%s/task-records/{record_id}'\n", baseURL))
+	sb.WriteString("```\n\n")
+	sb.WriteString("### Download Task Record File\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString(fmt.Sprintf("curl -O '%s/task-records/files/{file_id}/download'\n", baseURL))
+	sb.WriteString("```\n\n")
 	sb.WriteString("## Available Workflows\n\n")
 	for index, workflow := range workflows {
 		appendServerWorkflowSkillSection(&sb, index+1, workflow, baseURL)
@@ -368,8 +432,8 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("## Usage Notes\n\n")
 	sb.WriteString("- These workflows come from the BrowserFlow server database, not from the currently open browser-agent page.\n")
 	sb.WriteString("- Prefer creating reusable tasks for repeated use, then execute those task IDs from the skill.\n")
-	sb.WriteString("- Leave `client_ip` empty when any online client that owns the workflow may execute it.\n")
-	sb.WriteString("- Set `client_ip` only when the user explicitly wants a specific client.\n")
+	sb.WriteString("- Leave both `client_ip` and `node_id` empty when any online node that owns the workflow may execute it.\n")
+	sb.WriteString("- Set both `client_ip` and `node_id` only when the user explicitly wants a specific execution node.\n")
 	sb.WriteString("- A successful execute response means the server accepted and dispatched the task. Use task records to inspect final status and returned data.\n")
 	return sb.String()
 }
@@ -392,6 +456,12 @@ func appendServerWorkflowSkillSection(sb *strings.Builder, index int, workflow m
 	}
 	if automaID := firstAgentSkillString(workflow, "automa_id"); automaID != "" && automaID != workflowID {
 		sb.WriteString(fmt.Sprintf("- Automa ID: `%s`\n", inlineCode(automaID)))
+	}
+	if sourceIP := firstAgentSkillString(workflow, "source_ip"); sourceIP != "" {
+		sb.WriteString(fmt.Sprintf("- Last Sync Client IP: `%s`\n", inlineCode(sourceIP)))
+	}
+	if sourceNodeID := firstAgentSkillString(workflow, "source_node_id"); sourceNodeID != "" {
+		sb.WriteString(fmt.Sprintf("- Last Sync Node ID: `%s`\n", inlineCode(sourceNodeID)))
 	}
 	sb.WriteString(fmt.Sprintf("- Description: %s\n", markdownLine(defaultText(firstAgentSkillString(workflow, "description", "automa_description"), "-"))))
 	sb.WriteString(fmt.Sprintf("- Status: %s\n", agentWorkflowStatus(workflow)))
@@ -445,6 +515,7 @@ func appendServerWorkflowTaskExample(sb *strings.Builder, baseURL string, workfl
 		"name":                  "Skill task for " + workflowID,
 		"workflow_id":           workflowID,
 		"client_ip":             "",
+		"node_id":               "",
 		"cron_expression":       "",
 		"params":                variables,
 		"enabled":               true,
@@ -780,7 +851,7 @@ func formatAgentSkillDefaultValue(value any) string {
 
 // compactJSON marshals single-line json 序列化单行 JSON
 func compactJSON(value any) string {
-	data, err := json.Marshal(value)
+	data, err := json.Marshal(normalizeSkillJSONValue(value))
 	if err != nil {
 		return "{}"
 	}
@@ -811,8 +882,20 @@ func agentSkillBaseURL(host string, tls bool) string {
 	return fmt.Sprintf("%s://%s/api/v1", scheme, host)
 }
 
+func agentSkillBaseURLFromFrontendURL(frontendURL string) string {
+	frontendURL = strings.TrimRight(strings.TrimSpace(frontendURL), "/")
+	if frontendURL == "" {
+		return ""
+	}
+	if strings.HasSuffix(frontendURL, "/api/v1") {
+		return frontendURL
+	}
+	return frontendURL + "/api/v1"
+}
+
 // markdownLine keeps text on one markdown line 保持 Markdown 单行文本
 func markdownLine(value string) string {
+	value = normalizeSkillText(value)
 	return strings.NewReplacer("\r", " ", "\n", " ").Replace(strings.TrimSpace(value))
 }
 
@@ -827,4 +910,97 @@ func defaultText(value string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func normalizeSkillJSONValue(value any) any {
+	switch item := value.(type) {
+	case string:
+		return normalizeSkillText(item)
+	case map[string]any:
+		result := make(map[string]any, len(item))
+		for key, value := range item {
+			result[normalizeSkillText(key)] = normalizeSkillJSONValue(value)
+		}
+		return result
+	case []map[string]any:
+		result := make([]map[string]any, 0, len(item))
+		for _, value := range item {
+			normalized, _ := normalizeSkillJSONValue(value).(map[string]any)
+			result = append(result, normalized)
+		}
+		return result
+	case []any:
+		result := make([]any, 0, len(item))
+		for _, value := range item {
+			result = append(result, normalizeSkillJSONValue(value))
+		}
+		return result
+	default:
+		return value
+	}
+}
+
+func normalizeSkillText(value string) string {
+	if strings.TrimSpace(value) == "" || skillMojibakeScore(value) == 0 {
+		return value
+	}
+
+	best := value
+	bestScore := skillMojibakeScore(value)
+	for _, candidate := range []string{
+		repairGB18030Mojibake(value),
+		repairLatin1Mojibake(value),
+	} {
+		if candidate == "" || candidate == value || !utf8.ValidString(candidate) {
+			continue
+		}
+		if score := skillMojibakeScore(candidate); score < bestScore {
+			best = candidate
+			bestScore = score
+		}
+	}
+	return best
+}
+
+func repairGB18030Mojibake(value string) string {
+	data, err := simplifiedchinese.GB18030.NewEncoder().Bytes([]byte(value))
+	if err != nil || !utf8.Valid(data) {
+		return ""
+	}
+	return string(data)
+}
+
+func repairLatin1Mojibake(value string) string {
+	data := make([]byte, 0, len(value))
+	for _, item := range value {
+		if item > 255 {
+			return ""
+		}
+		data = append(data, byte(item))
+	}
+	if !utf8.Valid(data) {
+		return ""
+	}
+	return string(data)
+}
+
+func skillMojibakeScore(value string) int {
+	score := 0
+	for _, item := range value {
+		switch {
+		case item == utf8.RuneError:
+			score += 4
+		case item >= '\uE000' && item <= '\uF8FF':
+			score += 4
+		case strings.ContainsRune("ÃÂ¤¥€™œš", item):
+			score += 3
+		}
+	}
+
+	for _, marker := range []string{"鏅", "澶", "鍗", "妫", "閿", "绱", "弬", "繚", "畾", "屾", "", "", ""} {
+		if strings.Contains(value, marker) {
+			score += 2
+		}
+	}
+	return score
 }

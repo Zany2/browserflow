@@ -15,7 +15,7 @@
         <template v-if="backendAvailable && isServerMode">
           <span class="status-note">将客户端地址发给执行电脑打开</span>
           <div class="client-link-row">
-            <a class="client-link" :href="clientAgentUrl" target="_blank" rel="noreferrer">
+            <a class="client-link" :href="clientAgentOpenUrl" target="_blank" rel="noreferrer">
               {{ clientAgentUrl }}
             </a>
             <el-button link type="primary" @click="copyClientAgentUrl">复制</el-button>
@@ -234,6 +234,11 @@ const clientAgentUrl = computed(() => {
   if (typeof window === 'undefined') return '#/client-agent'
 
   return `${window.location.origin}${window.location.pathname}#/client-agent`
+})
+
+// clientAgentOpenUrl opens a local manual node from the current browser 首页手动打开时使用 node-0
+const clientAgentOpenUrl = computed(() => {
+  return `${clientAgentUrl.value}?node_id=node-0`
 })
 
 onMounted(async () => {

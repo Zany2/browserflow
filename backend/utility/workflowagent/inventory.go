@@ -37,9 +37,21 @@ func RefreshClientInventory(ctx context.Context, clientIP string, timeout time.D
 	state.SetPendingCommand(commandID, resultCh)
 
 	// Send forced inventory refresh command. 下发强制刷新清单命令
-	if sent := websockets.SendClientMessage(clientIP, &model.WSResponse{
+	node, ok, nodeErr := workflowcache.GetOnlineNode(ctx, clientIP)
+	if nodeErr != nil {
+		state.RemovePendingCommand(commandID)
+		return nodeErr
+	}
+	if !ok {
+		node.NodeID = clientIP
+		node.ClientIP = clientIP
+	}
+	if sent := websockets.SendNodeMessage(node.NodeID, node.ClientIP, &model.WSResponse{
 		Type:      model.WSMessageTypeAgentCommand,
-		ClientIP:  clientIP,
+		ClientIP:  node.ClientIP,
+		MachineID: node.MachineID,
+		NodeID:    node.NodeID,
+		NodeName:  node.NodeName,
 		CommandID: commandID,
 		Command:   workflowInventoryRefreshCommand,
 		Payload: map[string]any{
