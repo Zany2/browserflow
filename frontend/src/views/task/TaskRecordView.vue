@@ -17,6 +17,11 @@
             <el-input v-model="recordFilters.workflow_name" clearable placeholder="自定义工作流名称" />
           </div>
 
+          <div class="filter-item filter-item--execute-time">
+            <span class="filter-label">执行时间</span>
+            <AppTimeRangeFilter v-model="recordFilters.execute_time_range" />
+          </div>
+
           <div class="filter-item filter-item--client">
             <span class="filter-label">客户端 IP</span>
             <el-select
@@ -54,11 +59,6 @@
             </el-select>
           </div>
 
-          <div class="filter-item filter-item--execute-time">
-            <span class="filter-label">执行时间</span>
-            <AppTimeRangeFilter v-model="recordFilters.execute_time_range" />
-          </div>
-
           <div class="filter-item filter-item--status">
             <span class="filter-label">状态</span>
             <el-select v-model="recordFilters.status" clearable placeholder="全部">
@@ -71,14 +71,14 @@
               <el-option label="已取消" value="cancelled" />
             </el-select>
           </div>
-        </div>
 
-        <div class="record-filter-actions">
-          <el-button type="danger" :disabled="selectedRecordIds.length === 0" @click="handleBatchDeleteRecords">
-            删除选中
-          </el-button>
-          <el-button @click="resetRecordFilters">重置</el-button>
-          <AppSelectionSummary :count="selectedRecordIds.length" unit="记录" />
+          <div class="record-filter-actions">
+            <el-button type="danger" :disabled="selectedRecordIds.length === 0" @click="handleBatchDeleteRecords">
+              删除选中
+            </el-button>
+            <el-button @click="resetRecordFilters">重置</el-button>
+            <AppSelectionSummary :count="selectedRecordIds.length" unit="记录" />
+          </div>
         </div>
       </div>
 
@@ -545,9 +545,10 @@ function formatDate(value) {
 .record-filter-fields {
   display: grid;
   grid-template-columns:
-    minmax(220px, 1fr)
-    minmax(240px, 1.05fr)
-    minmax(360px, 1.35fr);
+    minmax(260px, 1.2fr)
+    minmax(300px, 1.3fr)
+    minmax(220px, 0.75fr)
+    minmax(300px, auto);
   gap: 12px 16px;
   min-width: 0;
 }
@@ -556,7 +557,6 @@ function formatDate(value) {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  align-self: flex-end;
   flex-wrap: nowrap;
   gap: 12px;
   min-width: max-content;
@@ -572,6 +572,36 @@ function formatDate(value) {
 .filter-item--node :deep(.el-select),
 .filter-item--execute-time :deep(.el-date-editor) {
   width: 100%;
+}
+
+.filter-item--task {
+  grid-column: 1;
+}
+
+.filter-item--workflow {
+  grid-column: 2;
+}
+
+.filter-item--execute-time {
+  grid-column: 3 / 5;
+}
+
+.filter-item--client {
+  grid-column: 1;
+}
+
+.filter-item--node {
+  grid-column: 2;
+}
+
+.filter-item--status {
+  grid-column: 3;
+  max-width: 180px;
+}
+
+.record-filter-actions {
+  grid-column: 4;
+  justify-self: end;
 }
 
 .filter-item :deep(.el-input),
@@ -660,6 +690,7 @@ function formatDate(value) {
   }
 
   .record-filter-actions {
+    grid-column: auto;
     justify-content: flex-end;
   }
 }

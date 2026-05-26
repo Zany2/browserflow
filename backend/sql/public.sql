@@ -12,7 +12,7 @@
  Target Server Version : 160010 (160010)
  File Encoding         : 65001
 
- Date: 25/05/2026 23:48:39
+ Date: 26/05/2026 17:31:56
 */
 
 
@@ -1050,7 +1050,7 @@ SELECT setval('"public"."automa_workflows_id_seq"', 10, true);
 -- ----------------------------
 ALTER SEQUENCE "public"."automa_workflows_id_seq1"
 OWNED BY "public"."automa_workflows"."id";
-SELECT setval('"public"."automa_workflows_id_seq1"', 1, false);
+SELECT setval('"public"."automa_workflows_id_seq1"', 3, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1064,7 +1064,7 @@ SELECT setval('"public"."clients_id_seq"', 3, true);
 -- ----------------------------
 ALTER SEQUENCE "public"."clients_id_seq1"
 OWNED BY "public"."clients"."id";
-SELECT setval('"public"."clients_id_seq1"', 1, false);
+SELECT setval('"public"."clients_id_seq1"', 3, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1204,7 +1204,7 @@ SELECT setval('"public"."task_records_id_seq"', 1, false);
 -- ----------------------------
 ALTER SEQUENCE "public"."task_records_id_seq1"
 OWNED BY "public"."task_records"."id";
-SELECT setval('"public"."task_records_id_seq1"', 1, false);
+SELECT setval('"public"."task_records_id_seq1"', 7, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1218,7 +1218,7 @@ SELECT setval('"public"."tasks_id_seq"', 1, false);
 -- ----------------------------
 ALTER SEQUENCE "public"."tasks_id_seq1"
 OWNED BY "public"."tasks"."id";
-SELECT setval('"public"."tasks_id_seq1"', 1, false);
+SELECT setval('"public"."tasks_id_seq1"', 4, true);
 
 -- ----------------------------
 -- Indexes structure for table automa_packages

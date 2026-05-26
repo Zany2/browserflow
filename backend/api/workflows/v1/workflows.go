@@ -17,6 +17,7 @@ type WorkflowListReq struct {
 	Source        int    `json:"source" in:"query" d:"0" v:"in:0,1,2#鏉ユ簮鍙兘鏄?銆?銆?" dc:"宸ヤ綔娴佹潵婧?`
 	SourceIP      string `json:"source_ip" in:"query" dc:"瀹㈡埛绔潵婧愬湴鍧€"`
 	SourceNodeID  string `json:"source_node_id" in:"query" dc:"鏉ユ簮鎵ц鑺傜偣 ID"`
+	SourceNodeIDs string `json:"source_node_ids" in:"query" dc:"source node id list"`
 	Syncable      int    `json:"syncable" in:"query" d:"0" v:"in:0,1,2#鍚屾绛涢€夊彧鑳芥槸0銆?銆?" dc:"鍚屾绛涢€?`
 }
 

@@ -242,8 +242,8 @@ func (s *windowState) handleCommand(id int) {
 func (s *windowState) detectChrome() {
 	path, err := chrome.Detect()
 	if err != nil {
-		s.setStatus("未检测到 Chrome，请点击“浏览...”手动选择 chrome.exe")
-		messageBox(s.hwnd, "未检测到 Chrome，请手动选择 chrome.exe。")
+		s.setStatus("未检测到 Chrome，请点击“浏览...”手动选择 Chrome 可执行文件")
+		messageBox(s.hwnd, "未检测到 Chrome，请手动选择 Chrome 可执行文件。")
 		return
 	}
 	setWindowText(s.chromeEdit, path)
@@ -251,8 +251,8 @@ func (s *windowState) detectChrome() {
 }
 
 func (s *windowState) browseChrome() {
-	path, ok := openFileDialog(s.hwnd, "选择 chrome.exe", []fileFilter{
-		{Name: "Chrome 浏览器", Pattern: "chrome.exe"},
+	path, ok := openFileDialog(s.hwnd, "选择 Chrome 可执行文件", []fileFilter{
+		{Name: "可执行文件", Pattern: "*.exe"},
 		{Name: "所有文件", Pattern: "*.*"},
 	}, "exe")
 	if !ok {
@@ -333,8 +333,8 @@ func (s *windowState) startNodes() {
 	if chromePath == "" {
 		chromePath, err = chrome.Detect()
 		if err != nil {
-			s.setStatus("未检测到 Chrome，请手动选择 chrome.exe")
-			messageBox(s.hwnd, "未检测到 Chrome，请手动选择 chrome.exe。")
+			s.setStatus("未检测到 Chrome，请手动选择 Chrome 可执行文件")
+			messageBox(s.hwnd, "未检测到 Chrome，请手动选择 Chrome 可执行文件。")
 			return
 		}
 		setWindowText(s.chromeEdit, chromePath)

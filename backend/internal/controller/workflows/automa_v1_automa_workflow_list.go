@@ -23,6 +23,11 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 	keyword := strings.ToLower(strings.TrimSpace(req.Keyword))
 	sourceIP := strings.TrimSpace(req.SourceIP)
 	sourceNodeID := strings.TrimSpace(req.SourceNodeID)
+	sourceNodeIDs := splitWorkflowListFilter(req.SourceNodeIDs)
+	sourceNodeIDSet := make(map[string]struct{}, len(sourceNodeIDs))
+	for _, nodeID := range sourceNodeIDs {
+		sourceNodeIDSet[nodeID] = struct{}{}
+	}
 	pageNum := req.PageNum
 	if pageNum <= 0 {
 		pageNum = 1
@@ -49,7 +54,9 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		if sourceIP != "" {
 			dbModel = dbModel.Where(columns.SourceIp, sourceIP)
 		}
-		if sourceNodeID != "" {
+		if len(sourceNodeIDs) > 0 {
+			dbModel = dbModel.WhereIn(columns.SourceNodeId, sourceNodeIDs)
+		} else if sourceNodeID != "" {
 			dbModel = dbModel.Where(columns.SourceNodeId, sourceNodeID)
 		}
 		if req.Syncable == 1 {
@@ -154,7 +161,11 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		if sourceIP != "" && record.SourceIP != sourceIP {
 			continue
 		}
-		if sourceNodeID != "" && record.SourceNodeID != sourceNodeID {
+		if len(sourceNodeIDSet) > 0 {
+			if _, ok := sourceNodeIDSet[record.SourceNodeID]; !ok {
+				continue
+			}
+		} else if sourceNodeID != "" && record.SourceNodeID != sourceNodeID {
 			continue
 		}
 		if req.Syncable == 1 && record.IsProtected {
@@ -208,4 +219,22 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		list = append(list, item)
 	}
 	return &v1.WorkflowListRes{List: list, Total: len(filtered)}, nil
+}
+
+func splitWorkflowListFilter(value string) []string {
+	parts := strings.Split(value, ",")
+	list := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		list = append(list, item)
+	}
+	return list
 }

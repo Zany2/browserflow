@@ -17,7 +17,20 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 
 	if keyword := strings.TrimSpace(req.Keyword); keyword != "" {
 		likeKeyword := "%" + keyword + "%"
-		gModel = gModel.Where("("+columns.Name+" LIKE ? OR "+columns.Description+" LIKE ?)", likeKeyword, likeKeyword)
+		workflowIDs, workflowErr := findWorkflowIDsByName(ctx, keyword)
+		if workflowErr != nil {
+			return nil, workflowErr
+		}
+		if len(workflowIDs) > 0 {
+			gModel = gModel.Where(
+				"("+columns.Name+" LIKE ? OR "+columns.Description+" LIKE ? OR "+columns.AutomaId+" IN (?))",
+				likeKeyword,
+				likeKeyword,
+				workflowIDs,
+			)
+		} else {
+			gModel = gModel.Where("("+columns.Name+" LIKE ? OR "+columns.Description+" LIKE ?)", likeKeyword, likeKeyword)
+		}
 	}
 	if workflowID := strings.TrimSpace(req.WorkflowID); workflowID != "" {
 		gModel = gModel.Where(columns.AutomaId, workflowID)
