@@ -10,5 +10,4 @@ import (
 
 func main() {
 	cmd.Main.Run(gctx.GetInitCtx())
-
 }
