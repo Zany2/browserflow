@@ -40,14 +40,18 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 		}
 		gModel = gModel.WhereIn(columns.WorkflowId, workflowIDs)
 	}
-	if clientIP, resolveErr := resolveClientIP(ctx, req.ClientID, req.ClientIP); resolveErr != nil {
+	if clientIPs := splitListFilter(req.ClientIPs); len(clientIPs) > 0 {
+		gModel = gModel.WhereIn(columns.ClientIp, clientIPs)
+	} else if clientIP, resolveErr := resolveClientIP(ctx, req.ClientID, req.ClientIP); resolveErr != nil {
 		return nil, resolveErr
 	} else if clientIP != "" {
 		gModel = gModel.Where(columns.ClientIp, clientIP)
 	} else if clientID := strings.TrimSpace(req.ClientID); clientID != "" {
 		gModel = gModel.Where(columns.ClientIp, clientID)
 	}
-	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
+	if nodeIDs := splitListFilter(req.NodeIDs); len(nodeIDs) > 0 {
+		gModel = gModel.WhereIn(columns.NodeId, nodeIDs)
+	} else if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
 		gModel = gModel.Where(columns.NodeId, nodeID)
 	}
 	if status := strings.TrimSpace(req.Status); status != "" {
@@ -97,4 +101,22 @@ func (c *ControllerV1) TaskRecordList(ctx context.Context, req *v1.TaskRecordLis
 	}
 
 	return &v1.TaskRecordListRes{List: list, Total: total}, nil
+}
+
+func splitListFilter(value string) []string {
+	parts := strings.Split(value, ",")
+	list := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		list = append(list, item)
+	}
+	return list
 }

@@ -50,29 +50,29 @@
         @selection-change="handleTaskSelectionChange"
       >
         <el-table-column type="selection" width="40" reserve-selection />
-        <el-table-column prop="name" label="任务名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="description" label="任务说明" min-width="180" show-overflow-tooltip />
-        <el-table-column label="自定义工作流名称" min-width="160" show-overflow-tooltip>
+        <el-table-column prop="name" label="任务名称" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="description" label="任务说明" min-width="110" show-overflow-tooltip />
+        <el-table-column label="自定义工作流名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.workflow_name || row.workflow_id || '' }}
           </template>
         </el-table-column>
-        <el-table-column label="执行客户端 IP" min-width="140" show-overflow-tooltip>
+        <el-table-column label="执行客户端 IP" min-width="105" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getTaskClientIp(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="执行节点 ID" min-width="150" show-overflow-tooltip>
+        <el-table-column label="执行节点 ID" min-width="105" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getTaskNodeId(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="执行计划" min-width="140" show-overflow-tooltip>
+        <el-table-column label="执行计划" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getScheduleText(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="86" align="center" class-name="quick-edit-column">
+        <el-table-column label="状态" width="76" align="center" class-name="quick-edit-column">
           <template #default="{ row }">
             <div class="quick-edit-cell">
               <el-switch
@@ -84,12 +84,12 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" width="170" class-name="nowrap-column">
+        <el-table-column label="创建时间" width="168" class-name="nowrap-column">
           <template #default="{ row }">
             {{ formatDate(row.created_at || row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="最近执行时间" width="170" class-name="nowrap-column">
+        <el-table-column label="最近执行时间" width="168" class-name="nowrap-column">
           <template #default="{ row }">
             {{ formatDate(row.last_executed_at || row.lastExecutedAt) }}
           </template>
@@ -732,6 +732,7 @@ async function checkSelectedClientWorkflow() {
     const candidates = normalizeList(data)
     if (seq !== clientWorkflowCheckSeq.value) return
     selectedClientHasWorkflow.value = candidates.some((item) => {
+      if (!candidateHasClientWorkflow(item)) return false
       if (targetNodeId) return getClientNodeId(item) === targetNodeId
       return getClientIp(item) === clientIp
     })
@@ -1391,6 +1392,12 @@ function findClientById(clientId) {
 
 function getWorkflowId(row) {
   return row?.automa_id || row?.workflow_id || row?.workflowId || row?.id || ''
+}
+
+function candidateHasClientWorkflow(row) {
+  const status = String(row?.sync_status || row?.syncStatus || '').trim()
+  if (status === 'client_missing') return false
+  return Boolean(row?.automa_id || row?.workflow_id || row?.workflowId || row?.id)
 }
 
 function getClientId(row) {

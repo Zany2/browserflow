@@ -163,6 +163,7 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		WorkflowId:  workflowID,
 		ClientIp:    clientIP,
 		NodeId:      nodeID,
+		AttemptNo:   0,
 		TriggerType: triggerType,
 		Status:      "pending",
 		ParamsJson:  paramsJSON,
@@ -230,6 +231,7 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 					ClientIp:  clientIP,
 					NodeId:    nodeID,
 					CommandId: commandID,
+					AttemptNo: attemptCount,
 				}).
 				Update(); err != nil {
 				_ = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID)
@@ -295,7 +297,11 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		if _, err = dao.TaskRecords.Ctx(ctx).
 			WherePri(recordID).
 			Where(dao.TaskRecords.Columns().Status, "pending").
-			Data(do.TaskRecords{Status: "queued"}).
+			Data(do.TaskRecords{
+				Status:       "queued",
+				AttemptNo:    attemptCount,
+				ErrorMessage: "waiting for an available execution node",
+			}).
 			Update(); err != nil {
 			return nil, err
 		}
@@ -303,6 +309,15 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		case <-time.After(sleepDuration):
 		case <-ctx.Done():
 			state.RemovePendingCommand(commandID)
+			_, _ = dao.TaskRecords.Ctx(ctx).
+				WherePri(recordID).
+				WhereIn(dao.TaskRecords.Columns().Status, []string{"pending", "queued"}).
+				Data(do.TaskRecords{
+					Status:       "failed",
+					ErrorMessage: "task dispatch was cancelled while waiting for an available execution node",
+					FinishedAt:   gtime.Now(),
+				}).
+				Update()
 			return nil, ctx.Err()
 		}
 	}
@@ -320,8 +335,9 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	_, err = dao.TaskRecords.Ctx(ctx).
 		WherePri(recordID).
 		Data(do.TaskRecords{
-			Status:    "queued",
-			StartedAt: gtime.Now(),
+			Status:       "queued",
+			ErrorMessage: "",
+			StartedAt:    gtime.Now(),
 		}).
 		Update()
 	if err != nil {

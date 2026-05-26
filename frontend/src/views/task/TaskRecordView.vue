@@ -27,8 +27,30 @@
               :loading="clientIpLoading"
               @visible-change="handleClientIpSelectVisible"
             >
-              <el-option label="全部" value="" />
               <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
+            </el-select>
+          </div>
+
+          <div class="filter-item filter-item--node">
+            <span class="filter-label">执行节点</span>
+            <el-select
+              v-model="recordFilters.node_ids"
+              clearable
+              filterable
+              multiple
+              collapse-tags
+              collapse-tags-tooltip
+              placeholder="请先选择客户端 IP"
+              :disabled="!recordFilters.client_ip"
+              :loading="clientIpLoading"
+              @visible-change="handleClientIpSelectVisible"
+            >
+              <el-option
+                v-for="node in filteredNodeOptions"
+                :key="node.node_id"
+                :label="node.label"
+                :value="node.node_id"
+              />
             </el-select>
           </div>
 
@@ -218,6 +240,7 @@ import { DEFAULT_PAGE_SIZES, normalizeList } from '@/utils/list'
 
 const records = ref([])
 const clientIpOptions = ref([])
+const nodeOptions = ref([])
 const loadingRecords = ref(false)
 const clientIpLoading = ref(false)
 const recordTableRef = ref(null)
@@ -237,11 +260,17 @@ const recordFilters = reactive({
   task_name: '',
   workflow_name: '',
   client_ip: '',
+  node_ids: [],
   execute_time_range: [],
   status: '',
 })
 
 const pagedRecords = computed(() => records.value)
+const filteredNodeOptions = computed(() => {
+  const selectedClientIp = recordFilters.client_ip
+  if (!selectedClientIp) return []
+  return nodeOptions.value.filter((node) => node.client_ip === selectedClientIp)
+})
 const {
   selectedKeys: selectedRecordIds,
   handleSelectionChange: handleRecordSelectionChange,
@@ -262,9 +291,14 @@ watch(() => [recordFilters.task_name, recordFilters.workflow_name], () => {
   scheduleFilterSearch()
 })
 
-watch(() => [recordFilters.client_ip, recordFilters.execute_time_range, recordFilters.status], () => {
+watch(() => [recordFilters.client_ip, recordFilters.node_ids, recordFilters.execute_time_range, recordFilters.status], () => {
   clearFilterSearchTimer()
   reloadFirstRecordPage()
+}, { deep: true })
+
+watch(() => recordFilters.client_ip, () => {
+  const validNodeIds = new Set(filteredNodeOptions.value.map((node) => node.node_id))
+  recordFilters.node_ids = recordFilters.node_ids.filter((nodeId) => validNodeIds.has(nodeId))
 })
 
 watch(recordPage, () => {
@@ -287,6 +321,7 @@ async function loadRecords() {
       task_name: recordFilters.task_name.trim(),
       workflow_name: recordFilters.workflow_name.trim(),
       client_ip: recordFilters.client_ip.trim(),
+      node_ids: recordFilters.node_ids,
       start_time: startTime,
       end_time: endTime,
       status: recordFilters.status.trim(),
@@ -306,10 +341,22 @@ async function loadClientIpOptions() {
   clientIpLoading.value = true
   try {
     const data = await listClients()
-    clientIpOptions.value = normalizeList(data, 'clients')
+    const clients = normalizeList(data, 'clients')
+    clientIpOptions.value = clients
       .map(getClientIp)
       .filter(Boolean)
       .filter((clientIp, index, list) => list.indexOf(clientIp) === index)
+    nodeOptions.value = clients
+      .map((client) => {
+        const clientIp = getClientIp(client)
+        const nodeId = getClientNodeId(client)
+        return {
+          client_ip: clientIp,
+          node_id: nodeId,
+          label: [clientIp, getClientNodeName(client) || nodeId].filter(Boolean).join(' / '),
+        }
+      })
+      .filter((node) => node.client_ip && node.node_id)
   } finally {
     clientIpLoading.value = false
   }
@@ -405,6 +452,7 @@ function resetRecordFilters() {
   recordFilters.task_name = ''
   recordFilters.workflow_name = ''
   recordFilters.client_ip = ''
+  recordFilters.node_ids = []
   recordFilters.execute_time_range = []
   recordFilters.status = ''
 }
@@ -418,6 +466,14 @@ function getExecuteTimeRange() {
 
 function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
+}
+
+function getClientNodeId(row) {
+  return row?.node_id || row?.nodeId || ''
+}
+
+function getClientNodeName(row) {
+  return row?.node_name || row?.nodeName || ''
 }
 
 function getRecordNodeText(row) {
@@ -480,30 +536,27 @@ function formatDate(value) {
 
 <style scoped lang="scss">
 .record-filters {
-  align-items: center;
-  flex-wrap: nowrap;
-  justify-content: space-between;
-  overflow-x: auto;
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 12px 16px;
 }
 
 .record-filter-fields {
   display: grid;
-  flex: 1 1 auto;
   grid-template-columns:
-    minmax(150px, 0.8fr)
-    minmax(210px, 1fr)
-    minmax(160px, 0.85fr)
-    minmax(330px, 1.55fr)
-    minmax(120px, 0.55fr);
+    minmax(220px, 1fr)
+    minmax(240px, 1.05fr)
+    minmax(360px, 1.35fr);
   gap: 12px 16px;
-  min-width: 970px;
+  min-width: 0;
 }
 
 .record-filter-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  flex-shrink: 0;
+  align-self: flex-end;
   flex-wrap: nowrap;
   gap: 12px;
   min-width: max-content;
@@ -516,6 +569,7 @@ function formatDate(value) {
 }
 
 .filter-item--client :deep(.el-select),
+.filter-item--node :deep(.el-select),
 .filter-item--execute-time :deep(.el-date-editor) {
   width: 100%;
 }
@@ -599,26 +653,10 @@ function formatDate(value) {
 }
 
 @media (max-width: 1280px) {
-  .record-filters {
-    flex-wrap: nowrap;
-  }
-
   .record-filter-fields {
     grid-template-columns:
-      minmax(150px, 0.8fr)
-      minmax(210px, 1fr)
-      minmax(160px, 0.85fr)
-      minmax(330px, 1.55fr)
-      minmax(120px, 0.55fr);
-    min-width: 970px;
-  }
-
-  .filter-item--task,
-  .filter-item--workflow,
-  .filter-item--client,
-  .filter-item--execute-time,
-  .filter-item--status {
-    grid-column: auto;
+      minmax(220px, 1fr)
+      minmax(260px, 1fr);
   }
 
   .record-filter-actions {
@@ -642,9 +680,15 @@ function formatDate(value) {
     width: 100%;
   }
 
+  .record-filter-actions {
+    align-self: stretch;
+    min-width: 0;
+  }
+
   .filter-item--task,
   .filter-item--workflow,
   .filter-item--client,
+  .filter-item--node,
   .filter-item--execute-time,
   .filter-item--status {
     grid-column: auto;

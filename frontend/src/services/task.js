@@ -54,7 +54,7 @@ export function executeTask(id, data) {
 export function listTaskRecords(params = {}) {
   return request({
     url: '/task-records',
-    params,
+    params: normalizeTaskRecordListParams(params),
     showSuccessMessage: false,
   })
 }
@@ -77,4 +77,22 @@ export function deleteTaskRecords(ids = []) {
 
 export function getTaskRecordFileDownloadUrl(id) {
   return `${API_BASE_URL}/task-records/files/${encodeURIComponent(id)}/download`
+}
+
+function normalizeTaskRecordListParams(params = {}) {
+  return {
+    ...params,
+    client_ips: normalizeMultiValue(params.client_ips),
+    node_ids: normalizeMultiValue(params.node_ids),
+  }
+}
+
+function normalizeMultiValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .join(',')
+  }
+  return String(value || '').trim()
 }

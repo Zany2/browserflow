@@ -101,7 +101,7 @@ func (l Launcher) Start() ([]Node, error) {
 			return nil, err
 		}
 		l.writeLog("node=%s started pid=%d profile=%q url=%q args=%s", nodeID, cmd.Process.Pid, profileDir, agentURL, quoteArgs(args))
-		if hasExtension {
+		if hasExtension && strings.EqualFold(strings.TrimSpace(os.Getenv("BROWSERFLOW_WORKER_CDP_LOAD_AUTOMA")), "1") {
 			if err = loadExtensionAndNavigate(profileDir, extensionDir, agentURL, l.writeLog); err != nil {
 				l.writeLog("node=%s CDP load Automa skipped error=%v", nodeID, err)
 			}

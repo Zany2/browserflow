@@ -142,6 +142,7 @@ export function listAutomaSyncCandidatesByWorkflow(automaId, params = {}) {
       ...params,
       mode: 'workflow',
       automa_id: automaId,
+      source_ip: sourceIp,
       source_node_id: normalizeSourceNodeId(sourceIp, params.source_node_id),
     },
     showSuccessMessage: false,
