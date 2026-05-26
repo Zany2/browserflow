@@ -8,296 +8,289 @@ import (
 	"github.com/gogf/gf/v2/os/gtime"
 )
 
-// WorkflowListReq 获取工作流列表
 type WorkflowListReq struct {
-	g.Meta `path:"/" method:"get" tags:"工作流" summary:"获取工作流列表"`
+	g.Meta `path:"/" method:"get" tags:"宸ヤ綔娴? summary:"鑾峰彇宸ヤ綔娴佸垪琛?`
 	rr.CommonPageReq
 	rr.CommonTimeReq
-	Keyword       string `json:"keyword" in:"query" dc:"关键字"`
-	CustomKeyword string `json:"custom_keyword" in:"query" dc:"自定义工作流名称、描述关键字"`
-	Source        int    `json:"source" in:"query" d:"0" v:"in:0,1,2#来源只能是0、1、2" dc:"工作流来源"`
-	SourceIP      string `json:"source_ip" in:"query" dc:"客户端来源地址"`
-	Syncable      int    `json:"syncable" in:"query" d:"0" v:"in:0,1,2#同步筛选只能是0、1、2" dc:"同步筛选"`
+	Keyword       string `json:"keyword" in:"query" dc:"鍏抽敭瀛?`
+	CustomKeyword string `json:"custom_keyword" in:"query" dc:"鑷畾涔夊伐浣滄祦鍚嶇О銆佹弿杩板叧閿瓧"`
+	Source        int    `json:"source" in:"query" d:"0" v:"in:0,1,2#鏉ユ簮鍙兘鏄?銆?銆?" dc:"宸ヤ綔娴佹潵婧?`
+	SourceIP      string `json:"source_ip" in:"query" dc:"瀹㈡埛绔潵婧愬湴鍧€"`
+	SourceNodeID  string `json:"source_node_id" in:"query" dc:"鏉ユ簮鎵ц鑺傜偣 ID"`
+	Syncable      int    `json:"syncable" in:"query" d:"0" v:"in:0,1,2#鍚屾绛涢€夊彧鑳芥槸0銆?銆?" dc:"鍚屾绛涢€?`
 }
 
-// WorkflowListResModel 工作流列表项
 type WorkflowListResModel struct {
-	Id                int64       `json:"id" dc:"服务端主键"`
-	AutomaId          string      `json:"automa_id" dc:"Automa 原始工作流标识"`
-	Name              string      `json:"name" dc:"工作流名称"`
-	Description       string      `json:"description" dc:"工作流描述"`
-	AutomaName        string      `json:"automa_name" dc:"Automa 工作流原始名称"`
-	AutomaDescription string      `json:"automa_description" dc:"Automa 工作流原始描述"`
-	Source            string      `json:"source" dc:"工作流来源"`
-	SourceIp          string      `json:"source_ip" dc:"来源客户端地址"`
-	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 原始创建时间"`
-	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 原始更新时间"`
-	IsDisabled        bool        `json:"is_disabled" dc:"是否禁用"`
-	IsProtected       bool        `json:"is_protected" dc:"是否受保护"`
-	NodeCount         int         `json:"node_count" dc:"节点数量"`
-	EdgeCount         int         `json:"edge_count" dc:"连线数量"`
-	ContentHash       string      `json:"content_hash" dc:"内容哈希"`
-	Revision          int         `json:"revision" dc:"版本号"`
-	CreatedAt         *gtime.Time `json:"created_at" dc:"服务端创建时间"`
-	UpdatedAt         *gtime.Time `json:"updated_at" dc:"服务端更新时间"`
+	Id                int64       `json:"id" dc:"鏈嶅姟绔富閿?`
+	AutomaId          string      `json:"automa_id" dc:"Automa 鍘熷宸ヤ綔娴佹爣璇?`
+	Name              string      `json:"name" dc:"宸ヤ綔娴佸悕绉?`
+	Description       string      `json:"description" dc:"宸ヤ綔娴佹弿杩?`
+	AutomaName        string      `json:"automa_name" dc:"Automa 宸ヤ綔娴佸師濮嬪悕绉?`
+	AutomaDescription string      `json:"automa_description" dc:"Automa 宸ヤ綔娴佸師濮嬫弿杩?`
+	Source            string      `json:"source" dc:"宸ヤ綔娴佹潵婧?`
+	SourceIp          string      `json:"source_ip" dc:"鏉ユ簮瀹㈡埛绔湴鍧€"`
+	SourceNodeId      string      `json:"source_node_id" dc:"鏉ユ簮鎵ц鑺傜偣 ID"`
+	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 鍘熷鍒涘缓鏃堕棿"`
+	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 鍘熷鏇存柊鏃堕棿"`
+	IsDisabled        bool        `json:"is_disabled" dc:"鏄惁绂佺敤"`
+	IsProtected       bool        `json:"is_protected" dc:"鏄惁鍙椾繚鎶?`
+	NodeCount         int         `json:"node_count" dc:"鑺傜偣鏁伴噺"`
+	EdgeCount         int         `json:"edge_count" dc:"杩炵嚎鏁伴噺"`
+	ContentHash       string      `json:"content_hash" dc:"鍐呭鍝堝笇"`
+	Revision          int         `json:"revision" dc:"鐗堟湰鍙?`
+	CreatedAt         *gtime.Time `json:"created_at" dc:"鏈嶅姟绔垱寤烘椂闂?`
+	UpdatedAt         *gtime.Time `json:"updated_at" dc:"鏈嶅姟绔洿鏂版椂闂?`
 }
 
-// WorkflowListRes 工作流列表响应
 type WorkflowListRes struct {
-	List  []WorkflowListResModel `json:"list" dc:"工作流列表"`
-	Total int                    `json:"total" dc:"工作流总数"`
+	List  []WorkflowListResModel `json:"list" dc:"宸ヤ綔娴佸垪琛?`
+	Total int                    `json:"total" dc:"宸ヤ綔娴佹€绘暟"`
 }
 
-// WorkflowDetailReq 获取工作流详情
 type WorkflowDetailReq struct {
-	g.Meta `path:"/{id}" method:"get" tags:"工作流" summary:"获取工作流详情"`
-	ID     string `json:"id" in:"path" v:"required#ID不能为空" dc:"工作流标识"`
+	g.Meta `path:"/{id}" method:"get" tags:"宸ヤ綔娴? summary:"鑾峰彇宸ヤ綔娴佽鎯?`
+	ID     string `json:"id" in:"path" v:"required#ID涓嶈兘涓虹┖" dc:"宸ヤ綔娴佹爣璇?`
 }
 
-// WorkflowDetailRes 工作流详情响应
 type WorkflowDetailRes struct {
-	Id                int64       `json:"id" dc:"服务端主键"`
-	AutomaId          string      `json:"automa_id" dc:"Automa 原始工作流标识"`
-	Name              string      `json:"name" dc:"工作流名称"`
-	Description       string      `json:"description" dc:"工作流描述"`
-	AutomaName        string      `json:"automa_name" dc:"Automa 工作流原始名称"`
-	AutomaDescription string      `json:"automa_description" dc:"Automa 工作流原始描述"`
-	Source            string      `json:"source" dc:"工作流来源"`
-	SourceIp          string      `json:"source_ip" dc:"来源客户端地址"`
-	SourceUserAgent   string      `json:"source_user_agent" dc:"来源用户代理"`
-	AutomaVersion     string      `json:"automa_version" dc:"Automa 版本"`
-	ExtVersion        string      `json:"ext_version" dc:"扩展版本"`
-	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 原始创建时间"`
-	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 原始更新时间"`
-	IsDisabled        bool        `json:"is_disabled" dc:"是否禁用"`
-	IsProtected       bool        `json:"is_protected" dc:"是否受保护"`
-	NodeCount         int         `json:"node_count" dc:"节点数量"`
-	EdgeCount         int         `json:"edge_count" dc:"连线数量"`
-	RawJson           string      `json:"raw_json" dc:"原始 JSON"`
-	NormalizedJson    string      `json:"normalized_json" dc:"规范化 JSON"`
-	ContentHash       string      `json:"content_hash" dc:"内容哈希"`
-	Revision          int         `json:"revision" dc:"版本号"`
-	FirstSyncedAt     *gtime.Time `json:"first_synced_at" dc:"首次同步时间"`
-	LastSyncedAt      *gtime.Time `json:"last_synced_at" dc:"最近同步时间"`
-	CreatedAt         *gtime.Time `json:"created_at" dc:"服务端创建时间"`
-	UpdatedAt         *gtime.Time `json:"updated_at" dc:"服务端更新时间"`
+	Id                int64       `json:"id" dc:"鏈嶅姟绔富閿?`
+	AutomaId          string      `json:"automa_id" dc:"Automa 鍘熷宸ヤ綔娴佹爣璇?`
+	Name              string      `json:"name" dc:"宸ヤ綔娴佸悕绉?`
+	Description       string      `json:"description" dc:"宸ヤ綔娴佹弿杩?`
+	AutomaName        string      `json:"automa_name" dc:"Automa 宸ヤ綔娴佸師濮嬪悕绉?`
+	AutomaDescription string      `json:"automa_description" dc:"Automa 宸ヤ綔娴佸師濮嬫弿杩?`
+	Source            string      `json:"source" dc:"宸ヤ綔娴佹潵婧?`
+	SourceIp          string      `json:"source_ip" dc:"鏉ユ簮瀹㈡埛绔湴鍧€"`
+	SourceNodeId      string      `json:"source_node_id" dc:"鏉ユ簮鎵ц鑺傜偣 ID"`
+	SourceUserAgent   string      `json:"source_user_agent" dc:"鏉ユ簮鐢ㄦ埛浠ｇ悊"`
+	AutomaVersion     string      `json:"automa_version" dc:"Automa 鐗堟湰"`
+	ExtVersion        string      `json:"ext_version" dc:"鎵╁睍鐗堟湰"`
+	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 鍘熷鍒涘缓鏃堕棿"`
+	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 鍘熷鏇存柊鏃堕棿"`
+	IsDisabled        bool        `json:"is_disabled" dc:"鏄惁绂佺敤"`
+	IsProtected       bool        `json:"is_protected" dc:"鏄惁鍙椾繚鎶?`
+	NodeCount         int         `json:"node_count" dc:"鑺傜偣鏁伴噺"`
+	EdgeCount         int         `json:"edge_count" dc:"杩炵嚎鏁伴噺"`
+	RawJson           string      `json:"raw_json" dc:"鍘熷 JSON"`
+	NormalizedJson    string      `json:"normalized_json" dc:"瑙勮寖鍖?JSON"`
+	ContentHash       string      `json:"content_hash" dc:"鍐呭鍝堝笇"`
+	Revision          int         `json:"revision" dc:"鐗堟湰鍙?`
+	FirstSyncedAt     *gtime.Time `json:"first_synced_at" dc:"棣栨鍚屾鏃堕棿"`
+	LastSyncedAt      *gtime.Time `json:"last_synced_at" dc:"鏈€杩戝悓姝ユ椂闂?`
+	CreatedAt         *gtime.Time `json:"created_at" dc:"鏈嶅姟绔垱寤烘椂闂?`
+	UpdatedAt         *gtime.Time `json:"updated_at" dc:"鏈嶅姟绔洿鏂版椂闂?`
 }
 
-// WorkflowCreateMeta 创建工作流元数据
 type WorkflowCreateMeta struct {
-	Name        string `json:"name" dc:"工作流名称"`
-	Description string `json:"description" dc:"工作流描述"`
-	Source      int    `json:"source" d:"1" v:"in:1,2#来源必须是1或2" dc:"工作流来源"`
-	IsProtected bool   `json:"is_protected" d:"false" dc:"是否受保护"`
+	Name        string `json:"name" dc:"宸ヤ綔娴佸悕绉?`
+	Description string `json:"description" dc:"宸ヤ綔娴佹弿杩?`
+	Source      int    `json:"source" d:"1" v:"in:1,2#鏉ユ簮蹇呴』鏄?鎴?" dc:"宸ヤ綔娴佹潵婧?`
+	IsProtected bool   `json:"is_protected" d:"false" dc:"鏄惁鍙椾繚鎶?`
 }
 
-// WorkflowCreateReq 创建工作流
 type WorkflowCreateReq struct {
-	g.Meta        `path:"/" method:"post" tags:"工作流" summary:"创建工作流" mime:"multipart/form-data"`
-	WorkflowFiles ghttp.UploadFiles `json:"workflow_files" type:"file" dc:"工作流 JSON 文件列表"`
-	WorkflowMetas string            `json:"workflow_metas" dc:"工作流元数据 JSON"`
+	g.Meta        `path:"/" method:"post" tags:"宸ヤ綔娴? summary:"鍒涘缓宸ヤ綔娴? mime:"multipart/form-data"`
+	WorkflowFiles ghttp.UploadFiles `json:"workflow_files" type:"file" dc:"宸ヤ綔娴?JSON 鏂囦欢鍒楄〃"`
+	WorkflowMetas string            `json:"workflow_metas" dc:"宸ヤ綔娴佸厓鏁版嵁 JSON"`
 }
 
-// WorkflowMutationStats 工作流变更统计
 type WorkflowMutationStats struct {
-	Submitted int `json:"submitted" dc:"提交数量"`
-	Created   int `json:"created" dc:"新增数量"`
-	Updated   int `json:"updated" dc:"更新数量"`
-	Unchanged int `json:"unchanged" dc:"未变化数量"`
+	Submitted int `json:"submitted" dc:"鎻愪氦鏁伴噺"`
+	Created   int `json:"created" dc:"鏂板鏁伴噺"`
+	Updated   int `json:"updated" dc:"鏇存柊鏁伴噺"`
+	Unchanged int `json:"unchanged" dc:"鏈彉鍖栨暟閲?`
 }
 
-// WorkflowCreateRes 工作流创建响应
 type WorkflowCreateRes struct {
 	WorkflowMutationStats
 }
 
-// WorkflowUpdateReq 更新工作流
 type WorkflowUpdateReq struct {
-	g.Meta      `path:"/{id}" method:"put" tags:"工作流" summary:"更新工作流"`
-	ID          int64  `json:"id" in:"path" v:"required#id不能为空" dc:"工作流标识"`
-	Name        string `json:"name" dc:"工作流名称"`
-	Description string `json:"description" dc:"工作流描述"`
-	Source      int    `json:"source" d:"0" v:"in:0,1,2#来源只能是0、1、2" dc:"工作流来源"`
-	IsProtected bool   `json:"is_protected" d:"false" dc:"是否受保护"`
-	Revision    int    `json:"revision" v:"required#版本号不能为空" dc:"版本号"`
+	g.Meta      `path:"/{id}" method:"put" tags:"宸ヤ綔娴? summary:"鏇存柊宸ヤ綔娴?`
+	ID          int64  `json:"id" in:"path" v:"required#id涓嶈兘涓虹┖" dc:"宸ヤ綔娴佹爣璇?`
+	Name        string `json:"name" dc:"宸ヤ綔娴佸悕绉?`
+	Description string `json:"description" dc:"宸ヤ綔娴佹弿杩?`
+	Source      int    `json:"source" d:"0" v:"in:0,1,2#鏉ユ簮鍙兘鏄?銆?銆?" dc:"宸ヤ綔娴佹潵婧?`
+	IsProtected bool   `json:"is_protected" d:"false" dc:"鏄惁鍙椾繚鎶?`
+	Revision    int    `json:"revision" v:"required#鐗堟湰鍙蜂笉鑳戒负绌? dc:"鐗堟湰鍙?`
 }
 
-// WorkflowUpdateRes 工作流更新响应
 type WorkflowUpdateRes struct{}
 
-// WorkflowProtectedReq 更新工作流保护状态
 type WorkflowProtectedReq struct {
-	g.Meta      `path:"/{id}/syncable" method:"put" tags:"工作流" summary:"更新工作流保护状态"`
-	ID          int64 `json:"id" in:"path" v:"required#id不能为空" dc:"工作流标识"`
-	IsProtected bool  `json:"is_protected" dc:"是否受保护"`
-	Revision    int   `json:"revision" v:"required#版本号不能为空" dc:"版本号"`
+	g.Meta      `path:"/{id}/syncable" method:"put" tags:"宸ヤ綔娴? summary:"鏇存柊宸ヤ綔娴佷繚鎶ょ姸鎬?`
+	ID          int64 `json:"id" in:"path" v:"required#id涓嶈兘涓虹┖" dc:"宸ヤ綔娴佹爣璇?`
+	IsProtected bool  `json:"is_protected" dc:"鏄惁鍙椾繚鎶?`
+	Revision    int   `json:"revision" v:"required#鐗堟湰鍙蜂笉鑳戒负绌? dc:"鐗堟湰鍙?`
 }
 
-// WorkflowProtectedRes 工作流保护响应
 type WorkflowProtectedRes struct{}
 
-// WorkflowBatchDeleteReq 批量删除工作流
 type WorkflowBatchDeleteReq struct {
-	g.Meta `path:"/" method:"delete" tags:"工作流" summary:"批量删除工作流"`
-	IDs    []string `json:"ids" v:"required|min-length:1#工作流id列表不能为空|至少选择一个工作流" dc:"工作流ID列表"`
+	g.Meta `path:"/" method:"delete" tags:"宸ヤ綔娴? summary:"鎵归噺鍒犻櫎宸ヤ綔娴?`
+	IDs    []string `json:"ids" v:"required|min-length:1#宸ヤ綔娴乮d鍒楄〃涓嶈兘涓虹┖|鑷冲皯閫夋嫨涓€涓伐浣滄祦" dc:"宸ヤ綔娴?ID 鍒楄〃"`
 }
 
-// WorkflowBatchDeleteRes 批量删除响应
 type WorkflowBatchDeleteRes struct{}
 
-// WorkflowImportFilesReq 导入工作流压缩包
 type WorkflowImportFilesReq struct {
-	g.Meta `path:"/import" method:"post" tags:"工作流" summary:"导入工作流压缩包" mime:"multipart/form-data"`
-	File   *ghttp.UploadFile `json:"file" type:"file" v:"required#ZIP压缩文件不能为空" dc:"工作流 ZIP 文件"`
+	g.Meta `path:"/import" method:"post" tags:"宸ヤ綔娴? summary:"瀵煎叆宸ヤ綔娴佸帇缂╁寘" mime:"multipart/form-data"`
+	File   *ghttp.UploadFile `json:"file" type:"file" v:"required#ZIP鍘嬬缉鏂囦欢涓嶈兘涓虹┖" dc:"宸ヤ綔娴?ZIP 鏂囦欢"`
 }
 
-// WorkflowImportFilesRes 工作流文件导入响应
 type WorkflowImportFilesRes struct {
 	WorkflowMutationStats
 }
 
-// WorkflowSyncCandidatesReq 获取可同步工作流
 type WorkflowSyncCandidatesReq struct {
-	g.Meta `path:"/sync-candidates" method:"get" tags:"工作流" summary:"获取可同步工作流"`
+	g.Meta `path:"/sync-candidates" method:"get" tags:"宸ヤ綔娴? summary:"鑾峰彇鍙悓姝ュ伐浣滄祦"`
 	rr.CommonPageReq
-	Mode     string `json:"mode" in:"query" d:"client" v:"in:client,workflow#查询维度只能是client或workflow" dc:"查询维度"`
-	SourceIP string `json:"source_ip" in:"query" dc:"客户端来源地址"`
-	AutomaID string `json:"automa_id" in:"query" dc:"Automa 工作流 ID"`
-	Keyword  string `json:"keyword,omitempty" in:"query" dc:"关键字"`
-	Refresh  bool   `json:"refresh" in:"query" d:"false" dc:"是否先刷新客户端工作流清单"`
+	Mode           string `json:"mode" in:"query" d:"client" v:"in:client,workflow#鏌ヨ缁村害鍙兘鏄痗lient鎴杦orkflow" dc:"鏌ヨ缁村害"`
+	SourceIP       string `json:"source_ip" in:"query" dc:"瀹㈡埛绔潵婧愬湴鍧€"`
+	SourceNodeID   string `json:"source_node_id" in:"query" dc:"鏉ユ簮鎵ц鑺傜偣 ID"`
+	AutomaID       string `json:"automa_id" in:"query" dc:"Automa 宸ヤ綔娴?ID"`
+	Keyword        string `json:"keyword,omitempty" in:"query" dc:"鍏抽敭瀛?`
+	SyncStatus     string `json:"sync_status,omitempty" in:"query" dc:"同步状态"`
+	WorkflowStatus string `json:"workflow_status,omitempty" in:"query" dc:"工作流状态"`
+	Refresh        bool   `json:"refresh" in:"query" d:"false" dc:"鏄惁鍏堝埛鏂板鎴风宸ヤ綔娴佹竻鍗?`
 }
 
-// WorkflowSyncCandidatesResModel 同步候选列表项
 type WorkflowSyncCandidatesResModel struct {
-	Id                string      `json:"id" dc:"客户端工作流标识"`
-	AutomaId          string      `json:"automa_id" dc:"Automa 工作流 ID"`
-	WorkflowId        string      `json:"workflow_id" dc:"工作流 ID"`
-	Name              string      `json:"name" dc:"工作流名称"`
-	Description       string      `json:"description" dc:"工作流描述"`
-	AutomaName        string      `json:"automa_name" dc:"Automa 工作流原始名称"`
-	AutomaDescription string      `json:"automa_description" dc:"Automa 工作流原始描述"`
-	Source            string      `json:"source" dc:"工作流来源"`
-	SourceIp          string      `json:"source_ip" dc:"来源地址"`
-	AutomaVersion     string      `json:"automa_version" dc:"Automa 版本"`
-	ExtVersion        string      `json:"ext_version" dc:"扩展版本"`
-	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 创建时间"`
-	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 更新时间"`
-	IsDisabled        bool        `json:"is_disabled" dc:"是否禁用"`
-	IsProtected       bool        `json:"is_protected" dc:"是否受保护"`
-	NodeCount         int         `json:"node_count" dc:"节点数量"`
-	EdgeCount         int         `json:"edge_count" dc:"连线数量"`
-	ContentHash       string      `json:"content_hash" dc:"内容哈希"`
-	Synced            bool        `json:"synced" dc:"是否已同步"`
-	HasUpdate         bool        `json:"has_update" dc:"是否有更新"`
-	SyncStatus        string      `json:"sync_status" dc:"同步状态"`
-	ServerId          int64       `json:"server_id" dc:"服务端主键"`
-	ServerName        string      `json:"server_name" dc:"服务端名称"`
-	ServerDesc        string      `json:"server_description" dc:"服务端描述"`
-	ServerAutomaName  string      `json:"server_automa_name" dc:"服务端 Automa 原始名称"`
-	ServerAutomaDesc  string      `json:"server_automa_description" dc:"服务端 Automa 原始描述"`
-	ServerRevision    int         `json:"server_revision" dc:"服务端版本"`
-	LastSyncedAt      *gtime.Time `json:"last_synced_at" dc:"最近同步时间"`
-	ServerUpdatedAt   *gtime.Time `json:"server_updated_at" dc:"服务端更新时间"`
-	Online            bool        `json:"online" dc:"是否在线"`
+	Id                string      `json:"id" dc:"瀹㈡埛绔伐浣滄祦鏍囪瘑"`
+	AutomaId          string      `json:"automa_id" dc:"Automa 宸ヤ綔娴?ID"`
+	WorkflowId        string      `json:"workflow_id" dc:"宸ヤ綔娴?ID"`
+	Name              string      `json:"name" dc:"宸ヤ綔娴佸悕绉?`
+	Description       string      `json:"description" dc:"宸ヤ綔娴佹弿杩?`
+	AutomaName        string      `json:"automa_name" dc:"Automa 宸ヤ綔娴佸師濮嬪悕绉?`
+	AutomaDescription string      `json:"automa_description" dc:"Automa 宸ヤ綔娴佸師濮嬫弿杩?`
+	Source            string      `json:"source" dc:"宸ヤ綔娴佹潵婧?`
+	SourceIp          string      `json:"source_ip" dc:"鏉ユ簮鍦板潃"`
+	MachineId         string      `json:"machine_id" dc:"鏈哄櫒 ID"`
+	NodeId            string      `json:"node_id" dc:"鎵ц鑺傜偣 ID"`
+	NodeName          string      `json:"node_name" dc:"鎵ц鑺傜偣鍚嶇О"`
+	AutomaVersion     string      `json:"automa_version" dc:"Automa 鐗堟湰"`
+	ExtVersion        string      `json:"ext_version" dc:"鎵╁睍鐗堟湰"`
+	CreatedAtAutoma   int64       `json:"created_at_automa" dc:"Automa 鍒涘缓鏃堕棿"`
+	UpdatedAtAutoma   int64       `json:"updated_at_automa" dc:"Automa 鏇存柊鏃堕棿"`
+	IsDisabled        bool        `json:"is_disabled" dc:"鏄惁绂佺敤"`
+	IsProtected       bool        `json:"is_protected" dc:"鏄惁鍙椾繚鎶?`
+	NodeCount         int         `json:"node_count" dc:"鑺傜偣鏁伴噺"`
+	EdgeCount         int         `json:"edge_count" dc:"杩炵嚎鏁伴噺"`
+	ContentHash       string      `json:"content_hash" dc:"鍐呭鍝堝笇"`
+	Synced            bool        `json:"synced" dc:"鏄惁宸插悓姝?`
+	HasUpdate         bool        `json:"has_update" dc:"鏄惁鏈夋洿鏂?`
+	SyncStatus        string      `json:"sync_status" dc:"鍚屾鐘舵€?`
+	ServerId          int64       `json:"server_id" dc:"鏈嶅姟绔富閿?`
+	ServerName        string      `json:"server_name" dc:"鏈嶅姟绔悕绉?`
+	ServerDesc        string      `json:"server_description" dc:"鏈嶅姟绔弿杩?`
+	ServerAutomaName  string      `json:"server_automa_name" dc:"鏈嶅姟绔?Automa 鍘熷鍚嶇О"`
+	ServerAutomaDesc  string      `json:"server_automa_description" dc:"鏈嶅姟绔?Automa 鍘熷鎻忚堪"`
+	ServerRevision    int         `json:"server_revision" dc:"鏈嶅姟绔増鏈?`
+	LastSyncedAt      *gtime.Time `json:"last_synced_at" dc:"鏈€杩戝悓姝ユ椂闂?`
+	ServerUpdatedAt   *gtime.Time `json:"server_updated_at" dc:"鏈嶅姟绔洿鏂版椂闂?`
+	Online            bool        `json:"online" dc:"鏄惁鍦ㄧ嚎"`
 }
 
-// WorkflowSyncCandidatesRes 同步候选响应
 type WorkflowSyncCandidatesRes struct {
-	List  []WorkflowSyncCandidatesResModel `json:"list" dc:"可同步工作流列表"`
-	Total int                              `json:"total" dc:"可同步工作流数量"`
+	List  []WorkflowSyncCandidatesResModel `json:"list" dc:"鍙悓姝ュ伐浣滄祦鍒楄〃"`
+	Total int                              `json:"total" dc:"鍙悓姝ュ伐浣滄祦鏁伴噺"`
 }
 
-// WorkflowSyncReq 从客户端同步工作流
 type WorkflowSyncReq struct {
-	g.Meta               `path:"/sync" method:"post" tags:"工作流" summary:"同步工作流"`
-	SourceIP             string          `json:"source_ip" v:"required#客户端ip不能为空" dc:"客户端来源地址"`
-	WorkflowIds          []string        `json:"workflow_ids" dc:"需要同步的工作流 ID 列表"`
-	WorkflowJsonDataList []model.JSONMap `json:"workflows" dc:"工作流 JSON 数据列表"`
+	g.Meta               `path:"/sync" method:"post" tags:"宸ヤ綔娴? summary:"鍚屾宸ヤ綔娴?`
+	SourceIP             string          `json:"source_ip" v:"required#瀹㈡埛绔痠p涓嶈兘涓虹┖" dc:"瀹㈡埛绔潵婧愬湴鍧€"`
+	SourceNodeID         string          `json:"source_node_id" dc:"鏉ユ簮鎵ц鑺傜偣 ID"`
+	WorkflowIds          []string        `json:"workflow_ids" dc:"闇€瑕佸悓姝ョ殑宸ヤ綔娴?ID 鍒楄〃"`
+	WorkflowJsonDataList []model.JSONMap `json:"workflows" dc:"宸ヤ綔娴?JSON 鏁版嵁鍒楄〃"`
 }
 
-// WorkflowSyncRes 同步响应
 type WorkflowSyncRes struct{}
 
-// WorkflowCacheReq 获取本地工作流快照
+type WorkflowClientMaintenanceReq struct {
+	g.Meta        `path:"/client-maintenance" method:"post" tags:"宸ヤ綔娴? summary:"缁存姢瀹㈡埛绔墽琛岃妭鐐瑰伐浣滄祦"`
+	SourceIP      string   `json:"source_ip" v:"required#瀹㈡埛绔?IP 涓嶈兘涓虹┖" dc:"瀹㈡埛绔潵婧愬湴鍧€"`
+	SourceNodeID  string   `json:"source_node_id" dc:"鎵ц鑺傜偣 ID"`
+	SourceNodeIDs []string `json:"source_node_ids" dc:"鎵ц鑺傜偣 ID 鍒楄〃"`
+	Action        string   `json:"action" v:"required|in:install,update,delete#鎿嶄綔涓嶈兘涓虹┖|鎿嶄綔鍙兘鏄?install銆乽pdate銆乨elete" dc:"缁存姢鍔ㄤ綔"`
+	WorkflowIds   []string `json:"workflow_ids" v:"required|min-length:1#宸ヤ綔娴佷笉鑳戒负绌簗鑷冲皯閫夋嫨涓€涓伐浣滄祦" dc:"宸ヤ綔娴?ID 鍒楄〃"`
+	Timeout       int      `json:"timeout" d:"20" dc:"绛夊緟瓒呮椂绉掓暟"`
+	Refresh       bool     `json:"refresh" d:"true" dc:"瀹屾垚鍚庢槸鍚﹀埛鏂拌妭鐐规竻鍗?`
+}
+
+type WorkflowClientMaintenanceRes struct {
+	Submitted   int      `json:"submitted" dc:"鎻愪氦鏁伴噺"`
+	Succeeded   int      `json:"succeeded" dc:"鎴愬姛鏁伴噺"`
+	Failed      int      `json:"failed" dc:"澶辫触鏁伴噺"`
+	WorkflowIds []string `json:"workflow_ids" dc:"宸ヤ綔娴?ID 鍒楄〃"`
+	Message     string   `json:"message" dc:"缁撴灉璇存槑"`
+}
+
 type WorkflowCacheReq struct {
-	g.Meta `path:"/cache" method:"get" tags:"工作流" summary:"获取本地工作流快照"`
+	g.Meta `path:"/cache" method:"get" tags:"宸ヤ綔娴? summary:"鑾峰彇鏈湴宸ヤ綔娴佸揩鐓?`
 }
 
-// WorkflowCacheRes 工作流快照响应
 type WorkflowCacheRes struct {
-	Snapshot *model.AutomaWorkflowSnapshot `json:"snapshot,omitempty" dc:"本地工作流快照"`
+	Snapshot *model.AutomaWorkflowSnapshot `json:"snapshot,omitempty" dc:"鏈湴宸ヤ綔娴佸揩鐓?`
 }
 
-// WorkflowAgentListReq reads workflows from browser agent 从浏览器执行端读取工作流
 type WorkflowAgentListReq struct {
-	g.Meta    `path:"/agent/workflows" method:"get" tags:"工作流" summary:"从浏览器执行端读取工作流"`
-	BrowserID string `json:"browser_id" in:"query" dc:"浏览器实例ID"`
+	g.Meta    `path:"/agent/workflows" method:"get" tags:"宸ヤ綔娴? summary:"浠庢祻瑙堝櫒鎵ц绔鍙栧伐浣滄祦"`
+	BrowserID string `json:"browser_id" in:"query" dc:"娴忚鍣ㄥ疄渚?ID"`
 }
 
-// WorkflowAgentListRes browser agent workflow list 浏览器执行端工作流列表
 type WorkflowAgentListRes struct {
-	BrowserID string           `json:"browser_id" dc:"浏览器实例ID"`
-	Workflows []map[string]any `json:"workflows" dc:"工作流列表"`
-	Total     int              `json:"total" dc:"工作流总数"`
+	BrowserID string           `json:"browser_id" dc:"娴忚鍣ㄥ疄渚?ID"`
+	Workflows []map[string]any `json:"workflows" dc:"宸ヤ綔娴佸垪琛?`
+	Total     int              `json:"total" dc:"宸ヤ綔娴佹€绘暟"`
 }
 
-// WorkflowAgentExportSkillReq exports browser agent workflows as Skill 导出浏览器执行端工作流为 Skill
 type WorkflowAgentExportSkillReq struct {
-	g.Meta      `path:"/agent/export/skill" method:"post" tags:"工作流" summary:"导出浏览器执行端工作流为 Skill"`
-	BrowserID   string   `json:"browser_id" dc:"浏览器实例ID"`
-	Scope       string   `json:"scope" d:"filtered" v:"in:selected,filtered,all#导出范围只能是selected、filtered或all" dc:"导出范围"`
-	WorkflowIDs []string `json:"workflow_ids" dc:"需要导出的工作流ID列表"`
+	g.Meta      `path:"/agent/export/skill" method:"post" tags:"宸ヤ綔娴? summary:"瀵煎嚭娴忚鍣ㄦ墽琛岀宸ヤ綔娴佷负 Skill"`
+	BrowserID   string   `json:"browser_id" dc:"娴忚鍣ㄥ疄渚?ID"`
+	Scope       string   `json:"scope" d:"filtered" v:"in:selected,filtered,all#瀵煎嚭鑼冨洿鍙兘鏄痵elected銆乫iltered鎴朼ll" dc:"瀵煎嚭鑼冨洿"`
+	WorkflowIDs []string `json:"workflow_ids" dc:"闇€瑕佸鍑虹殑宸ヤ綔娴?ID 鍒楄〃"`
 }
 
-// WorkflowAgentExportSkillRes skill export response Skill 导出响应
 type WorkflowAgentExportSkillRes struct{}
 
-// WorkflowExportSkillReq exports stored workflows as Skill 导出服务端工作流为 Skill
 type WorkflowExportSkillReq struct {
-	g.Meta      `path:"/export/skill" method:"post" tags:"工作流" summary:"导出服务端工作流为 Skill"`
-	Scope       string   `json:"scope" d:"filtered" v:"in:selected,filtered,all#导出范围只能是selected、filtered或all" dc:"导出范围"`
-	WorkflowIDs []string `json:"workflow_ids" dc:"需要导出的工作流ID列表"`
+	g.Meta      `path:"/export/skill" method:"post" tags:"宸ヤ綔娴? summary:"瀵煎嚭鏈嶅姟绔伐浣滄祦涓?Skill"`
+	Scope       string   `json:"scope" d:"filtered" v:"in:selected,filtered,all#瀵煎嚭鑼冨洿鍙兘鏄痵elected銆乫iltered鎴朼ll" dc:"瀵煎嚭鑼冨洿"`
+	WorkflowIDs []string `json:"workflow_ids" dc:"闇€瑕佸鍑虹殑宸ヤ綔娴?ID 鍒楄〃"`
 }
 
-// WorkflowExportSkillRes skill export response Skill 导出响应
 type WorkflowExportSkillRes struct{}
 
-// WorkflowRunReq 运行工作流
 type WorkflowRunReq struct {
-	g.Meta     `path:"/{id}/run" method:"post" tags:"工作流" summary:"运行工作流"`
-	ID         string                             `json:"id" in:"path" v:"required#工作流ID不能为空" dc:"工作流ID"`
-	BrowserID  string                             `json:"browser_id" dc:"浏览器实例ID"`
-	Variables  model.JSONMap                      `json:"variables" dc:"运行变量"`
-	WaitResult bool                               `json:"wait_result" d:"false" dc:"是否等待工作流完成"`
-	Timeout    int                                `json:"timeout" d:"300" dc:"等待超时秒数"`
-	ReturnData *model.WorkflowExecutionReturnData `json:"return_data" dc:"回传数据配置"`
+	g.Meta     `path:"/{id}/run" method:"post" tags:"宸ヤ綔娴? summary:"杩愯宸ヤ綔娴?`
+	ID         string                             `json:"id" in:"path" v:"required#宸ヤ綔娴両D涓嶈兘涓虹┖" dc:"宸ヤ綔娴?ID"`
+	BrowserID  string                             `json:"browser_id" dc:"娴忚鍣ㄥ疄渚?ID"`
+	Variables  model.JSONMap                      `json:"variables" dc:"杩愯鍙橀噺"`
+	WaitResult bool                               `json:"wait_result" d:"false" dc:"鏄惁绛夊緟宸ヤ綔娴佸畬鎴?`
+	Timeout    int                                `json:"timeout" d:"300" dc:"绛夊緟瓒呮椂绉掓暟"`
+	ReturnData *model.WorkflowExecutionReturnData `json:"return_data" dc:"鍥炰紶鏁版嵁閰嶇疆"`
 }
 
-// WorkflowRunRes 工作流运行响应
 type WorkflowRunRes struct {
-	Result    *model.AgentCommandResult `json:"result,omitempty" dc:"运行结果"`
-	Execution *model.WorkflowExecution  `json:"execution,omitempty" dc:"执行状态"`
+	Result    *model.AgentCommandResult `json:"result,omitempty" dc:"杩愯缁撴灉"`
+	Execution *model.WorkflowExecution  `json:"execution,omitempty" dc:"鎵ц鐘舵€?`
 }
 
-// WorkflowExecutionDetailReq 获取工作流执行状态
 type WorkflowExecutionDetailReq struct {
-	g.Meta      `path:"/executions/{execution_id}" method:"get" tags:"工作流" summary:"获取工作流执行状态"`
-	ExecutionID string `json:"execution_id" in:"path" v:"required#执行ID不能为空" dc:"执行ID"`
+	g.Meta      `path:"/executions/{execution_id}" method:"get" tags:"宸ヤ綔娴? summary:"鑾峰彇宸ヤ綔娴佹墽琛岀姸鎬?`
+	ExecutionID string `json:"execution_id" in:"path" v:"required#鎵цID涓嶈兘涓虹┖" dc:"鎵ц ID"`
 }
 
-// WorkflowExecutionDetailRes 工作流执行状态响应
 type WorkflowExecutionDetailRes struct {
-	Execution *model.WorkflowExecution `json:"execution,omitempty" dc:"执行状态"`
+	Execution *model.WorkflowExecution `json:"execution,omitempty" dc:"鎵ц鐘舵€?`
 }
 
-// WorkflowOpenReq 打开工作流
 type WorkflowOpenReq struct {
-	g.Meta    `path:"/{id}/open" method:"post" tags:"工作流" summary:"打开工作流"`
-	ID        string `json:"id" in:"path" v:"required#工作流ID不能为空" dc:"工作流ID"`
-	BrowserID string `json:"browser_id" dc:"浏览器实例ID"`
+	g.Meta    `path:"/{id}/open" method:"post" tags:"宸ヤ綔娴? summary:"鎵撳紑宸ヤ綔娴?`
+	ID        string `json:"id" in:"path" v:"required#宸ヤ綔娴両D涓嶈兘涓虹┖" dc:"宸ヤ綔娴?ID"`
+	BrowserID string `json:"browser_id" dc:"娴忚鍣ㄥ疄渚?ID"`
 }
 
-// WorkflowOpenRes 工作流打开响应
 type WorkflowOpenRes struct {
-	Result *model.AgentCommandResult `json:"result,omitempty" dc:"打开结果"`
+	Result *model.AgentCommandResult `json:"result,omitempty" dc:"鎵撳紑缁撴灉"`
 }

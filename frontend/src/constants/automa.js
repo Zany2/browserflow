@@ -3,6 +3,7 @@ export const AUTOMA_EVENTS = {
   bridge: '__automa-ext__',
   workflowsResponse: '__automa-ext__get-workflows',
   importWorkflowResponse: '__automa-ext__add-workflow',
+  deleteWorkflowResponse: '__automa-ext__delete-workflow',
   executeWorkflow: 'automa:execute-workflow',
   executeWorkflowResponse: '__browserflow_automa_workflow_result__',
 }

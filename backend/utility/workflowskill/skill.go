@@ -303,7 +303,7 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("---\n\n")
 	sb.WriteString("# BrowserFlow Server Automa Workflows\n\n")
 	sb.WriteString("## Overview\n\n")
-	sb.WriteString("This skill describes Automa workflows stored in BrowserFlow Server mode. Use the BrowserFlow task APIs to create or run server-side tasks. The server dispatches each task to an online Windows client that owns the target workflow.\n\n")
+	sb.WriteString("This skill describes Automa workflows stored in BrowserFlow Server mode. Use the BrowserFlow task APIs to create or run server-side tasks. The server dispatches each task to an online Windows client node that owns the target workflow. A client node is identified by `client_ip` plus `node_id`.\n\n")
 	sb.WriteString(fmt.Sprintf("**Total Workflows Available:** %d\n\n", len(workflows)))
 	sb.WriteString(fmt.Sprintf("**Recommended Filename:** `%s`\n\n", FileName))
 	sb.WriteString(fmt.Sprintf("**API Base URL:** `%s`\n\n", baseURL))
@@ -313,17 +313,17 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString(fmt.Sprintf("curl '%s/app/runtime'\n", baseURL))
 	sb.WriteString("```\n\n")
 	sb.WriteString("If the request fails or the mode is not `server`, ask the user to start BrowserFlow in Server mode before continuing.\n\n")
-	sb.WriteString("Then verify that at least one client is online and has the target workflow. If a task does not specify a client, BrowserFlow scans online clients that own the workflow and chooses an unlocked client.\n\n")
+	sb.WriteString("Then verify that at least one client node is online and has the target workflow. If a task does not specify a client node, BrowserFlow scans online nodes that own the workflow and chooses an unlocked node.\n\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("curl '%s/clients'\n", baseURL))
 	sb.WriteString("```\n\n")
 	sb.WriteString("## Required Step-By-Step Procedure\n\n")
 	sb.WriteString("Always work in this order. Do not create or execute a task until the checks are complete.\n\n")
 	sb.WriteString("1. Detect runtime: call `/app/runtime` and confirm BrowserFlow is reachable and running in `server` mode.\n")
-	sb.WriteString("2. Detect clients: call `/clients`, confirm there is at least one online client, and confirm the target workflow can be dispatched to an online client.\n")
+	sb.WriteString("2. Detect client nodes: call `/clients`, confirm there is at least one online node, and confirm the target workflow can be dispatched to an online node.\n")
 	sb.WriteString("3. Detect workflow and parameters: choose the matching workflow from this Skill, inspect its `Parameters`, and ask the user for any missing required values.\n")
 	sb.WriteString("4. Find reusable tasks: query `/tasks?workflow_id={workflow_id}&page_num=1&page_size=10`. Reuse an enabled task when it matches the workflow and parameters, unless the user asks to create a new task.\n")
-	sb.WriteString("5. Decide dispatch target: keep `client_ip` empty unless the user explicitly requires a specific client.\n")
+	sb.WriteString("5. Decide dispatch target: keep both `client_ip` and `node_id` empty for automatic dispatch, or set both fields when the user explicitly requires a specific node.\n")
 	sb.WriteString("6. Decide execution mode: use async for action-only requests, sync for requests that need returned data or final completion.\n")
 	sb.WriteString("7. Execute only after steps 1-6 pass. If any check fails, stop and report the exact reason instead of creating or executing a task.\n")
 	sb.WriteString("8. After execution, inspect the response or task record before answering. For async runs, return the task record or execution identifier available in the response.\n\n")
@@ -337,10 +337,11 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("- `checkbox`: pass a boolean `true` or `false`.\n")
 	sb.WriteString("- Example values like `\"\"` are placeholders. Replace required placeholders with real user-provided values before executing.\n\n")
 	sb.WriteString("## Dispatch Rules\n\n")
-	sb.WriteString("- If `client_ip` is provided, BrowserFlow dispatches only to that client.\n")
-	sb.WriteString("- If `client_ip` is omitted, BrowserFlow scans online clients that own the workflow and dispatches to the first unlocked client.\n")
-	sb.WriteString("- If the target client is busy, offline, or does not own the workflow, the API creates a failed execution record with a readable reason.\n")
-	sb.WriteString("- Per-client Redis locks prevent the same client from running multiple Automa workflows concurrently.\n")
+	sb.WriteString("- Leave both `client_ip` and `node_id` empty when any online node that owns the workflow may execute it.\n")
+	sb.WriteString("- Set both `client_ip` and `node_id` when the user explicitly wants a specific execution node.\n")
+	sb.WriteString("- Avoid setting only one of `client_ip` or `node_id`; BrowserFlow Server mode identifies execution targets by the pair.\n")
+	sb.WriteString("- If the target node is busy, offline, or does not own the workflow, the API creates a failed execution record with a readable reason.\n")
+	sb.WriteString("- Per-node Redis locks prevent the same browser node from running multiple Automa workflows concurrently.\n")
 	sb.WriteString("- Use `trigger_type: \"skill\"` when executing tasks from this skill so execution records are easy to filter.\n\n")
 	sb.WriteString("## Execution Mode Rules\n\n")
 	sb.WriteString("- Use asynchronous execution when the user only asks to start, trigger, submit, launch, run, or execute a task and does not ask for returned data or final completion. Set `wait_result` to `false`.\n")
@@ -356,9 +357,9 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("## Failure Handling Rules\n\n")
 	sb.WriteString("- Backend unreachable: ask the user to start BrowserFlow Server and do not execute.\n")
 	sb.WriteString("- Runtime mode is not `server`: ask the user to start or switch to Server mode and do not execute.\n")
-	sb.WriteString("- No online clients: ask the user to open a Windows client browser-agent page and keep it connected.\n")
-	sb.WriteString("- No online client owns the workflow: ask the user to sync the workflow to a client or choose another workflow.\n")
-	sb.WriteString("- Client is busy or locked: report the busy reason and suggest retrying later or choosing another client.\n")
+	sb.WriteString("- No online nodes: ask the user to open a Windows client browser-agent page and keep it connected.\n")
+	sb.WriteString("- No online node owns the workflow: ask the user to install or sync the workflow to a client node, or choose another workflow.\n")
+	sb.WriteString("- Target node is busy or locked: report the busy reason and suggest retrying later or choosing another node.\n")
 	sb.WriteString("- Missing required parameters: ask for the missing values before creating or executing a task.\n")
 	sb.WriteString("- API returns a failed task record: report `record.error_message` or the readable failure reason from the response.\n\n")
 	sb.WriteString("## API Endpoints\n\n")
@@ -375,6 +376,7 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 		"description":           "Created by BrowserFlow exported Skill",
 		"workflow_id":           firstWorkflowID,
 		"client_ip":             "",
+		"node_id":               "",
 		"cron_expression":       "",
 		"params":                firstVariables,
 		"enabled":               true,
@@ -388,6 +390,7 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
 		"trigger_type": "skill",
 		"client_ip":    "",
+		"node_id":      "",
 		"params":       firstVariables,
 	}))))
 	sb.WriteString("```\n\n")
@@ -398,6 +401,7 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString(fmt.Sprintf("  -d %s\n", shellSingleQuote(compactJSON(map[string]any{
 		"trigger_type": "skill",
 		"client_ip":    "",
+		"node_id":      "",
 		"params":       firstVariables,
 		"wait_result":  true,
 		"timeout":      300,
@@ -428,8 +432,8 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("## Usage Notes\n\n")
 	sb.WriteString("- These workflows come from the BrowserFlow server database, not from the currently open browser-agent page.\n")
 	sb.WriteString("- Prefer creating reusable tasks for repeated use, then execute those task IDs from the skill.\n")
-	sb.WriteString("- Leave `client_ip` empty when any online client that owns the workflow may execute it.\n")
-	sb.WriteString("- Set `client_ip` only when the user explicitly wants a specific client.\n")
+	sb.WriteString("- Leave both `client_ip` and `node_id` empty when any online node that owns the workflow may execute it.\n")
+	sb.WriteString("- Set both `client_ip` and `node_id` only when the user explicitly wants a specific execution node.\n")
 	sb.WriteString("- A successful execute response means the server accepted and dispatched the task. Use task records to inspect final status and returned data.\n")
 	return sb.String()
 }
@@ -452,6 +456,12 @@ func appendServerWorkflowSkillSection(sb *strings.Builder, index int, workflow m
 	}
 	if automaID := firstAgentSkillString(workflow, "automa_id"); automaID != "" && automaID != workflowID {
 		sb.WriteString(fmt.Sprintf("- Automa ID: `%s`\n", inlineCode(automaID)))
+	}
+	if sourceIP := firstAgentSkillString(workflow, "source_ip"); sourceIP != "" {
+		sb.WriteString(fmt.Sprintf("- Last Sync Client IP: `%s`\n", inlineCode(sourceIP)))
+	}
+	if sourceNodeID := firstAgentSkillString(workflow, "source_node_id"); sourceNodeID != "" {
+		sb.WriteString(fmt.Sprintf("- Last Sync Node ID: `%s`\n", inlineCode(sourceNodeID)))
 	}
 	sb.WriteString(fmt.Sprintf("- Description: %s\n", markdownLine(defaultText(firstAgentSkillString(workflow, "description", "automa_description"), "-"))))
 	sb.WriteString(fmt.Sprintf("- Status: %s\n", agentWorkflowStatus(workflow)))
@@ -505,6 +515,7 @@ func appendServerWorkflowTaskExample(sb *strings.Builder, baseURL string, workfl
 		"name":                  "Skill task for " + workflowID,
 		"workflow_id":           workflowID,
 		"client_ip":             "",
+		"node_id":               "",
 		"cron_expression":       "",
 		"params":                variables,
 		"enabled":               true,

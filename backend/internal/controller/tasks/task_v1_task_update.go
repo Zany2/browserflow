@@ -38,9 +38,7 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 	}
 
 	taskID := gconv.Int64(req.ID)
-	record, err := dao.Tasks.Ctx(ctx).
-		WherePri(taskID).
-		One()
+	record, err := dao.Tasks.Ctx(ctx).WherePri(taskID).One()
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +59,7 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		return nil, nil
 	}
 
-	clientIP, err := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP)
+	clientIP, nodeID, err := resolveClientTarget(ctx, req.ClientID, req.ClientIP, req.NodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -69,11 +67,17 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "执行客户端不能为空")
 		return nil, nil
 	}
-	if clientIP != "" {
+	if clientIP != "" || nodeID != "" {
 		clientColumns := dao.Clients.Columns()
-		clientRecord, err := dao.Clients.Ctx(ctx).
-			Where(clientColumns.ClientIp, clientIP).
-			One()
+		clientModel := dao.Clients.Ctx(ctx)
+		if clientIP != "" && nodeID != "" {
+			clientModel = clientModel.Where(clientColumns.ClientIp, clientIP).Where(clientColumns.NodeId, nodeID)
+		} else if nodeID != "" {
+			clientModel = clientModel.Where(clientColumns.NodeId, nodeID)
+		} else {
+			clientModel = clientModel.Where(clientColumns.ClientIp, clientIP)
+		}
+		clientRecord, err := clientModel.One()
 		if err != nil {
 			return nil, err
 		}
@@ -96,13 +100,21 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 	_, err = dao.Tasks.Ctx(ctx).
 		WherePri(taskID).
 		Data(do.Tasks{
-			Name:           name,
-			Description:    description,
-			AutomaId:       workflowID,
-			ClientIp:       clientIP,
-			CronExpression: cronExpression,
-			ParamsJson:     paramsJSON,
-			Enabled:        enabled,
+			Name:                      name,
+			Description:               description,
+			AutomaId:                  workflowID,
+			ClientIp:                  clientIP,
+			NodeId:                    nodeID,
+			TargetGroupId:             req.TargetGroupID,
+			DispatchMode:              normalizeDispatchMode(req.DispatchMode, nodeID, req.TargetGroupID, clientIP),
+			QueuePolicy:               normalizeQueuePolicy(req.QueuePolicy),
+			MaxAttempts:               normalizeMaxAttempts(req.MaxAttempts),
+			TimeoutSeconds:            normalizeTimeoutSeconds(req.TimeoutSeconds),
+			QueueWaitSeconds:          normalizeQueueWaitSeconds(req.QueueWaitSeconds),
+			QueueRetryIntervalSeconds: normalizeQueueRetryIntervalSeconds(req.QueueRetryIntervalSeconds),
+			CronExpression:            cronExpression,
+			ParamsJson:                paramsJSON,
+			Enabled:                   enabled,
 		}).
 		Update()
 	if err != nil {
@@ -113,7 +125,7 @@ func (c *ControllerV1) TaskUpdate(ctx context.Context, req *v1.TaskUpdateReq) (r
 	if err != nil {
 		return nil, err
 	}
-	task, err := taskdata.BuildTaskMap(ctx, updated)
+	task, err := buildTaskMap(ctx, updated)
 	if err != nil {
 		return nil, err
 	}

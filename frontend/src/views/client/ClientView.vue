@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <section class="client-page server-list-page">
     <header class="page-actions server-list-actions">
       <el-button type="primary" :icon="RefreshRight" @click="loadClients">刷新</el-button>
@@ -7,8 +7,8 @@
     <section class="client-panel server-list-panel">
       <div class="client-filters server-list-filters">
         <div class="filter-item filter-item--keyword">
-          <span class="filter-label">关键词</span>
-          <el-input v-model="keywordFilter" clearable placeholder="客户端 IP、客户端名称" />
+          <span class="filter-label">关键字</span>
+          <el-input v-model="keywordFilter" clearable placeholder="客户端 IP、节点、客户端名称、主机名" />
         </div>
 
         <div class="filter-item filter-item--status">
@@ -22,113 +22,152 @@
         </div>
 
         <el-button @click="resetFilters">重置</el-button>
-        <el-button type="warning" :disabled="selectedClientIds.length === 0 || batchOfflineLoading"
-          :loading="batchOfflineLoading" @click="handleBatchOffline">
+        <el-button
+          type="warning"
+          :disabled="selectedClientIds.length === 0 || batchOfflineLoading"
+          :loading="batchOfflineLoading"
+          @click="handleBatchOffline"
+        >
           下线重连
         </el-button>
-        <el-button type="danger" :disabled="selectedClientIds.length === 0 || batchBanLoading"
-          :loading="batchBanLoading" @click="handleBatchBan">
+        <el-button
+          type="danger"
+          :disabled="selectedClientIds.length === 0 || batchBanLoading"
+          :loading="batchBanLoading"
+          @click="handleBatchBan"
+        >
           拉黑
         </el-button>
         <AppSelectionSummary :count="selectedClientIds.length" unit="客户端" />
       </div>
 
-      <el-table ref="clientTableRef" v-loading="loading" class="client-table server-list-table adaptive-table" :data="pagedClients" border height="100%"
-        :row-key="getClientId" empty-text="暂无客户端" @selection-change="handleSelectionChange">
+      <el-table
+        ref="clientTableRef"
+        v-loading="loading"
+        class="client-table server-list-table adaptive-table"
+        :data="pagedClients"
+        border
+        height="100%"
+        :row-key="getClientId"
+        empty-text="暂无客户端"
+        @selection-change="handleSelectionChange"
+      >
         <el-table-column type="selection" width="40" reserve-selection />
-        <el-table-column label="客户端 IP" width="118" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getClientIp(row) || '' }}
-          </template>
+        <el-table-column label="客户端 IP" width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ getClientIp(row) || '' }}</template>
+        </el-table-column>
+        <el-table-column label="执行节点 ID" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ getNodeId(row) }}</template>
         </el-table-column>
         <el-table-column label="客户端名称" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ getClientName(row) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            {{ getClientName(row) }}
+            <el-tag :type="getStatusTagType(row)" effect="plain">{{ getStatusText(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="客户端状态" width="100" align="center">
+        <el-table-column label="Automa 状态" width="120" align="center">
           <template #default="{ row }">
-            <el-tag :type="getStatusTagType(row)" effect="plain">
-              {{ getStatusText(row) }}
-            </el-tag>
+            <el-tag :type="getAutomaTagType(row)" effect="plain">{{ getAutomaStatusText(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Automa 状态" width="110" align="center">
-          <template #default="{ row }">
-            <el-tag :type="getAutomaTagType(row)" effect="plain">
-              {{ getAutomaStatusText(row) }}
-            </el-tag>
-          </template>
+        <el-table-column label="Automa 版本" width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ getAutomaVersion(row) }}</template>
         </el-table-column>
-        <el-table-column label="Automa 版本" width="104" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getAutomaVersion(row) }}
-          </template>
+        <el-table-column label="浏览器" width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ getBrowserName(row) }}</template>
         </el-table-column>
-        <el-table-column label="浏览器名称" width="100" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getBrowserName(row) }}
-          </template>
+        <el-table-column label="浏览器版本" width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ getBrowserVersion(row) }}</template>
         </el-table-column>
-        <el-table-column label="浏览器版本" width="96" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getBrowserVersion(row) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="是否拉黑" width="86" align="center">
+        <el-table-column label="是否拉黑" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="isBanned(row) ? 'danger' : 'success'" effect="plain">
               {{ isBanned(row) ? '是' : '否' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="最近心跳/交互" width="160" class-name="nowrap-column">
-          <template #default="{ row }">
-            {{ formatDate(getLastActiveTime(row)) }}
-          </template>
+        <el-table-column label="最近心跳" width="160" class-name="nowrap-column">
+          <template #default="{ row }">{{ formatDate(getLastActiveTime(row)) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="168" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button v-if="!isBanned(row)" link type="warning" :disabled="isClientActionLoading(row)"
-              :loading="isClientActionLoading(row)" @click="handleOffline(row)">
+            <el-button
+              v-if="!isBanned(row)"
+              link
+              type="warning"
+              :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)"
+              @click="handleOffline(row)"
+            >
               下线重连
             </el-button>
-            <el-button v-if="!isBanned(row)" link type="danger" :disabled="isClientActionLoading(row)"
-              :loading="isClientActionLoading(row)" @click="handleBan(row)">
+            <el-button
+              v-if="!isBanned(row)"
+              link
+              type="danger"
+              :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)"
+              @click="handleBan(row)"
+            >
               拉黑
             </el-button>
-            <el-button v-else link type="success" :disabled="isClientActionLoading(row)"
-              :loading="isClientActionLoading(row)" @click="handleUnban(row)">解除拉黑</el-button>
+            <el-button
+              v-else
+              link
+              type="success"
+              :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)"
+              @click="handleUnban(row)"
+            >
+              解除拉黑
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <AppPagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="pageSizes"
-        :total="clients.length" />
+      <AppPagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="pageSizes"
+        :total="clients.length"
+      />
     </section>
 
-    <AppDialog v-model="detailVisible" title="客户端详情" width="720px" class="client-detail-dialog" confirm-text="保存"
-      cancel-text="关闭" :loading="detailSaving" :confirm-disabled="detailLoading" @confirm="handleSaveDetail">
-      <div v-loading="detailLoading" class="detail-form">
-        <div v-for="field in detailFields" :key="field.key" class="detail-field">
-          <span class="detail-label">{{ field.label }}</span>
-          <div class="detail-control">
+    <AppDialog
+      v-model="detailVisible"
+      title="客户端详情"
+      width="720px"
+      class="client-detail-dialog"
+      confirm-text="保存"
+      cancel-text="关闭"
+      :loading="detailSaving"
+      :confirm-disabled="detailLoading"
+      @confirm="handleSaveDetail"
+    >
+      <div v-loading="detailLoading" class="detail-form server-detail-form">
+        <div v-for="field in detailFields" :key="field.key" class="detail-field server-detail-field">
+          <span class="detail-label server-detail-label">{{ field.label }}</span>
+          <div class="detail-control server-detail-control">
             <el-input v-if="field.type === 'textarea'" :model-value="field.value" disabled type="textarea" :rows="3" />
             <el-input v-else-if="field.editable" v-model="detailForm[field.key]" clearable />
             <el-input v-else :model-value="field.value" disabled />
-            <el-button v-if="!field.editable" :icon="CopyDocument" :disabled="!field.value"
-              @click="copyDetailValue(field.value)">
+            <el-button
+              v-if="!field.editable"
+              :icon="CopyDocument"
+              :disabled="!field.value"
+              @click="copyDetailValue(field.value)"
+            >
               复制
             </el-button>
           </div>
         </div>
       </div>
     </AppDialog>
-
   </section>
 </template>
-
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { CopyDocument, RefreshRight } from '@element-plus/icons-vue'
@@ -191,7 +230,9 @@ const {
 const detailFields = computed(() => {
   return [
     { key: 'client_ip', label: '客户端 IP', value: formatEmpty(getClientIp(detailForm)) },
-    { key: 'client_name', label: '客户端名称', value: formatEmpty(detailForm.client_name), editable: true },
+    { key: 'node_id', label: '执行节点 ID', value: formatEmpty(detailForm.node_id) },
+    { key: 'display_name', label: '客户端名称', value: formatEmpty(detailForm.display_name), editable: true },
+    { key: 'hostname', label: '主机名', value: formatEmpty(detailForm.hostname) },
     { key: 'status', label: '客户端状态', value: getStatusText(detailForm) },
     { key: 'plugin_status', label: 'Automa 状态', value: getAutomaStatusText(detailForm) },
     { key: 'automa_version', label: 'Automa 版本', value: formatEmpty(getAutomaVersion(detailForm)) },
@@ -200,10 +241,8 @@ const detailFields = computed(() => {
     { key: 'is_banned', label: '是否拉黑', value: isBanned(detailForm) ? '是' : '否' },
     { key: 'last_seen_at', label: '最近心跳/交互', value: formatDate(getLastActiveTime(detailForm)) },
     { key: 'id', label: '服务端 ID', value: formatEmpty(detailForm.id) },
-    { key: 'client_id', label: '客户端标识', value: formatEmpty(detailForm.client_id) },
     { key: 'os_name', label: '操作系统', value: formatEmpty(detailForm.os_name) },
     { key: 'os_version', label: '系统版本', value: formatEmpty(detailForm.os_version) },
-    { key: 'hostname', label: '主机名', value: formatEmpty(detailForm.hostname) },
     { key: 'user_agent', label: 'User-Agent', value: formatEmpty(detailForm.user_agent), type: 'textarea' },
     { key: 'ban_reason', label: '拉黑原因', value: formatEmpty(detailForm.ban_reason) },
     { key: 'first_seen_at', label: '首次连接时间', value: formatDate(detailForm.first_seen_at) },
@@ -287,13 +326,13 @@ async function handleSaveDetail() {
 
   detailSaving.value = true
   try {
-    const clientName = detailForm.client_name.trim()
+    const displayName = detailForm.display_name.trim()
     const data = await updateClient(clientId, {
-      client_name: clientName,
+      display_name: displayName,
     })
     const updatedClient = data.client || {
       ...detailForm,
-      client_name: clientName,
+      display_name: displayName,
     }
 
     // Sync detail form after save 保存后同步详情表单
@@ -412,7 +451,12 @@ function createDetailForm() {
     id: '',
     client_id: '',
     client_name: '',
+    display_name: '',
     client_ip: '',
+    machine_id: '',
+    machine_name: '',
+    node_id: '',
+    node_name: '',
     status: '',
     online: false,
     plugin_status: '',
@@ -446,7 +490,12 @@ function setDetailForm(row = {}) {
     id: row.id || '',
     client_id: row.client_id || row.clientId || '',
     client_name: row.client_name || row.clientName || '',
+    display_name: row.display_name || row.displayName || '',
     client_ip: getClientIp(row),
+    machine_id: row.machine_id || row.machineId || '',
+    machine_name: row.machine_name || row.machineName || '',
+    node_id: row.node_id || row.nodeId || '',
+    node_name: row.node_name || row.nodeName || '',
     status: row.status || '',
     online: Boolean(row.online),
     plugin_status: row.plugin_status || row.pluginStatus || '',
@@ -484,7 +533,11 @@ function getClientIp(row) {
 }
 
 function getClientName(row) {
-  return row?.client_name || row?.clientName || row?.name || row?.hostname || getClientId(row) || ''
+  return row?.display_name || row?.displayName || row?.hostname || row?.client_name || row?.clientName || row?.name || ''
+}
+
+function getNodeId(row) {
+  return row?.node_id || row?.nodeId || ''
 }
 
 function isBanned(row) {
@@ -631,34 +684,8 @@ async function copyDetailValue(value) {
   }
 }
 
-.detail-form {
-  display: grid;
-  gap: 12px;
-  max-height: 62vh;
-  overflow: auto;
-  padding-right: 4px;
-}
-
 .detail-field {
-  display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
-  align-items: start;
-  gap: 6px;
-  min-width: 0;
-}
-
-.detail-label {
-  padding-top: 7px;
-  color: #606266;
-  font-size: 13px;
-  text-align: right;
-}
-
-.detail-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 70px;
-  gap: 6px;
-  min-width: 0;
 }
 
 @media (max-width: 640px) {

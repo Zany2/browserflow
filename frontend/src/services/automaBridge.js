@@ -148,6 +148,57 @@ export function importAutomaWorkflow(workflow, { openDashboard = false } = {}) {
   })
 }
 
+export async function deleteAutomaWorkflowFromClient(workflowIds, { timeout = 15000 } = {}) {
+  const ids = Array.isArray(workflowIds) ? workflowIds : [workflowIds]
+  const normalizedIds = ids.map((id) => String(id || '').trim()).filter(Boolean)
+  if (normalizedIds.length === 0) {
+    throw new Error('删除工作流 ID 不能为空')
+  }
+
+  const bridgeReady = await probeAutomaBridgeInstalled()
+  if (!bridgeReady) {
+    throw new Error('未检测到可用的 Automa 桥接，请确认当前执行节点已安装并启用 BrowserFlow 版本的 Automa 插件')
+  }
+
+  const requestId = createBridgeRequestId()
+
+  return new Promise((resolve, reject) => {
+    let timeoutTimer = 0
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutTimer)
+      window.removeEventListener(AUTOMA_EVENTS.deleteWorkflowResponse, onResponse)
+    }
+
+    function onResponse(event) {
+      const detail = event.detail || {}
+      if (detail.requestId !== requestId) return
+
+      cleanup()
+      if (detail.ok === false) {
+        reject(new Error(detail.error || '删除本地 Automa 工作流失败'))
+        return
+      }
+
+      resolve(detail)
+    }
+
+    window.addEventListener(AUTOMA_EVENTS.deleteWorkflowResponse, onResponse)
+    dispatchBridgeEvent({
+      type: 'delete-workflow',
+      data: {
+        requestId,
+        workflowIds: normalizedIds,
+      },
+    })
+
+    timeoutTimer = window.setTimeout(() => {
+      cleanup()
+      reject(new Error('未收到 Automa 删除响应，请确认扩展已安装并启用'))
+    }, timeout)
+  })
+}
+
 export function runAutomaWorkflow({
   id,
   publicId,

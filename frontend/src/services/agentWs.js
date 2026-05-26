@@ -21,6 +21,14 @@ const TASK_EXECUTION_MAX_ITEMS = 100
 // createAgentSocket creates websocket channel 创建客户端 websocket 通道
 export function createAgentSocket({
   browserId,
+  machineId = '',
+  machineName = '',
+  nodeId = '',
+  nodeName = '',
+  nodeIndex = 0,
+  workerVersion = '',
+  profileDir = '',
+  extensionDir = '',
   token,
   role = 'browser_agent',
   wsUrl,
@@ -68,6 +76,16 @@ export function createAgentSocket({
   // workflowCommandPayloads keeps command context for final result logs 保存命令上下文用于最终结果展示
   let workflowCommandPayloads = new Map()
   let activeExecutionId = ''
+  const nodeIdentity = {
+    machine_id: String(machineId || '').trim(),
+    machine_name: String(machineName || '').trim(),
+    node_id: String(nodeId || '').trim(),
+    node_name: String(nodeName || '').trim(),
+    node_index: Number(nodeIndex || 0),
+    worker_version: String(workerVersion || '').trim(),
+    profile_dir: String(profileDir || '').trim(),
+    extension_dir: String(extensionDir || '').trim(),
+  }
 
   const getCurrentAutomaInstalled = () => Boolean(getAutomaInstalled?.() || lastKnownAutomaInstalled)
 
@@ -139,6 +157,7 @@ export function createAgentSocket({
       role,
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
+      ...nodeIdentity,
       ...clientInfo,
       token,
       automa_installed: automaInfo.installed,
@@ -156,6 +175,7 @@ export function createAgentSocket({
       type: 'agent_status_update',
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
+      ...nodeIdentity,
       automa_installed: automaInfo.installed,
       automa_version: automaInfo.version,
     })
@@ -200,6 +220,7 @@ export function createAgentSocket({
       type: 'heartbeat',
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
+      ...nodeIdentity,
       client_ip: currentClientIp,
       execution_id: activeExecutionId || undefined,
       client_time: Date.now(),
@@ -210,6 +231,7 @@ export function createAgentSocket({
     sendJSON({
       browser_id: activeBrowserId,
       client_id: activeBrowserId,
+      ...nodeIdentity,
       ...payload,
     })
   }
@@ -379,6 +401,7 @@ export function createAgentSocket({
         type: 'workflow_inventory',
         browser_id: activeBrowserId,
         client_id: activeBrowserId,
+        ...nodeIdentity,
         workflows: workflowList,
         client_time: Date.now(),
       })
@@ -665,7 +688,7 @@ export function createAgentSocket({
 
     if (stopped) return
 
-    socket = new WebSocket(wsUrl || getWSURL())
+    socket = new WebSocket(wsUrl || getWSURL(nodeIdentity))
 
     socket.addEventListener('open', async () => {
       reconnectCount = 0
@@ -969,16 +992,25 @@ function getOSInfo(userAgent) {
   return { name: 'Unknown', version: '' }
 }
 
-export function getWSURL() {
+export function getWSURL(identity = {}) {
+  const query = new URLSearchParams()
+  if (identity.node_id) query.set('node_id', identity.node_id)
+  const queryString = query.toString()
+
   if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL
+    return appendQuery(import.meta.env.VITE_WS_URL, queryString)
   }
 
   const baseURL = API_BASE_URL.replace(/\/$/, '')
   if (baseURL.startsWith('http')) {
-    return `${baseURL.replace(/^http/, 'ws')}/ws`
+    return appendQuery(`${baseURL.replace(/^http/, 'ws')}/ws`, queryString)
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}${baseURL}/ws`
+  return appendQuery(`${protocol}//${window.location.host}${baseURL}/ws`, queryString)
+}
+
+function appendQuery(url, queryString) {
+  if (!queryString) return url
+  return `${url}${url.includes('?') ? '&' : '?'}${queryString}`
 }

@@ -1,34 +1,34 @@
 ---
 name: browserflow-server-automa-workflows
-description: "Run BrowserFlow Server-mode Automa workflows through the task scheduling API. Workflows include: 普通检索, 多参数检索, 单参数检索返回值变量与表格, 单参数检索返回值变量, 单参数检索"
+description: "Run BrowserFlow Server-mode Automa workflows through the task scheduling API. Workflows include: 单参数检索返回值变量, 单参数检索返回值变量与表格, 普通检索, 多参数检索, 单参数检索"
 ---
 
 # BrowserFlow Server Automa Workflows
 
 ## Overview
 
-This skill describes Automa workflows stored in BrowserFlow Server mode. Use the BrowserFlow task APIs to create or run server-side tasks. The server dispatches each task to an online Windows client that owns the target workflow.
+This skill describes Automa workflows stored in BrowserFlow Server mode. Use the BrowserFlow task APIs to create or run server-side tasks. The server dispatches each task to an online Windows client node that owns the target workflow. A client node is identified by `client_ip` plus `node_id`.
 
 **Total Workflows Available:** 5
 
 **Recommended Filename:** `SKILL.md`
 
-**API Base URL:** `http://192.168.0.103/api/v1`
+**API Base URL:** `http://localhost:5173/api/v1`
 
 ## Mandatory Preflight
 
 Before running any workflow, first verify that the BrowserFlow backend is reachable and running in Server mode.
 
 ```bash
-curl 'http://192.168.0.103/api/v1/app/runtime'
+curl 'http://localhost:5173/api/v1/app/runtime'
 ```
 
 If the request fails or the mode is not `server`, ask the user to start BrowserFlow in Server mode before continuing.
 
-Then verify that at least one client is online and has the target workflow. If a task does not specify a client, BrowserFlow scans online clients that own the workflow and chooses an unlocked client.
+Then verify that at least one client node is online and has the target workflow. If a task does not specify a client node, BrowserFlow scans online nodes that own the workflow and chooses an unlocked node.
 
 ```bash
-curl 'http://192.168.0.103/api/v1/clients'
+curl 'http://localhost:5173/api/v1/clients'
 ```
 
 ## Required Step-By-Step Procedure
@@ -36,10 +36,10 @@ curl 'http://192.168.0.103/api/v1/clients'
 Always work in this order. Do not create or execute a task until the checks are complete.
 
 1. Detect runtime: call `/app/runtime` and confirm BrowserFlow is reachable and running in `server` mode.
-2. Detect clients: call `/clients`, confirm there is at least one online client, and confirm the target workflow can be dispatched to an online client.
+2. Detect client nodes: call `/clients`, confirm there is at least one online node, and confirm the target workflow can be dispatched to an online node.
 3. Detect workflow and parameters: choose the matching workflow from this Skill, inspect its `Parameters`, and ask the user for any missing required values.
 4. Find reusable tasks: query `/tasks?workflow_id={workflow_id}&page_num=1&page_size=10`. Reuse an enabled task when it matches the workflow and parameters, unless the user asks to create a new task.
-5. Decide dispatch target: keep `client_ip` empty unless the user explicitly requires a specific client.
+5. Decide dispatch target: keep both `client_ip` and `node_id` empty for automatic dispatch, or set both fields when the user explicitly requires a specific node.
 6. Decide execution mode: use async for action-only requests, sync for requests that need returned data or final completion.
 7. Execute only after steps 1-6 pass. If any check fails, stop and report the exact reason instead of creating or executing a task.
 8. After execution, inspect the response or task record before answering. For async runs, return the task record or execution identifier available in the response.
@@ -58,10 +58,11 @@ Before creating or executing a task, inspect the workflow's `Parameters` section
 
 ## Dispatch Rules
 
-- If `client_ip` is provided, BrowserFlow dispatches only to that client.
-- If `client_ip` is omitted, BrowserFlow scans online clients that own the workflow and dispatches to the first unlocked client.
-- If the target client is busy, offline, or does not own the workflow, the API creates a failed execution record with a readable reason.
-- Per-client Redis locks prevent the same client from running multiple Automa workflows concurrently.
+- Leave both `client_ip` and `node_id` empty when any online node that owns the workflow may execute it.
+- Set both `client_ip` and `node_id` when the user explicitly wants a specific execution node.
+- Avoid setting only one of `client_ip` or `node_id`; BrowserFlow Server mode identifies execution targets by the pair.
+- If the target node is busy, offline, or does not own the workflow, the API creates a failed execution record with a readable reason.
+- Per-node Redis locks prevent the same browser node from running multiple Automa workflows concurrently.
 - Use `trigger_type: "skill"` when executing tasks from this skill so execution records are easy to filter.
 
 ## Execution Mode Rules
@@ -83,9 +84,9 @@ Before creating or executing a task, inspect the workflow's `Parameters` section
 
 - Backend unreachable: ask the user to start BrowserFlow Server and do not execute.
 - Runtime mode is not `server`: ask the user to start or switch to Server mode and do not execute.
-- No online clients: ask the user to open a Windows client browser-agent page and keep it connected.
-- No online client owns the workflow: ask the user to sync the workflow to a client or choose another workflow.
-- Client is busy or locked: report the busy reason and suggest retrying later or choosing another client.
+- No online nodes: ask the user to open a Windows client browser-agent page and keep it connected.
+- No online node owns the workflow: ask the user to install or sync the workflow to a client node, or choose another workflow.
+- Target node is busy or locked: report the busy reason and suggest retrying later or choosing another node.
 - Missing required parameters: ask for the missing values before creating or executing a task.
 - API returns a failed task record: report `record.error_message` or the readable failure reason from the response.
 
@@ -94,57 +95,99 @@ Before creating or executing a task, inspect the workflow's `Parameters` section
 ### Query Existing Tasks
 
 ```bash
-curl 'http://192.168.0.103/api/v1/tasks?workflow_id=Yx03DAsLctZzjj_LDiOCN&page_num=1&page_size=10'
+curl 'http://localhost:5173/api/v1/tasks?workflow_id=L-zNN7CUmhQB2l6imY31W&page_num=1&page_size=10'
 ```
 
 ### Create Task
 
 ```bash
-curl -X POST 'http://192.168.0.103/api/v1/tasks' \
+curl -X POST 'http://localhost:5173/api/v1/tasks' \
   -H 'Content-Type: application/json' \
-  -d '{"client_ip":"","cron_expression":"","description":"Created by BrowserFlow exported Skill","enabled":true,"name":"Skill task for Yx03DAsLctZzjj_LDiOCN","params":{},"run_once_after_create":false,"workflow_id":"Yx03DAsLctZzjj_LDiOCN"}'
+  -d '{"client_ip":"","cron_expression":"","description":"Created by BrowserFlow exported Skill","enabled":true,"name":"Skill task for L-zNN7CUmhQB2l6imY31W","node_id":"","params":{"key_word":""},"run_once_after_create":false,"workflow_id":"L-zNN7CUmhQB2l6imY31W"}'
 ```
 
 ### Execute Existing Task
 
 ```bash
-curl -X POST 'http://192.168.0.103/api/v1/tasks/{task_id}/execute' \
+curl -X POST 'http://localhost:5173/api/v1/tasks/{task_id}/execute' \
   -H 'Content-Type: application/json' \
-  -d '{"client_ip":"","params":{},"trigger_type":"skill"}'
+  -d '{"client_ip":"","node_id":"","params":{"key_word":""},"trigger_type":"skill"}'
 ```
 
 ### Execute Existing Task And Wait For Result
 
 ```bash
-curl -X POST 'http://192.168.0.103/api/v1/tasks/{task_id}/execute' \
+curl -X POST 'http://localhost:5173/api/v1/tasks/{task_id}/execute' \
   -H 'Content-Type: application/json' \
-  -d '{"client_ip":"","params":{},"return_data":{"include_history":false,"include_table":true,"table_limit":100,"variables":["browserflow_output"]},"timeout":300,"trigger_type":"skill","wait_result":true}'
+  -d '{"client_ip":"","node_id":"","params":{"key_word":""},"return_data":{"include_history":false,"include_table":true,"table_limit":100,"variables":["browserflow_output"]},"timeout":300,"trigger_type":"skill","wait_result":true}'
 ```
 
 ### Query Task Records
 
 ```bash
-curl 'http://192.168.0.103/api/v1/task-records?workflow_id=Yx03DAsLctZzjj_LDiOCN&page_num=1&page_size=10'
+curl 'http://localhost:5173/api/v1/task-records?workflow_id=L-zNN7CUmhQB2l6imY31W&page_num=1&page_size=10'
 ```
 
 ### Query Task Record Detail
 
 ```bash
-curl 'http://192.168.0.103/api/v1/task-records/{record_id}'
+curl 'http://localhost:5173/api/v1/task-records/{record_id}'
 ```
 
 ### Download Task Record File
 
 ```bash
-curl -O 'http://192.168.0.103/api/v1/task-records/files/{file_id}/download'
+curl -O 'http://localhost:5173/api/v1/task-records/files/{file_id}/download'
 ```
 
 ## Available Workflows
 
-### 1. 普通检索
+### 1. 单参数检索返回值变量
+
+- Workflow ID: `L-zNN7CUmhQB2l6imY31W`
+- Server ID: `10`
+- Last Sync Client IP: `127.0.0.1`
+- Last Sync Node ID: `node-0`
+- Description: 单参数检索返回值变量
+- Status: enabled
+- Nodes: 9
+- Created: 2026-05-19 20:42:51
+- Updated: 2026-05-23 23:43:48
+
+Parameters:
+- `key_word` (string, required): 检索关键词 Default: `""`
+
+Create task example:
+```bash
+curl -X POST 'http://localhost:5173/api/v1/tasks' \
+  -H 'Content-Type: application/json' \
+  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for L-zNN7CUmhQB2l6imY31W","node_id":"","params":{"key_word":""},"run_once_after_create":true,"workflow_id":"L-zNN7CUmhQB2l6imY31W"}'
+```
+
+### 2. 单参数检索返回值变量与表格
+
+- Workflow ID: `7KKfW4mVvDFBGux2kMgft`
+- Server ID: `8`
+- Description: 单参数检索返回值变量与表格
+- Status: enabled
+- Nodes: 9
+- Created: 2026-05-23 23:44:00
+- Updated: 2026-05-23 23:44:57
+
+Parameters:
+- `key_word` (string, required): 检索关键词 Default: `""`
+
+Create task example:
+```bash
+curl -X POST 'http://localhost:5173/api/v1/tasks' \
+  -H 'Content-Type: application/json' \
+  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for 7KKfW4mVvDFBGux2kMgft","node_id":"","params":{"key_word":""},"run_once_after_create":true,"workflow_id":"7KKfW4mVvDFBGux2kMgft"}'
+```
+
+### 3. 普通检索
 
 - Workflow ID: `Yx03DAsLctZzjj_LDiOCN`
-- Server ID: `19`
+- Server ID: `7`
 - Description: 普通检索
 - Status: enabled
 - Nodes: 7
@@ -155,15 +198,17 @@ Parameters: none detected.
 
 Create task example:
 ```bash
-curl -X POST 'http://192.168.0.103/api/v1/tasks' \
+curl -X POST 'http://localhost:5173/api/v1/tasks' \
   -H 'Content-Type: application/json' \
-  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for Yx03DAsLctZzjj_LDiOCN","params":{},"run_once_after_create":true,"workflow_id":"Yx03DAsLctZzjj_LDiOCN"}'
+  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for Yx03DAsLctZzjj_LDiOCN","node_id":"","params":{},"run_once_after_create":true,"workflow_id":"Yx03DAsLctZzjj_LDiOCN"}'
 ```
 
-### 2. 多参数检索
+### 4. 多参数检索
 
 - Workflow ID: `wbI3CSCL4hRh8xbuTBD5h`
-- Server ID: `18`
+- Server ID: `6`
+- Last Sync Client IP: `127.0.0.1`
+- Last Sync Node ID: `node-0`
 - Description: 多参数检索
 - Status: enabled
 - Nodes: 7
@@ -178,55 +223,17 @@ Parameters:
 
 Create task example:
 ```bash
-curl -X POST 'http://192.168.0.103/api/v1/tasks' \
+curl -X POST 'http://localhost:5173/api/v1/tasks' \
   -H 'Content-Type: application/json' \
-  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for wbI3CSCL4hRh8xbuTBD5h","params":{"age":"","desc":"","is_enable":"","key_word":""},"run_once_after_create":true,"workflow_id":"wbI3CSCL4hRh8xbuTBD5h"}'
-```
-
-### 3. 单参数检索返回值变量与表格
-
-- Workflow ID: `7KKfW4mVvDFBGux2kMgft`
-- Server ID: `17`
-- Description: 单参数检索返回值变量与表格
-- Status: enabled
-- Nodes: 9
-- Created: 2026-05-23 23:44:00
-- Updated: 2026-05-23 23:44:57
-
-Parameters:
-- `key_word` (string, required): 检索关键词 Default: `""`
-
-Create task example:
-```bash
-curl -X POST 'http://192.168.0.103/api/v1/tasks' \
-  -H 'Content-Type: application/json' \
-  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for 7KKfW4mVvDFBGux2kMgft","params":{"key_word":""},"run_once_after_create":true,"workflow_id":"7KKfW4mVvDFBGux2kMgft"}'
-```
-
-### 4. 单参数检索返回值变量
-
-- Workflow ID: `L-zNN7CUmhQB2l6imY31W`
-- Server ID: `16`
-- Description: 单参数检索返回值变量
-- Status: enabled
-- Nodes: 9
-- Created: 2026-05-19 20:42:51
-- Updated: 2026-05-23 23:43:48
-
-Parameters:
-- `key_word` (string, required): 检索关键词 Default: `""`
-
-Create task example:
-```bash
-curl -X POST 'http://192.168.0.103/api/v1/tasks' \
-  -H 'Content-Type: application/json' \
-  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for L-zNN7CUmhQB2l6imY31W","params":{"key_word":""},"run_once_after_create":true,"workflow_id":"L-zNN7CUmhQB2l6imY31W"}'
+  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for wbI3CSCL4hRh8xbuTBD5h","node_id":"","params":{"age":"","desc":"","is_enable":"","key_word":""},"run_once_after_create":true,"workflow_id":"wbI3CSCL4hRh8xbuTBD5h"}'
 ```
 
 ### 5. 单参数检索
 
 - Workflow ID: `XtdNYUUtraUJXUI2SAiRu`
-- Server ID: `15`
+- Server ID: `5`
+- Last Sync Client IP: `127.0.0.1`
+- Last Sync Node ID: `node-0`
 - Description: 单参数检索
 - Status: enabled
 - Nodes: 7
@@ -238,15 +245,15 @@ Parameters:
 
 Create task example:
 ```bash
-curl -X POST 'http://192.168.0.103/api/v1/tasks' \
+curl -X POST 'http://localhost:5173/api/v1/tasks' \
   -H 'Content-Type: application/json' \
-  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for XtdNYUUtraUJXUI2SAiRu","params":{"key_word":""},"run_once_after_create":true,"workflow_id":"XtdNYUUtraUJXUI2SAiRu"}'
+  -d '{"client_ip":"","cron_expression":"","enabled":true,"name":"Skill task for XtdNYUUtraUJXUI2SAiRu","node_id":"","params":{"key_word":""},"run_once_after_create":true,"workflow_id":"XtdNYUUtraUJXUI2SAiRu"}'
 ```
 
 ## Usage Notes
 
 - These workflows come from the BrowserFlow server database, not from the currently open browser-agent page.
 - Prefer creating reusable tasks for repeated use, then execute those task IDs from the skill.
-- Leave `client_ip` empty when any online client that owns the workflow may execute it.
-- Set `client_ip` only when the user explicitly wants a specific client.
+- Leave both `client_ip` and `node_id` empty when any online node that owns the workflow may execute it.
+- Set both `client_ip` and `node_id` only when the user explicitly wants a specific execution node.
 - A successful execute response means the server accepted and dispatched the task. Use task records to inspect final status and returned data.

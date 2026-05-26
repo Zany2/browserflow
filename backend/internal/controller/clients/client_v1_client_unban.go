@@ -2,19 +2,14 @@ package clients
 
 import (
 	"context"
-	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
-	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
-	"github.com/Zany2/browserflow/backend/utility/clientops"
-	"github.com/gogf/gf/v2/util/gconv"
 )
 
-// ClientUnban removes client ban 解除客户端拉黑
+// ClientUnban removes client node ban. 解除客户端节点拉黑
 func (c *ControllerV1) ClientUnban(ctx context.Context, req *v1.ClientUnbanReq) (res *v1.ClientUnbanRes, err error) {
-	// Query target client 查询目标客户端
-	record, err := clientops.QueryRecord(ctx, req.ID)
+	record, err := queryClientRecord(ctx, req.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -22,11 +17,7 @@ func (c *ControllerV1) ClientUnban(ctx context.Context, req *v1.ClientUnbanReq) 
 		return &v1.ClientUnbanRes{Message: "客户端不存在或未注册"}, nil
 	}
 
-	// Clear ban state 清除拉黑状态
-	columns := dao.Clients.Columns()
-	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
-	_, err = dao.Clients.Ctx(ctx).
-		Where(columns.ClientIp, clientIP).
+	_, err = scopedClientModel(ctx, record).
 		Data(do.Clients{
 			IsBanned:  false,
 			BanReason: "",
@@ -36,7 +27,7 @@ func (c *ControllerV1) ClientUnban(ctx context.Context, req *v1.ClientUnbanReq) 
 		return nil, err
 	}
 
-	client, err := clientops.RecordToEntity(record)
+	client, err := clientRecordToEntity(record)
 	if err != nil {
 		return nil, err
 	}

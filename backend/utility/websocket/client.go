@@ -17,6 +17,8 @@ type Client struct {
 	connectionID string
 	// clientIP client identity 客户端唯一标识
 	clientIP string
+	// nodeID execution node identity 执行节点标识
+	nodeID string
 	// clientID business client id 业务客户端标识
 	clientID string
 	// connectedAt connected time 建连时间
@@ -65,6 +67,37 @@ func (c *Client) ClientIP() string {
 	return c.clientIP
 }
 
+// ExecutionNodeID returns the raw execution node id.
+func (c *Client) ExecutionNodeID() string {
+	if c == nil {
+		return ""
+	}
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	return c.nodeID
+}
+
+// NodeID get execution node id 获取执行节点标识
+func (c *Client) NodeID() string {
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	return c.nodeID
+}
+
+// ExecutionIdentity returns node id first, then client ip 返回执行身份
+func (c *Client) ExecutionIdentity() string {
+	if c == nil {
+		return ""
+	}
+	c.identityMu.RLock()
+	nodeID := c.nodeID
+	c.identityMu.RUnlock()
+	if nodeID != "" {
+		return NodeConnectionID(c.clientIP, nodeID)
+	}
+	return c.clientIP
+}
+
 // ClientID get business client id 获取业务客户端标识
 func (c *Client) ClientID() string {
 	c.identityMu.RLock()
@@ -77,6 +110,13 @@ func (c *Client) BindClientID(clientID string) {
 	c.identityMu.Lock()
 	defer c.identityMu.Unlock()
 	c.clientID = clientID
+}
+
+// BindNodeIdentity binds node id 绑定节点标识
+func (c *Client) BindNodeIdentity(nodeID string) {
+	c.identityMu.Lock()
+	defer c.identityMu.Unlock()
+	c.nodeID = nodeID
 }
 
 // ConnectedAt get connected time 获取连接建立时间

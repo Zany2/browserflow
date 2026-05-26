@@ -26,10 +26,6 @@
             <el-input v-model="workflow.description" clearable type="textarea" :rows="2" placeholder="可选；留空时使用 JSON 中的工作流描述" />
           </el-form-item>
 
-          <el-form-item label="Automa 工作流字段">
-            <el-input model-value="从上传的 Automa JSON 中解析保存，新增时不在这里编辑" disabled />
-          </el-form-item>
-
           <el-form-item label="是否可同步">
             <el-switch v-model="workflow.is_syncable" />
           </el-form-item>
@@ -142,15 +138,10 @@ function showWarningMessage(message) {
   display: flex;
   flex-direction: column;
   width: min(860px, calc(100vw - 32px));
-  max-height: calc(100vh - 112px);
-  overflow: hidden;
 }
 
 :global(.workflow-create-dialog .el-dialog__body) {
-  display: flex;
-  flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
 }
 
 :global(.workflow-create-dialog .el-dialog__header),
@@ -162,16 +153,14 @@ function showWarningMessage(message) {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  flex: 1 1 auto;
-  max-height: 100%;
+  width: 100%;
   min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   padding-right: 4px;
 }
 
 .workflow-create-item {
   flex: 0 0 auto;
+  width: 100%;
   padding: 14px;
   border: 1px solid #e4e7ed;
 }

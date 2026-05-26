@@ -23,7 +23,7 @@ import (
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
-// TaskExecute executes task 执行任务
+// TaskExecute executes task 鎵ц浠诲姟
 func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) (res *v1.TaskExecuteRes, err error) {
 	taskID := gconv.Int64(req.ID)
 	taskColumns := dao.Tasks.Columns()
@@ -43,24 +43,34 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	if !gconv.Bool(taskRecord[taskColumns.Enabled]) {
 		request := g.RequestFromCtx(ctx)
 		if request != nil {
-			rr.FailedJsonWithMessageExitAll(request, "任务已停用")
+			rr.FailedJsonWithMessageExitAll(request, "任务不存在")
 		}
 		return nil, nil
 	}
 
 	workflowID := strings.TrimSpace(gconv.String(taskRecord[taskColumns.AutomaId]))
-	clientIP, err := taskdata.ResolveClientIP(ctx, req.ClientID, req.ClientIP)
+	clientIP, nodeID, err := resolveClientTarget(ctx, req.ClientID, req.ClientIP, req.NodeID)
 	if err != nil {
 		return nil, err
 	}
 	storedClientIP := strings.TrimSpace(gconv.String(taskRecord[taskColumns.ClientIp]))
+	storedNodeID := strings.TrimSpace(gconv.String(taskRecord[taskColumns.NodeId]))
+	dispatchMode := strings.TrimSpace(gconv.String(taskRecord[taskColumns.DispatchMode]))
+	queuePolicy := normalizeQueuePolicy(gconv.String(taskRecord[taskColumns.QueuePolicy]))
+	targetGroupID := gconv.Int64(taskRecord[taskColumns.TargetGroupId])
+	maxAttempts := normalizeMaxAttempts(gconv.Int(taskRecord[taskColumns.MaxAttempts]))
+	queueWaitSeconds := normalizeQueueWaitSeconds(gconv.Int(taskRecord[taskColumns.QueueWaitSeconds]))
+	queueRetryIntervalSeconds := normalizeQueueRetryIntervalSeconds(gconv.Int(taskRecord[taskColumns.QueueRetryIntervalSeconds]))
 	if clientIP == "" {
 		clientIP = storedClientIP
+	}
+	if nodeID == "" {
+		nodeID = storedNodeID
 	}
 
 	params := req.Params
 	if params == nil {
-		taskMap, mapErr := taskdata.BuildTaskMap(ctx, taskRecord)
+		taskMap, mapErr := buildTaskMap(ctx, taskRecord)
 		if mapErr != nil {
 			return nil, mapErr
 		}
@@ -73,13 +83,12 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 
 	triggerType := taskdata.NormalizeTriggerType(req.TriggerType)
 	serverMode := consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer
-	autoDispatch := serverMode && storedClientIP == "" && strings.TrimSpace(req.ClientIP) == "" && strings.TrimSpace(req.ClientID) == ""
 	failedResponse := func(recordID int64, message string) (*v1.TaskExecuteRes, error) {
 		record, recordErr := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
 		if recordErr != nil {
 			return nil, recordErr
 		}
-		recordMap, recordErr := taskdata.BuildTaskRecordMap(ctx, record)
+		recordMap, recordErr := buildTaskRecordMap(ctx, record)
 		if recordErr != nil {
 			return nil, recordErr
 		}
@@ -94,6 +103,7 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 			TaskId:       taskID,
 			WorkflowId:   workflowID,
 			ClientIp:     clientIP,
+			NodeId:       nodeID,
 			TriggerType:  triggerType,
 			Status:       "failed",
 			ParamsJson:   paramsJSON,
@@ -112,11 +122,11 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		}
 		return failedResponse(failedRecordID, message)
 	}
-	failRecord := func(failedRecordID int64, message string) (*v1.TaskExecuteRes, error) {
+	failRecord := func(failedRecordID int64, status string, message string) (*v1.TaskExecuteRes, error) {
 		_, _ = dao.TaskRecords.Ctx(ctx).
 			WherePri(failedRecordID).
 			Data(do.TaskRecords{
-				Status:       "failed",
+				Status:       status,
 				ErrorMessage: message,
 				FinishedAt:   gtime.Now(),
 			}).
@@ -124,9 +134,10 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		return failedResponse(failedRecordID, message)
 	}
 	dispatchMessage := ""
-	candidateClientIPs := make([]string, 0, 1)
+	candidateTargets := make([]dispatchTarget, 0, 1)
 	workflowID = strings.TrimSpace(workflowID)
 	clientIP = strings.TrimSpace(clientIP)
+	nodeID = strings.TrimSpace(nodeID)
 
 	if workflowID == "" {
 		dispatchMessage = "工作流不能为空"
@@ -134,31 +145,13 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		if clientIP == "" {
 			dispatchMessage = "执行客户端不能为空"
 		} else {
-			candidateClientIPs = append(candidateClientIPs, clientIP)
-		}
-	} else if clientIP != "" {
-		if !workflowcache.IsClientOnline(ctx, clientIP) {
-			dispatchMessage = "客户端不在线或 WebSocket 未连接"
-		} else if _, ok, cacheErr := workflowcache.GetClientWorkflow(ctx, clientIP, workflowID); cacheErr != nil {
-			dispatchMessage = cacheErr.Error()
-		} else if !ok {
-			dispatchMessage = "客户端没有该工作流"
-		} else {
-			candidateClientIPs = append(candidateClientIPs, clientIP)
+			candidateTargets = append(candidateTargets, dispatchTarget{ClientIP: clientIP, NodeID: nodeID})
 		}
 	} else {
-		items, listErr := workflowcache.ListWorkflowClients(ctx, workflowID)
-		if listErr != nil {
-			dispatchMessage = listErr.Error()
-		} else if len(items) == 0 {
-			dispatchMessage = "没有在线客户端拥有该工作流"
-		} else {
-			for _, item := range items {
-				itemClientIP := strings.TrimSpace(item.SourceIp)
-				if itemClientIP != "" {
-					candidateClientIPs = append(candidateClientIPs, itemClientIP)
-				}
-			}
+		var targetErr error
+		candidateTargets, dispatchMessage, targetErr = buildDispatchTargets(ctx, workflowID, dispatchMode, clientIP, nodeID, targetGroupID)
+		if targetErr != nil {
+			return nil, targetErr
 		}
 	}
 	if dispatchMessage != "" {
@@ -169,6 +162,8 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 		TaskId:      taskID,
 		WorkflowId:  workflowID,
 		ClientIp:    clientIP,
+		NodeId:      nodeID,
+		AttemptNo:   0,
 		TriggerType: triggerType,
 		Status:      "pending",
 		ParamsJson:  paramsJSON,
@@ -186,6 +181,9 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	}
 	websockets.Init(ctx)
 	timeout := workflowagent.NormalizeRunTimeout(req.Timeout)
+	if req.Timeout <= 0 {
+		timeout = normalizeTimeoutSeconds(gconv.Int(taskRecord[taskColumns.TimeoutSeconds]))
+	}
 	returnData := workflowexecution.NormalizeReturnData(req.ReturnData)
 	if returnData == nil {
 		returnData = &model.WorkflowExecutionReturnData{
@@ -197,89 +195,149 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	var resultCh chan model.AgentCommandResult
 	locked := false
 	sendFailed := false
-	for _, candidateClientIP := range candidateClientIPs {
-		candidateClientIP = strings.TrimSpace(candidateClientIP)
-		if candidateClientIP == "" {
-			continue
-		}
-		ok, _, lockErr := tasklock.Acquire(ctx, tasklock.LockInfo{
-			ClientIP:   candidateClientIP,
-			TaskID:     taskID,
-			RecordID:   recordID,
-			WorkflowID: workflowID,
-			CommandID:  commandID,
-		})
-		if lockErr != nil {
-			return nil, lockErr
-		}
-		if !ok {
-			continue
-		}
-
-		clientIP = candidateClientIP
-		if _, err = dao.TaskRecords.Ctx(ctx).
-			WherePri(recordID).
-			Data(do.TaskRecords{ClientIp: clientIP}).
-			Update(); err != nil {
-			_ = tasklock.Release(ctx, clientIP, commandID)
-			return nil, err
-		}
-
-		if req.WaitResult {
-			resultCh = make(chan model.AgentCommandResult, 1)
-			state.SetPendingCommand(commandID, resultCh)
-		}
-		sentCount := websockets.SendClientMessage(clientIP, &model.WSResponse{
-			Type:      model.WSMessageTypeAgentCommand,
-			ClientIP:  clientIP,
-			CommandID: commandID,
-			Command:   "task.execute",
-			Payload: map[string]any{
-				"task_id":      taskID,
-				"task_name":    strings.TrimSpace(gconv.String(taskRecord[taskColumns.Name])),
-				"workflow_id":  workflowID,
-				"params":       params,
-				"check_params": false,
-				"execution_id": commandID,
-				"wait_result":  req.WaitResult,
-				"timeout":      timeout,
-				"return_data":  returnData,
-			},
-		})
-		if sentCount <= 0 {
-			sendFailed = true
-			state.RemovePendingCommand(commandID)
-			_ = tasklock.Release(ctx, clientIP, commandID)
-			if serverMode {
-				_ = workflowcache.ClearClient(ctx, clientIP)
-			}
-			if autoDispatch {
+	attemptCount := 0
+	queueDeadline := time.Now()
+	if queuePolicy == "queue" {
+		queueDeadline = queueDeadline.Add(time.Duration(queueWaitSeconds) * time.Second)
+	}
+	for {
+		attemptCount++
+		for _, target := range candidateTargets {
+			target.ClientIP = strings.TrimSpace(target.ClientIP)
+			target.NodeID = strings.TrimSpace(target.NodeID)
+			if target.ClientIP == "" && target.NodeID == "" {
 				continue
 			}
+			ok, _, lockErr := tasklock.Acquire(ctx, tasklock.LockInfo{
+				ClientIP:   target.ClientIP,
+				NodeID:     target.NodeID,
+				TaskID:     taskID,
+				RecordID:   recordID,
+				WorkflowID: workflowID,
+				CommandID:  commandID,
+			})
+			if lockErr != nil {
+				return nil, lockErr
+			}
+			if !ok {
+				continue
+			}
+
+			clientIP = target.ClientIP
+			nodeID = target.NodeID
+			if _, err = dao.TaskRecords.Ctx(ctx).
+				WherePri(recordID).
+				Data(do.TaskRecords{
+					ClientIp:  clientIP,
+					NodeId:    nodeID,
+					CommandId: commandID,
+					AttemptNo: attemptCount,
+				}).
+				Update(); err != nil {
+				_ = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID)
+				return nil, err
+			}
+
+			if req.WaitResult {
+				resultCh = make(chan model.AgentCommandResult, 1)
+				state.SetPendingCommand(commandID, resultCh)
+			}
+			if err = markTaskNodeBusy(ctx, clientIP, nodeID, commandID, recordID); err != nil {
+				state.RemovePendingCommand(commandID)
+				_ = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID)
+				return nil, err
+			}
+			sentCount := websockets.SendNodeMessage(nodeID, clientIP, &model.WSResponse{
+				Type:      model.WSMessageTypeAgentCommand,
+				ClientIP:  clientIP,
+				NodeID:    nodeID,
+				CommandID: commandID,
+				Command:   "task.execute",
+				Payload: map[string]any{
+					"task_id":      taskID,
+					"task_name":    strings.TrimSpace(gconv.String(taskRecord[taskColumns.Name])),
+					"workflow_id":  workflowID,
+					"params":       params,
+					"check_params": false,
+					"execution_id": commandID,
+					"wait_result":  req.WaitResult,
+					"timeout":      timeout,
+					"return_data":  returnData,
+				},
+			})
+			if sentCount <= 0 {
+				sendFailed = true
+				state.RemovePendingCommand(commandID)
+				_ = markTaskNodeIdle(ctx, clientIP, nodeID, commandID, recordID)
+				_ = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID)
+				if serverMode {
+					_ = workflowcache.ClearNode(ctx, websockets.NodeConnectionID(clientIP, nodeID))
+				}
+				if len(candidateTargets) > 1 {
+					continue
+				}
+				break
+			}
+
+			locked = true
+			break
+		}
+		if locked || queuePolicy != "queue" || attemptCount >= maxAttempts || !time.Now().Before(queueDeadline) {
 			break
 		}
 
-		locked = true
-		break
+		sleepDuration := time.Duration(queueRetryIntervalSeconds) * time.Second
+		remainingDuration := time.Until(queueDeadline)
+		if remainingDuration < sleepDuration {
+			sleepDuration = remainingDuration
+		}
+		if sleepDuration <= 0 {
+			break
+		}
+		if _, err = dao.TaskRecords.Ctx(ctx).
+			WherePri(recordID).
+			Where(dao.TaskRecords.Columns().Status, "pending").
+			Data(do.TaskRecords{
+				Status:       "queued",
+				AttemptNo:    attemptCount,
+				ErrorMessage: "waiting for an available execution node",
+			}).
+			Update(); err != nil {
+			return nil, err
+		}
+		select {
+		case <-time.After(sleepDuration):
+		case <-ctx.Done():
+			state.RemovePendingCommand(commandID)
+			_, _ = dao.TaskRecords.Ctx(ctx).
+				WherePri(recordID).
+				WhereIn(dao.TaskRecords.Columns().Status, []string{"pending", "queued"}).
+				Data(do.TaskRecords{
+					Status:       "failed",
+					ErrorMessage: "task dispatch was cancelled while waiting for an available execution node",
+					FinishedAt:   gtime.Now(),
+				}).
+				Update()
+			return nil, ctx.Err()
+		}
 	}
 
 	if !locked {
-		message := "客户端正在执行其他任务，请稍后重试"
-		if autoDispatch && sendFailed {
+		status, message := busyPolicyMessage(queuePolicy)
+		if len(candidateTargets) > 1 && sendFailed {
 			message = "已遍历调度所有在线且拥有工作流的客户端，均已断开或 WebSocket 不可发送，任务执行失败"
-		} else if autoDispatch {
-			message = "已遍历调度所有在线且拥有工作流的客户端，均处于繁忙状态，任务执行失败"
 		} else if sendFailed {
 			message = "客户端不在线或 WebSocket 未连接"
 		}
-		return failRecord(recordID, message)
+		return failRecord(recordID, status, message)
 	}
 
 	_, err = dao.TaskRecords.Ctx(ctx).
 		WherePri(recordID).
 		Data(do.TaskRecords{
-			Status:    "queued",
-			StartedAt: gtime.Now(),
+			Status:       "queued",
+			ErrorMessage: "",
+			StartedAt:    gtime.Now(),
 		}).
 		Update()
 	if err != nil {
@@ -296,18 +354,29 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 			if err != nil {
 				return nil, err
 			}
-			recordMap, err := taskdata.BuildTaskRecordMap(ctx, record)
+			recordMap, err := buildTaskRecordMap(ctx, record)
 			if err != nil {
 				return nil, err
 			}
 			return &v1.TaskExecuteRes{Record: recordMap, Result: &result}, nil
 		case <-timer.C:
 			state.RemovePendingCommand(commandID)
+			_ = markTaskNodeIdle(ctx, clientIP, nodeID, commandID, recordID)
+			_ = tasklock.ReleaseNode(ctx, nodeID, clientIP, commandID)
+			_, _ = dao.TaskRecords.Ctx(ctx).
+				WherePri(recordID).
+				WhereIn(dao.TaskRecords.Columns().Status, []string{"pending", "queued", "running"}).
+				Data(do.TaskRecords{
+					Status:       "timeout",
+					ErrorMessage: "task execution timed out while waiting for result",
+					FinishedAt:   gtime.Now(),
+				}).
+				Update()
 			record, recordErr := dao.TaskRecords.Ctx(ctx).WherePri(recordID).One()
 			if recordErr != nil {
 				return nil, recordErr
 			}
-			recordMap, recordErr := taskdata.BuildTaskRecordMap(ctx, record)
+			recordMap, recordErr := buildTaskRecordMap(ctx, record)
 			if recordErr != nil {
 				return nil, recordErr
 			}
@@ -322,7 +391,7 @@ func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) 
 	if err != nil {
 		return nil, err
 	}
-	recordMap, err := taskdata.BuildTaskRecordMap(ctx, record)
+	recordMap, err := buildTaskRecordMap(ctx, record)
 	if err != nil {
 		return nil, err
 	}

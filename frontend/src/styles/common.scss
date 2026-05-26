@@ -58,6 +58,35 @@
   min-height: 0;
 }
 
+// Server detail form Server 模式详情表单通用视觉
+.server-detail-form {
+  display: grid;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.server-detail-field {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.server-detail-label {
+  padding-top: 7px;
+  color: #606266;
+  font-size: 13px;
+  text-align: right;
+}
+
+.server-detail-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px;
+  gap: 6px;
+  min-width: 0;
+}
+
 // Adaptive table 自适应表格，默认单行省略，完整内容由列 tooltip/title 展示
 .adaptive-table {
   width: 100%;

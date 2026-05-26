@@ -22,17 +22,20 @@ const (
 	windowClassName = "BrowserFlowWorkerWindow"
 	windowTitle     = "BrowserFlowWorker"
 
-	idServerEdit = 101
-	idChromeEdit = 102
-	idNodeEdit   = 103
-	idStatusText = 104
+	idServerEdit   = 101
+	idChromeEdit   = 102
+	idNodeEdit     = 103
+	idStatusText   = 104
+	idAutomaText   = 105
+	idDownloadEdit = 106
 
-	idDetectButton = 201
-	idBrowseButton = 202
-	idSaveButton   = 203
-	idStartButton  = 204
-	idCloseButton  = 205
-	idAutomaButton = 206
+	idDetectButton         = 201
+	idBrowseButton         = 202
+	idSaveButton           = 203
+	idStartButton          = 204
+	idCloseButton          = 205
+	idAutomaButton         = 206
+	idBrowseDownloadButton = 207
 )
 
 var (
@@ -41,28 +44,34 @@ var (
 	gdi32     = syscall.NewLazyDLL("gdi32.dll")
 	comdlg32  = syscall.NewLazyDLL("comdlg32.dll")
 	shell32   = syscall.NewLazyDLL("shell32.dll")
+	ole32     = syscall.NewLazyDLL("ole32.dll")
 	procCache = map[string]*syscall.LazyProc{}
 )
 
 type windowState struct {
-	hwnd       uintptr
-	serverEdit uintptr
-	chromeEdit uintptr
-	nodeEdit   uintptr
-	statusText uintptr
-	font       uintptr
-	icon       uintptr
-	exeDir     string
-	configPath string
-	config     config.Config
-	nodes      []worker.Node
-	stopping   bool
+	hwnd         uintptr
+	serverEdit   uintptr
+	chromeEdit   uintptr
+	nodeEdit     uintptr
+	downloadEdit uintptr
+	statusText   uintptr
+	automaText   uintptr
+	font         uintptr
+	icon         uintptr
+	exeDir       string
+	configPath   string
+	config       config.Config
+	nodes        []worker.Node
+	stopping     bool
 }
 
 // Run starts the Windows GUI.
 func Run() error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	if hr, _, _ := ole32.NewProc("OleInitialize").Call(0); int32(hr) >= 0 {
+		defer ole32.NewProc("OleUninitialize").Call()
+	}
 
 	exeDir, err := executableDir()
 	if err != nil {
@@ -120,7 +129,7 @@ func (s *windowState) run() error {
 		uintptr(cwUseDefault),
 		uintptr(cwUseDefault),
 		840,
-		480,
+		570,
 		0,
 		0,
 		hInstance,
@@ -177,13 +186,19 @@ func (s *windowState) initControls() {
 	s.nodeEdit = createEdit(s.hwnd, idNodeEdit, nodeText, 150, 198, 86, 32)
 	createLabel(s.hwnd, "每个节点会启动一个独立 Chrome 窗口，建议按电脑性能逐步增加。", 252, 202, 540, 26)
 
-	createButton(s.hwnd, idSaveButton, "保存配置", 150, 264, 112, 36)
-	createButton(s.hwnd, idStartButton, "启动执行节点", 278, 264, 148, 36)
-	createButton(s.hwnd, idCloseButton, "关闭所有执行节点", 442, 264, 160, 36)
-	createButton(s.hwnd, idAutomaButton, "安装/更新 Automa", 618, 264, 160, 36)
+	createLabel(s.hwnd, "下载目录", 32, 250, 110, 26)
+	s.downloadEdit = createEdit(s.hwnd, idDownloadEdit, s.config.DownloadDir, 150, 246, 566, 32)
+	createButton(s.hwnd, idBrowseDownloadButton, "浏览...", 728, 245, 72, 34)
 
-	createLabel(s.hwnd, "状态", 32, 342, 110, 26)
-	s.statusText = createLabel(s.hwnd, "就绪", 150, 342, 620, 60)
+	createButton(s.hwnd, idSaveButton, "保存配置", 150, 312, 112, 36)
+	createButton(s.hwnd, idStartButton, "启动执行节点", 278, 312, 148, 36)
+	createButton(s.hwnd, idCloseButton, "关闭所有执行节点", 442, 312, 160, 36)
+	createButton(s.hwnd, idAutomaButton, "安装/更新 Automa", 618, 312, 160, 36)
+
+	createLabel(s.hwnd, "状态", 32, 390, 110, 26)
+	s.statusText = createLabel(s.hwnd, "就绪", 150, 390, 620, 60)
+	createLabel(s.hwnd, "Automa 插件", 32, 475, 110, 26)
+	s.automaText = createLabel(s.hwnd, s.automaStatus(), 150, 475, 620, 44)
 	s.applyFont(s.hwnd)
 }
 
@@ -192,7 +207,9 @@ func (s *windowState) applyFont(hwnd uintptr) {
 		s.serverEdit,
 		s.chromeEdit,
 		s.nodeEdit,
+		s.downloadEdit,
 		s.statusText,
+		s.automaText,
 	}
 	for _, child := range children {
 		sendMessage(child, wmSetFont, s.font, 1)
@@ -209,6 +226,8 @@ func (s *windowState) handleCommand(id int) {
 		s.detectChrome()
 	case idBrowseButton:
 		s.browseChrome()
+	case idBrowseDownloadButton:
+		s.browseDownloadDir()
 	case idSaveButton:
 		s.save()
 	case idStartButton:
@@ -248,6 +267,15 @@ func (s *windowState) browseChrome() {
 	s.setStatus("已选择 Chrome：" + path)
 }
 
+func (s *windowState) browseDownloadDir() {
+	path, ok := openFolderDialog(s.hwnd, "选择下载目录")
+	if !ok {
+		return
+	}
+	setWindowText(s.downloadEdit, path)
+	s.setStatus("已选择下载目录：" + path)
+}
+
 func (s *windowState) installAutoma() {
 	zipPath, ok := openFileDialog(s.hwnd, "选择 Automa 安装包", []fileFilter{
 		{Name: "Automa 安装包", Pattern: "*.zip"},
@@ -265,6 +293,7 @@ func (s *windowState) installAutoma() {
 	}
 	s.config.AutomaExtensionDir = targetDir
 	_ = config.Save(s.configPath, s.config)
+	setWindowText(s.automaText, s.automaStatus())
 	s.setStatus("Automa 已安装/更新：" + targetDir)
 	messageBox(s.hwnd, "Automa 已安装/更新完成。\n\n下次启动执行节点时会自动加载。")
 }
@@ -282,6 +311,7 @@ func (s *windowState) save() bool {
 		return false
 	}
 	s.config = cfg
+	setWindowText(s.automaText, s.automaStatus())
 	s.setStatus("配置已保存：" + s.configPath)
 	return true
 }
@@ -317,6 +347,7 @@ func (s *windowState) startNodes() {
 	}
 
 	dataDir := resolvePath(s.exeDir, cfg.DataDir, config.DefaultDataDir())
+	downloadDir := resolvePath(s.exeDir, cfg.DownloadDir, config.DefaultDownloadDir())
 	extensionDir := resolvePath(s.exeDir, cfg.AutomaExtensionDir, config.DefaultAutomaExtensionDir())
 	nodes, err := worker.Launcher{
 		ChromePath:          chromePath,
@@ -325,6 +356,7 @@ func (s *windowState) startNodes() {
 		MachineName:         cfg.MachineName,
 		NodeCount:           cfg.NodeCount,
 		DataDir:             dataDir,
+		DownloadDir:         downloadDir,
 		AutomaExtensionDir:  extensionDir,
 		RequireAutomaFolder: cfg.RequireAutomaFolder,
 	}.Start()
@@ -374,6 +406,7 @@ func (s *windowState) readConfigFromForm() (config.Config, error) {
 	cfg := s.config
 	cfg.ServerURL = strings.TrimSpace(getWindowText(s.serverEdit))
 	cfg.ChromePath = strings.TrimSpace(getWindowText(s.chromeEdit))
+	cfg.DownloadDir = strings.TrimSpace(getWindowText(s.downloadEdit))
 	nodeCount, err := strconv.Atoi(strings.TrimSpace(getWindowText(s.nodeEdit)))
 	if err != nil || nodeCount <= 0 {
 		return cfg, fmt.Errorf("执行节点数必须是大于 0 的数字")
@@ -387,6 +420,16 @@ func (s *windowState) readConfigFromForm() (config.Config, error) {
 
 func (s *windowState) setStatus(text string) {
 	setWindowText(s.statusText, text)
+}
+
+func (s *windowState) automaStatus() string {
+	extensionDir := resolvePath(s.exeDir, s.config.AutomaExtensionDir, config.DefaultAutomaExtensionDir())
+	manifestPath := filepath.Join(extensionDir, "manifest.json")
+	info, err := os.Stat(manifestPath)
+	if err != nil {
+		return "未安装（点击“安装/更新 Automa”选择 zip 安装包）"
+	}
+	return "已安装，更新时间：" + info.ModTime().Format("2006-01-02 15:04:05")
 }
 
 func createLabel(parent uintptr, text string, x, y, width, height int) uintptr {
@@ -485,6 +528,28 @@ func openFileDialog(owner uintptr, title string, filters []fileFilter, defaultEx
 		lpstrDefExt: uintptr(unsafe.Pointer(utf16Ptr(defaultExt))),
 	}
 	ret, _, _ := comdlg32.NewProc("GetOpenFileNameW").Call(uintptr(unsafe.Pointer(&ofn)))
+	if ret == 0 {
+		return "", false
+	}
+	return syscall.UTF16ToString(buffer), true
+}
+
+func openFolderDialog(owner uintptr, title string) (string, bool) {
+	displayName := make([]uint16, 260)
+	dialog := browseinfo{
+		hwndOwner:      owner,
+		pszDisplayName: uintptr(unsafe.Pointer(&displayName[0])),
+		lpszTitle:      uintptr(unsafe.Pointer(utf16Ptr(title))),
+		ulFlags:        bifReturnOnlyFSDirs | bifNewDialogStyle,
+	}
+	pidl, _, _ := proc("SHBrowseForFolderW").Call(uintptr(unsafe.Pointer(&dialog)))
+	if pidl == 0 {
+		return "", false
+	}
+	defer ole32.NewProc("CoTaskMemFree").Call(pidl)
+
+	buffer := make([]uint16, 260)
+	ret, _, _ := proc("SHGetPathFromIDListW").Call(pidl, uintptr(unsafe.Pointer(&buffer[0])))
 	if ret == 0 {
 		return "", false
 	}
@@ -741,6 +806,17 @@ type openfilename struct {
 	flagsEx           uint32
 }
 
+type browseinfo struct {
+	hwndOwner      uintptr
+	pidlRoot       uintptr
+	pszDisplayName uintptr
+	lpszTitle      uintptr
+	ulFlags        uint32
+	lpfn           uintptr
+	lParam         uintptr
+	iImage         int32
+}
+
 type logfont struct {
 	lfHeight         int32
 	lfWidth          int32
@@ -796,4 +872,7 @@ const (
 
 	ofnFileMustExist = 0x00001000
 	ofnPathMustExist = 0x00000800
+
+	bifReturnOnlyFSDirs = 0x00000001
+	bifNewDialogStyle   = 0x00000040
 )

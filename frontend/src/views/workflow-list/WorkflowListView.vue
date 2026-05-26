@@ -865,8 +865,6 @@ function getCreatedTimeRange() {
 }
 
 .workflow-param-form {
-  max-height: 58vh;
-  overflow: auto;
   padding-right: 8px;
 }
 

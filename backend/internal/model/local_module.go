@@ -103,6 +103,7 @@ type AutomaWorkflowRecord struct {
 	AutomaDescription string    `json:"automa_description"`
 	Source            int       `json:"source"`
 	SourceIP          string    `json:"source_ip"`
+	SourceNodeID      string    `json:"source_node_id"`
 	SourceUserAgent   string    `json:"source_user_agent"`
 	AutomaVersion     string    `json:"automa_version"`
 	ExtVersion        string    `json:"ext_version"`

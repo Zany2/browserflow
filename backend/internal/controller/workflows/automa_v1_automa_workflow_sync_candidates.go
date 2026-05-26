@@ -15,6 +15,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/Zany2/browserflow/backend/utility/workflowagent"
@@ -95,35 +96,44 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 	}
 
 	keyword := strings.ToLower(strings.TrimSpace(req.Keyword))
+	syncStatusFilter := strings.TrimSpace(req.SyncStatus)
+	workflowStatusFilter := strings.TrimSpace(req.WorkflowStatus)
 	sourceIP := strings.TrimSpace(req.SourceIP)
+	sourceNodeID := normalizeSourceNodeID(sourceIP, req.SourceNodeID)
+	sourceIdentity := ""
+	if sourceNodeID != "" {
+		sourceIdentity = nodeConnectionIdentity(sourceIP, sourceNodeID)
+	}
 	automaID := strings.TrimSpace(req.AutomaID)
 	mode := strings.TrimSpace(req.Mode)
 	if !serverMode {
-		if req.Refresh || sourceIP != "" || mode == "workflow" {
+		if req.Refresh || sourceIP != "" || sourceNodeID != "" || mode == "workflow" {
 			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 		}
 		mode = "client"
 	}
-	if serverMode && sourceIP != "" && !workflowcache.IsClientOnline(ctx, sourceIP) {
+	if serverMode && sourceIdentity != "" && !workflowcache.IsClientOnline(ctx, sourceIdentity) {
 		return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 	}
 	if req.Refresh {
-		if sourceIP != "" {
-			if err = workflowagent.RefreshClientInventory(ctx, sourceIP, workflowInventoryRefreshTimeout); err != nil {
-				return nil, err
+		if sourceIdentity != "" {
+			if err = workflowagent.RefreshClientInventory(ctx, sourceIdentity, workflowInventoryRefreshTimeout); err != nil {
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), err.Error())
+				return nil, nil
 			}
-		} else if mode == "workflow" {
-			clientIPs, listErr := workflowcache.ListOnlineClients(ctx)
+		} else if mode == "workflow" || sourceIP != "" {
+			clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, sourceNodeID)
 			if listErr != nil {
 				return nil, listErr
 			}
 			if err = workflowagent.RefreshClientInventories(ctx, clientIPs, workflowInventoryRefreshTimeout); err != nil {
-				return nil, err
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), err.Error())
+				return nil, nil
 			}
 		}
 	}
 
-	if serverMode && mode == "workflow" && sourceIP == "" {
+	if serverMode && mode == "workflow" {
 		if automaID == "" {
 			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 		}
@@ -141,22 +151,23 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 			serverAutomaDescription = serverRecord.Description
 		}
 
-		clientIPs, listErr := workflowcache.ListOnlineClients(ctx)
+		clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, sourceNodeID)
 		if listErr != nil {
 			return nil, listErr
 		}
 
 		candidates := make([]v1.WorkflowSyncCandidatesResModel, 0, len(clientIPs))
-		for _, clientIP := range clientIPs {
-			clientIP = strings.TrimSpace(clientIP)
-			if clientIP == "" || !workflowcache.IsClientOnline(ctx, clientIP) {
+		for _, clientIdentity := range clientIPs {
+			clientIdentity = strings.TrimSpace(clientIdentity)
+			if clientIdentity == "" || !workflowcache.IsClientOnline(ctx, clientIdentity) {
 				continue
 			}
-			if keyword != "" && !strings.Contains(strings.ToLower(clientIP), keyword) {
+			node := getOnlineNodeSnapshot(ctx, clientIdentity)
+			if keyword != "" && !strings.Contains(strings.ToLower(strings.Join([]string{clientIdentity, node.ClientIP, node.MachineID, node.NodeID, node.NodeName}, " ")), keyword) {
 				continue
 			}
 
-			item, ok, loadErr := workflowcache.GetClientWorkflow(ctx, clientIP, automaID)
+			item, ok, loadErr := workflowcache.GetClientWorkflow(ctx, clientIdentity, automaID)
 			if loadErr != nil {
 				return nil, loadErr
 			}
@@ -166,7 +177,10 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 				AutomaId:          automaID,
 				WorkflowId:        automaID,
 				Source:            "客户端同步",
-				SourceIp:          clientIP,
+				SourceIp:          firstNonEmpty(node.ClientIP, clientIdentity),
+				MachineId:         node.MachineID,
+				NodeId:            firstNonEmpty(node.NodeID, clientIdentity),
+				NodeName:          node.NodeName,
 				IsProtected:       serverRecord.IsProtected,
 				Synced:            false,
 				HasUpdate:         false,
@@ -215,6 +229,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 				candidate.Description = item.Description
 				candidate.AutomaName = item.Name
 				candidate.AutomaDescription = item.Description
+				fillCandidateNode(&candidate, item, clientIdentity)
 				candidate.AutomaVersion = item.AutomaVersion
 				candidate.ExtVersion = item.ExtVersion
 				candidate.CreatedAtAutoma = item.CreatedAtAutoma
@@ -226,6 +241,9 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 				candidate.Synced = synced
 				candidate.HasUpdate = hasUpdate
 				candidate.SyncStatus = status
+			}
+			if !matchCandidateFilters(syncStatusFilter, workflowStatusFilter, candidate.SyncStatus, candidate.Synced, candidate.HasUpdate, candidate.IsDisabled) {
+				continue
 			}
 			candidates = append(candidates, candidate)
 		}
@@ -252,8 +270,21 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 
 	var cacheItems []workflowcache.WorkflowItem
 	if serverMode {
-		if sourceIP != "" {
-			cacheItems, err = workflowcache.ListClientWorkflows(ctx, sourceIP)
+		if sourceIdentity != "" {
+			cacheItems, err = workflowcache.ListClientWorkflows(ctx, sourceIdentity)
+		} else if sourceIP != "" {
+			clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, "")
+			if listErr != nil {
+				return nil, listErr
+			}
+			for _, identity := range clientIPs {
+				var items []workflowcache.WorkflowItem
+				items, err = workflowcache.ListClientWorkflows(ctx, identity)
+				if err != nil {
+					return nil, err
+				}
+				cacheItems = append(cacheItems, items...)
+			}
 		}
 	}
 	if err != nil {
@@ -262,14 +293,15 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 	if cacheItems != nil {
 		candidates := make([]v1.WorkflowSyncCandidatesResModel, 0, len(cacheItems))
 		for _, item := range cacheItems {
-			if !workflowcache.IsClientOnline(ctx, item.SourceIp) {
+			itemIdentity := workflowItemIdentity(item)
+			if !workflowcache.IsClientOnline(ctx, itemIdentity) {
 				continue
 			}
 			if automaID != "" && item.AutomaId != automaID {
 				continue
 			}
 			if keyword != "" {
-				text := strings.ToLower(strings.Join([]string{item.AutomaId, item.Name, item.Description, item.SourceIp}, " "))
+				text := strings.ToLower(strings.Join([]string{item.AutomaId, item.Name, item.Description, item.SourceIp, item.MachineId, item.NodeId, item.NodeName}, " "))
 				if !strings.Contains(text, keyword) {
 					continue
 				}
@@ -296,6 +328,9 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 					}
 				}
 			}
+			if !matchCandidateFilters(syncStatusFilter, workflowStatusFilter, status, synced, hasUpdate, item.IsDisabled) {
+				continue
+			}
 			if serverRecord != nil {
 				serverAutomaName := strings.TrimSpace(serverRecord.AutomaName)
 				if serverAutomaName == "" {
@@ -305,17 +340,19 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 				if serverAutomaDescription == "" {
 					serverAutomaDescription = serverRecord.Description
 				}
-				candidate := v1.WorkflowSyncCandidatesResModel{Id: item.AutomaId, AutomaId: item.AutomaId, WorkflowId: item.WorkflowId, Name: item.Name, Description: item.Description, AutomaName: item.Name, AutomaDescription: item.Description, Source: "客户端同步", SourceIp: item.SourceIp, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: serverRecord.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, ContentHash: item.ContentHash, Synced: synced, HasUpdate: hasUpdate, SyncStatus: status, Online: workflowcache.IsClientOnline(ctx, item.SourceIp), ServerId: serverRecord.ID, ServerName: serverRecord.Name, ServerDesc: serverRecord.Description, ServerAutomaName: serverAutomaName, ServerAutomaDesc: serverAutomaDescription, ServerRevision: serverRecord.Revision}
+				candidate := v1.WorkflowSyncCandidatesResModel{Id: item.AutomaId, AutomaId: item.AutomaId, WorkflowId: item.WorkflowId, Name: item.Name, Description: item.Description, AutomaName: item.Name, AutomaDescription: item.Description, Source: "客户端同步", SourceIp: item.SourceIp, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: serverRecord.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, ContentHash: item.ContentHash, Synced: synced, HasUpdate: hasUpdate, SyncStatus: status, Online: workflowcache.IsClientOnline(ctx, itemIdentity), ServerId: serverRecord.ID, ServerName: serverRecord.Name, ServerDesc: serverRecord.Description, ServerAutomaName: serverAutomaName, ServerAutomaDesc: serverAutomaDescription, ServerRevision: serverRecord.Revision}
 				if !serverRecord.LastSyncedAt.IsZero() {
 					candidate.LastSyncedAt = gtime.NewFromTime(serverRecord.LastSyncedAt)
 				}
 				if !serverRecord.UpdatedAt.IsZero() {
 					candidate.ServerUpdatedAt = gtime.NewFromTime(serverRecord.UpdatedAt)
 				}
+				fillCandidateNode(&candidate, item, itemIdentity)
 				candidates = append(candidates, candidate)
 				continue
 			}
-			candidate := v1.WorkflowSyncCandidatesResModel{Id: item.AutomaId, AutomaId: item.AutomaId, WorkflowId: item.WorkflowId, Name: item.Name, Description: item.Description, AutomaName: item.Name, AutomaDescription: item.Description, Source: "客户端同步", SourceIp: item.SourceIp, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, ContentHash: item.ContentHash, Synced: synced, HasUpdate: hasUpdate, SyncStatus: status, Online: workflowcache.IsClientOnline(ctx, item.SourceIp)}
+			candidate := v1.WorkflowSyncCandidatesResModel{Id: item.AutomaId, AutomaId: item.AutomaId, WorkflowId: item.WorkflowId, Name: item.Name, Description: item.Description, AutomaName: item.Name, AutomaDescription: item.Description, Source: "客户端同步", SourceIp: item.SourceIp, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, ContentHash: item.ContentHash, Synced: synced, HasUpdate: hasUpdate, SyncStatus: status, Online: workflowcache.IsClientOnline(ctx, itemIdentity)}
+			fillCandidateNode(&candidate, item, itemIdentity)
 			candidates = append(candidates, candidate)
 		}
 		total := len(candidates)
@@ -344,7 +381,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 			_ = json.Unmarshal(snapshot.Workflows, &items)
 		}
 	}
-	if serverMode && sourceIP == "" && automaID == "" {
+	if serverMode && sourceIP == "" && sourceNodeID == "" && automaID == "" {
 		return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 	}
 	if len(items) == 0 {
@@ -483,4 +520,112 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		end = total
 	}
 	return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}, nil
+}
+
+func getOnlineNodeSnapshot(ctx context.Context, identity string) workflowcache.OnlineNode {
+	node, ok, err := workflowcache.GetOnlineNode(ctx, identity)
+	if err != nil || !ok {
+		return workflowcache.OnlineNode{NodeID: strings.TrimSpace(identity)}
+	}
+	return node
+}
+
+func listOnlineCandidateIdentities(ctx context.Context, sourceIP string, sourceNodeID string) ([]string, error) {
+	sourceIP = strings.TrimSpace(sourceIP)
+	sourceNodeID = strings.TrimSpace(sourceNodeID)
+	if sourceNodeID != "" {
+		identity := nodeConnectionIdentity(sourceIP, sourceNodeID)
+		if identity != "" && workflowcache.IsClientOnline(ctx, identity) {
+			return []string{identity}, nil
+		}
+		return []string{}, nil
+	}
+	if sourceIP != "" {
+		return workflowcache.ListClientNodes(ctx, sourceIP)
+	}
+	return workflowcache.ListOnlineClients(ctx)
+}
+
+func nodeConnectionIdentity(sourceIP string, sourceNodeID string) string {
+	sourceIP = strings.TrimSpace(sourceIP)
+	sourceNodeID = normalizeSourceNodeID(sourceIP, sourceNodeID)
+	if sourceIP == "" {
+		return sourceNodeID
+	}
+	if sourceNodeID == "" || sourceNodeID == sourceIP {
+		return sourceIP
+	}
+	return sourceIP + "|" + sourceNodeID
+}
+
+func normalizeSourceNodeID(sourceIP string, sourceNodeID string) string {
+	sourceIP = strings.TrimSpace(sourceIP)
+	sourceNodeID = strings.TrimSpace(sourceNodeID)
+	if sourceIP == "" || sourceNodeID == "" {
+		return sourceNodeID
+	}
+
+	prefix := sourceIP + "|"
+	for strings.HasPrefix(sourceNodeID, prefix) {
+		sourceNodeID = strings.TrimSpace(strings.TrimPrefix(sourceNodeID, prefix))
+	}
+	return sourceNodeID
+}
+
+func workflowItemIdentity(item workflowcache.WorkflowItem) string {
+	return nodeConnectionIdentity(item.SourceIp, item.NodeId)
+}
+
+func fillCandidateNode(candidate *v1.WorkflowSyncCandidatesResModel, item workflowcache.WorkflowItem, identity string) {
+	if candidate == nil {
+		return
+	}
+	candidate.SourceIp = item.SourceIp
+	candidate.MachineId = item.MachineId
+	candidate.NodeId = firstNonEmpty(item.NodeId, identity)
+	candidate.NodeName = item.NodeName
+	candidate.Online = true
+}
+
+func matchCandidateFilters(syncStatusFilter string, workflowStatusFilter string, status string, synced bool, hasUpdate bool, isDisabled bool) bool {
+	if syncStatusFilter != "" {
+		switch syncStatusFilter {
+		case "syncable":
+			if status == "client_missing" || status == "server_newer" || !(hasUpdate || !synced) {
+				return false
+			}
+		case "synced":
+			if !synced {
+				return false
+			}
+		default:
+			if status != syncStatusFilter {
+				return false
+			}
+		}
+	}
+
+	if workflowStatusFilter != "" {
+		switch workflowStatusFilter {
+		case "enabled":
+			if isDisabled {
+				return false
+			}
+		case "disabled":
+			if !isDisabled {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }

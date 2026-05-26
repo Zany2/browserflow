@@ -77,6 +77,7 @@ func loadServerWorkflowRecordsForSkill(ctx context.Context) ([]*model.AutomaWork
 			AutomaDescription: item.AutomaDescription,
 			Source:            item.Source,
 			SourceIP:          item.SourceIp,
+			SourceNodeID:      item.SourceNodeId,
 			AutomaVersion:     item.AutomaVersion,
 			ExtVersion:        item.ExtVersion,
 			CreatedAtAutoma:   item.CreatedAtAutoma,
@@ -111,6 +112,12 @@ func storedWorkflowRecordToSkillMap(record *model.AutomaWorkflowRecord) map[stri
 	}
 	if strings.TrimSpace(record.AutomaID) != "" {
 		workflow["automa_id"] = record.AutomaID
+	}
+	if strings.TrimSpace(record.SourceIP) != "" {
+		workflow["source_ip"] = record.SourceIP
+	}
+	if strings.TrimSpace(record.SourceNodeID) != "" {
+		workflow["source_node_id"] = record.SourceNodeID
 	}
 	if strings.TrimSpace(record.Name) != "" {
 		workflow["name"] = record.Name
