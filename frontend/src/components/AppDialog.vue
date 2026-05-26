@@ -10,7 +10,9 @@
     class="app-dialog"
     @closed="handleClosed"
   >
-    <slot />
+    <div class="app-dialog__content">
+      <slot />
+    </div>
 
     <template #footer>
       <slot name="footer">
@@ -33,52 +35,52 @@ import { computed } from 'vue'
 
 const visible = defineModel({
   type: Boolean,
-  default: false,
+  default: false
 })
 
 const props = defineProps({
   title: {
     type: String,
-    default: '',
+    default: ''
   },
   width: {
     type: String,
-    default: '640px',
+    default: '640px'
   },
   top: {
     type: String,
-    default: '48px',
+    default: '48px'
   },
   confirmText: {
     type: String,
-    default: '确认',
+    default: '确认'
   },
   cancelText: {
     type: String,
-    default: '取消',
+    default: '取消'
   },
   loading: {
     type: Boolean,
-    default: false,
+    default: false
   },
   confirmDisabled: {
     type: Boolean,
-    default: false,
+    default: false
   },
   destroyOnClose: {
     type: Boolean,
-    default: true,
+    default: true
   },
   closeOnClickModal: {
     type: Boolean,
-    default: true,
-  },
+    default: true
+  }
 })
 
 const emit = defineEmits(['cancel', 'closed', 'confirm'])
 
 const dialogStyle = computed(() => ({
-  '--app-dialog-top': props.top,
+  '--app-dialog-top': props.top
 }))
 
 function handleCancel() {
@@ -116,8 +118,12 @@ function handleClosed() {
 :global(.app-dialog .el-dialog__body) {
   flex: 1 1 auto;
   min-height: 0;
-  padding-right: 28px;
+  padding: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+:global(.app-dialog .app-dialog__content) {
+  padding: 20px 28px 20px 20px;
 }
 </style>

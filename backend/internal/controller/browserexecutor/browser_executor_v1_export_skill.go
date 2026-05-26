@@ -14,7 +14,7 @@ func (c *ControllerV1) BrowserExecutorExportSkill(ctx context.Context, req *v1.B
 	// Skill export is static and should not include current browser runtime state. Skill 是静态说明，不写入当前浏览器运行状态。
 	skill := browserexecutor.GenerateSkill(browserexecutor.RequestBaseURL(request))
 	request.Response.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	request.Response.Header().Set("Content-Disposition", "attachment; filename=SKILL_BROWSER_EXECUTOR.md")
+	request.Response.Header().Set("Content-Disposition", "attachment; filename=SKILL.md")
 	request.Response.Write(skill)
 	request.ExitAll()
 	return nil, nil

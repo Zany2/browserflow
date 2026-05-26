@@ -1,9 +1,11 @@
 <template>
-  <section class="llm-chat-page">
-    <aside class="session-panel">
-      <div class="panel-header">
+  <section class="llm-chat-page windows-workspace-panel">
+    <aside class="session-panel windows-workspace-panel--stack">
+      <div class="panel-header windows-workspace-panel__header">
         <h1>大模型对话</h1>
-        <el-button type="primary" :icon="Plus" @click="handleCreateSession">新建</el-button>
+        <el-button type="primary" :icon="Plus" @click="handleCreateSession"
+          >新建</el-button
+        >
       </div>
 
       <div class="config-bar">
@@ -17,7 +19,7 @@
         </el-select>
       </div>
 
-      <div class="session-toolbar">
+      <div class="session-toolbar windows-workspace-selection">
         <el-checkbox
           :model-value="isAllSessionsSelected"
           :indeterminate="isSessionSelectionIndeterminate"
@@ -44,7 +46,7 @@
           class="session-item"
           :class="{ 'is-active': currentSession?.id === session.id }"
           type="button"
-          @click="currentSession = session"
+          @click="selectSession(session)"
         >
           <el-checkbox
             class="session-checkbox"
@@ -53,7 +55,9 @@
             @change="(checked) => handleToggleSession(session.id, checked)"
           />
           <span class="session-title">{{ getSessionTitle(session) }}</span>
-          <span class="session-meta">{{ session.messages?.length || 0 }} 条消息</span>
+          <span class="session-meta"
+            >{{ session.messages?.length || 0 }} 条消息</span
+          >
           <el-button
             class="session-delete"
             link
@@ -69,13 +73,18 @@
         v-model:current-page="sessionCurrentPage"
         v-model:page-size="sessionPageSize"
         class="session-pagination"
-        compact
+        layout="prev, pager, next"
+        :pager-count="3"
         :total="sessions.length"
       />
     </aside>
 
-    <main class="chat-panel">
-      <div ref="messageListRef" class="message-list" @scroll="handleMessageListScroll">
+    <main class="chat-panel windows-workspace-panel--stack">
+      <div
+        ref="messageListRef"
+        class="message-list"
+        @scroll="handleMessageListScroll"
+      >
         <el-empty v-if="!currentSession" description="请选择或新建一个会话" />
         <template v-else>
           <div
@@ -85,12 +94,16 @@
             :class="`is-${message.role}`"
           >
             <div class="message-bubble">
-              <div class="message-role">{{ message.role === 'user' ? '我' : 'AI' }}</div>
+              <div class="message-role">
+                {{ message.role === 'user' ? '我' : 'AI' }}
+              </div>
               <div class="message-content">{{ message.content }}</div>
-              <div class="message-time">{{ formatTime(message.timestamp) }}</div>
+              <div class="message-time">
+                {{ formatTime(message.timestamp) }}
+              </div>
             </div>
           </div>
-          <div v-if="streaming" class="message-row is-assistant">
+          <div v-if="currentSessionStreaming" class="message-row is-assistant">
             <div class="message-bubble">
               <div class="typing-dot"></div>
               <span>正在生成...</span>
@@ -114,14 +127,14 @@
           :rows="3"
           resize="none"
           placeholder="输入要对话的内容，Enter 发送，Shift+Enter 换行"
-          :disabled="!currentSession || streaming"
+          :disabled="!currentSession || currentSessionStreaming"
           @keydown.enter="handleInputEnter"
         />
         <el-button
           class="send-button"
           type="primary"
           :icon="Promotion"
-          :loading="streaming"
+          :loading="currentSessionStreaming"
           :disabled="!canSend"
           @click="handleSendMessage"
         >
@@ -147,7 +160,7 @@ import {
   listChatSessions,
   listLLMConfigs,
   listLLMProviders,
-  streamChatMessage,
+  streamChatMessage
 } from '@/services/llmChat'
 
 const configs = ref([])
@@ -164,38 +177,60 @@ const STREAM_CHAR_DELAY = 18
 const SCROLL_BOTTOM_THRESHOLD = 80
 const CHAT_INPUT_MIN_HEIGHT = 76
 const CHAT_INPUT_MAX_HEIGHT = 260
+const LAST_SESSION_STORAGE_KEY = 'browserflow.llmChat.lastSessionId'
+const STREAMING_SESSIONS_STORAGE_KEY = 'browserflow.llmChat.streamingSessionIds'
+const CHAT_SESSION_UPDATED_EVENT = 'browserflow:chat-session-updated'
+const CHAT_STREAMING_CHANGED_EVENT = 'browserflow:chat-streaming-changed'
 const inputMessage = ref('')
-const streaming = ref(false)
+const streamingSessionIds = ref(readStoredStreamingSessionIds())
 const messageListRef = ref(null)
 const chatInputHeight = ref(CHAT_INPUT_MIN_HEIGHT)
 const shouldStickToBottom = ref(true)
 
 let inputResizeStartY = 0
 let inputResizeStartHeight = CHAT_INPUT_MIN_HEIGHT
+let isViewActive = false
 
-const activeConfigs = computed(() => configs.value.filter((config) => config.is_active))
-const canSend = computed(() => Boolean(currentSession.value && inputMessage.value.trim() && !streaming.value))
+const activeConfigs = computed(() =>
+  configs.value.filter((config) => config.is_active)
+)
+const canSend = computed(() =>
+  Boolean(
+    currentSession.value &&
+    inputMessage.value.trim() &&
+    !currentSessionStreaming.value
+  )
+)
+const currentSessionStreaming = computed(() =>
+  isSessionStreaming(currentSession.value?.id)
+)
 const chatInputBarStyle = computed(() => ({
-  '--chat-input-height': `${chatInputHeight.value}px`,
+  '--chat-input-height': `${chatInputHeight.value}px`
 }))
 const pagedSessions = computed(() => {
   const start = (sessionCurrentPage.value - 1) * sessionPageSize.value
   return sessions.value.slice(start, start + sessionPageSize.value)
 })
-const pagedSessionIds = computed(() => pagedSessions.value.map((session) => session.id))
+const pagedSessionIds = computed(() =>
+  pagedSessions.value.map((session) => session.id)
+)
 const selectedPagedSessionIds = computed(() =>
-  selectedSessionIds.value.filter((id) => pagedSessionIds.value.includes(id)),
+  selectedSessionIds.value.filter((id) => pagedSessionIds.value.includes(id))
 )
 const isAllSessionsSelected = computed(
-  () => pagedSessionIds.value.length > 0 && selectedPagedSessionIds.value.length === pagedSessionIds.value.length,
+  () =>
+    pagedSessionIds.value.length > 0 &&
+    selectedPagedSessionIds.value.length === pagedSessionIds.value.length
 )
 const isSessionSelectionIndeterminate = computed(
-  () => selectedPagedSessionIds.value.length > 0 && selectedPagedSessionIds.value.length < pagedSessionIds.value.length,
+  () =>
+    selectedPagedSessionIds.value.length > 0 &&
+    selectedPagedSessionIds.value.length < pagedSessionIds.value.length
 )
 
 watch(
   () => currentSession.value?.messages?.length,
-  () => scrollToBottomIfNeeded(),
+  () => scrollToBottomIfNeeded()
 )
 
 watch(
@@ -203,22 +238,38 @@ watch(
   () => {
     shouldStickToBottom.value = true
     scrollToBottom()
-  },
+  }
 )
 
 watch([sessions, sessionPageSize], () => {
   sessionCurrentPage.value = getSafePage({
     total: sessions.value.length,
     page: sessionCurrentPage.value,
-    size: sessionPageSize.value,
+    size: sessionPageSize.value
   })
 })
 
 onMounted(async () => {
+  isViewActive = true
+  window.addEventListener(CHAT_SESSION_UPDATED_EVENT, handleChatSessionUpdated)
+  window.addEventListener(
+    CHAT_STREAMING_CHANGED_EVENT,
+    handleChatStreamingChanged
+  )
+  syncStreamingSessionIds()
   await Promise.all([loadProviders(), loadConfigs(), loadSessions()])
 })
 
 onBeforeUnmount(() => {
+  isViewActive = false
+  window.removeEventListener(
+    CHAT_SESSION_UPDATED_EVENT,
+    handleChatSessionUpdated
+  )
+  window.removeEventListener(
+    CHAT_STREAMING_CHANGED_EVENT,
+    handleChatStreamingChanged
+  )
   stopInputResize()
 })
 
@@ -236,28 +287,34 @@ async function loadConfigs() {
     ''
 }
 
-async function loadSessions(preferredSessionId = currentSession.value?.id) {
+async function loadSessions(
+  preferredSessionId = currentSession.value?.id || getStoredSessionId()
+) {
   const data = await listChatSessions()
-  sessions.value = sortSessionsByUpdatedDesc(data.sessions || [])
-  currentSession.value =
+  sessions.value = sortSessionsByCreatedDesc(data.sessions || [])
+  selectSession(
     sessions.value.find((session) => session.id === preferredSessionId) ||
-    sessions.value[0] ||
-    null
+      sessions.value[0] ||
+      null
+  )
   selectedSessionIds.value = selectedSessionIds.value.filter((id) =>
-    sessions.value.some((session) => session.id === id),
+    sessions.value.some((session) => session.id === id)
   )
 }
 
 async function handleCreateSession() {
   if (!selectedConfigId.value) {
-    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先在大模型配置页面配置并启用模型' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.warning,
+      message: '请先在大模型配置页面配置并启用模型'
+    })
     return
   }
 
   const data = await createChatSession(selectedConfigId.value)
-  sessions.value = sortSessionsByUpdatedDesc([data.session, ...sessions.value])
+  sessions.value = sortSessionsByCreatedDesc([data.session, ...sessions.value])
   sessionCurrentPage.value = 1
-  currentSession.value = data.session
+  selectSession(data.session)
 }
 
 async function handleDeleteSession(sessionId) {
@@ -265,7 +322,7 @@ async function handleDeleteSession(sessionId) {
     title: '删除会话',
     message: '确认删除这个会话吗？',
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '删除',
+    confirmText: '删除'
   })
   if (!confirmed) return
 
@@ -275,19 +332,27 @@ async function handleDeleteSession(sessionId) {
 
 function handleToggleSession(sessionId, checked) {
   if (checked) {
-    selectedSessionIds.value = Array.from(new Set([...selectedSessionIds.value, sessionId]))
+    selectedSessionIds.value = Array.from(
+      new Set([...selectedSessionIds.value, sessionId])
+    )
     return
   }
-  selectedSessionIds.value = selectedSessionIds.value.filter((id) => id !== sessionId)
+  selectedSessionIds.value = selectedSessionIds.value.filter(
+    (id) => id !== sessionId
+  )
 }
 
 function handleToggleAllSessions(checked) {
   const pageIds = pagedSessionIds.value
   if (checked) {
-    selectedSessionIds.value = Array.from(new Set([...selectedSessionIds.value, ...pageIds]))
+    selectedSessionIds.value = Array.from(
+      new Set([...selectedSessionIds.value, ...pageIds])
+    )
     return
   }
-  selectedSessionIds.value = selectedSessionIds.value.filter((id) => !pageIds.includes(id))
+  selectedSessionIds.value = selectedSessionIds.value.filter(
+    (id) => !pageIds.includes(id)
+  )
 }
 
 async function handleDeleteSelectedSessions() {
@@ -298,7 +363,7 @@ async function handleDeleteSelectedSessions() {
     title: '批量删除会话',
     message: `确认删除选中的 ${ids.length} 个会话吗？`,
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '删除',
+    confirmText: '删除'
   })
   if (!confirmed) return
 
@@ -307,25 +372,118 @@ async function handleDeleteSelectedSessions() {
 }
 
 function removeSessionsFromState(sessionIds) {
-  sessions.value = sessions.value.filter((session) => !sessionIds.includes(session.id))
-  selectedSessionIds.value = selectedSessionIds.value.filter((id) => !sessionIds.includes(id))
+  sessions.value = sessions.value.filter(
+    (session) => !sessionIds.includes(session.id)
+  )
+  sessionIds.forEach((sessionId) => removeStreamingSession(sessionId))
+  selectedSessionIds.value = selectedSessionIds.value.filter(
+    (id) => !sessionIds.includes(id)
+  )
   if (currentSession.value && sessionIds.includes(currentSession.value.id)) {
-    currentSession.value = sessions.value[0] || null
+    selectSession(sessions.value[0] || null)
   }
 }
 
-function sortSessionsByUpdatedDesc(data) {
-  // Session order 会话排序，跟随后端 updated_at，兜底使用 created_at。
-  return data.slice().sort((prev, next) => getSessionTime(next) - getSessionTime(prev))
+function sortSessionsByCreatedDesc(data) {
+  // Session order 会话按创建时间倒序，新增消息不改变列表位置。
+  return data
+    .slice()
+    .sort(
+      (prev, next) => getSessionCreatedTime(next) - getSessionCreatedTime(prev)
+    )
 }
 
-function getSessionTime(session) {
-  const value = session?.updated_at || session?.created_at
+function getSessionCreatedTime(session) {
+  const value = session?.created_at
   return value ? new Date(value).getTime() || 0 : 0
 }
 
+function selectSession(session) {
+  currentSession.value = session || null
+  if (session?.id) {
+    localStorage.setItem(LAST_SESSION_STORAGE_KEY, session.id)
+    return
+  }
+  localStorage.removeItem(LAST_SESSION_STORAGE_KEY)
+}
+
+function getStoredSessionId() {
+  return localStorage.getItem(LAST_SESSION_STORAGE_KEY) || ''
+}
+
+async function handleChatSessionUpdated(event) {
+  if (!event?.detail?.sessionId) return
+  await loadSessions().catch(() => {})
+}
+
+function handleChatStreamingChanged() {
+  syncStreamingSessionIds()
+}
+
+function notifyChatSessionUpdated(sessionId) {
+  window.dispatchEvent(
+    new CustomEvent(CHAT_SESSION_UPDATED_EVENT, {
+      detail: { sessionId }
+    })
+  )
+}
+
+function notifyChatStreamingChanged() {
+  window.dispatchEvent(new CustomEvent(CHAT_STREAMING_CHANGED_EVENT))
+}
+
+function isSessionStreaming(sessionId) {
+  return Boolean(sessionId && streamingSessionIds.value.includes(sessionId))
+}
+
+function addStreamingSession(sessionId) {
+  if (!sessionId) return
+  streamingSessionIds.value = Array.from(
+    new Set([...streamingSessionIds.value, sessionId])
+  )
+  storeStreamingSessionIds()
+  notifyChatStreamingChanged()
+}
+
+function removeStreamingSession(sessionId) {
+  if (!sessionId) return
+  streamingSessionIds.value = streamingSessionIds.value.filter(
+    (id) => id !== sessionId
+  )
+  storeStreamingSessionIds()
+  notifyChatStreamingChanged()
+}
+
+function syncStreamingSessionIds() {
+  streamingSessionIds.value = readStoredStreamingSessionIds()
+}
+
+function storeStreamingSessionIds() {
+  if (streamingSessionIds.value.length === 0) {
+    localStorage.removeItem(STREAMING_SESSIONS_STORAGE_KEY)
+    return
+  }
+  localStorage.setItem(
+    STREAMING_SESSIONS_STORAGE_KEY,
+    JSON.stringify(streamingSessionIds.value)
+  )
+}
+
+function readStoredStreamingSessionIds() {
+  try {
+    const data = JSON.parse(
+      localStorage.getItem(STREAMING_SESSIONS_STORAGE_KEY) || '[]'
+    )
+    return Array.isArray(data) ? data.filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
 async function handleSendMessage() {
-  if (!currentSession.value || streaming.value) return
+  if (!currentSession.value || isSessionStreaming(currentSession.value.id)) {
+    return
+  }
   if (!inputMessage.value.trim()) {
     appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请输入对话内容' })
     return
@@ -333,19 +491,18 @@ async function handleSendMessage() {
 
   const messageText = inputMessage.value.trim()
   inputMessage.value = ''
-  streaming.value = true
 
   const userMessage = {
     id: `local_user_${Date.now()}`,
     role: 'user',
     content: messageText,
-    timestamp: new Date().toISOString(),
+    timestamp: new Date().toISOString()
   }
   const assistantMessage = {
     id: `local_assistant_${Date.now()}`,
     role: 'assistant',
     content: '',
-    timestamp: '',
+    timestamp: ''
   }
 
   currentSession.value.messages.push(userMessage, assistantMessage)
@@ -355,6 +512,7 @@ async function handleSendMessage() {
   scrollToBottom()
 
   const sessionId = activeSession.id
+  addStreamingSession(sessionId)
   try {
     await streamChatMessage(sessionId, messageText, async (chunk) => {
       if (chunk.type === 'message') {
@@ -376,13 +534,23 @@ async function handleSendMessage() {
         throw new Error(chunk.error || '生成失败')
       }
     })
-    await loadSessions(sessionId)
+    if (isViewActive) {
+      await loadSessions()
+    } else {
+      notifyChatSessionUpdated(sessionId)
+    }
   } catch (error) {
-    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
-    await loadSessions(sessionId).catch(() => {})
+    if (isViewActive) {
+      appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
+      await loadSessions().catch(() => {})
+    } else {
+      notifyChatSessionUpdated(sessionId)
+    }
   } finally {
-    streaming.value = false
-    scrollToBottomIfNeeded()
+    removeStreamingSession(sessionId)
+    if (isViewActive) {
+      scrollToBottomIfNeeded()
+    }
   }
 }
 
@@ -418,15 +586,25 @@ function clampInputHeight(value) {
 }
 
 function getSessionTitle(session) {
-  return session.messages?.find((message) => message.role === 'user')?.content || '新会话'
+  return (
+    session.messages?.find((message) => message.role === 'user')?.content ||
+    '新会话'
+  )
 }
 
 function getConfigLabel(config) {
-  return [getProviderName(config.provider), config.name, config.model].filter(Boolean).join(' / ')
+  return [getProviderName(config.provider), config.name, config.model]
+    .filter(Boolean)
+    .join(' / ')
 }
 
 function getProviderName(providerId) {
-  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || ''
+  return (
+    providerCatalog.value.find((provider) => provider.id === providerId)
+      ?.name ||
+    providerId ||
+    ''
+  )
 }
 
 function formatTime(value) {
@@ -456,7 +634,10 @@ function handleMessageListScroll() {
 function isMessageListNearBottom() {
   const element = messageListRef.value
   if (!element) return true
-  return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD
+  return (
+    element.scrollHeight - element.scrollTop - element.clientHeight <=
+    SCROLL_BOTTOM_THRESHOLD
+  )
 }
 
 async function appendAssistantContent(assistantMessage, content) {
@@ -480,10 +661,6 @@ function sleep(ms) {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   height: 100%;
-  min-height: 0;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-  overflow: hidden;
 }
 
 .session-panel,
@@ -506,6 +683,10 @@ function sleep(ms) {
   gap: 12px;
   padding: 16px;
   border-bottom: 1px solid #e4e7ed;
+}
+
+.panel-header {
+  padding: 14px 16px;
 }
 
 .panel-header,
@@ -541,24 +722,30 @@ function sleep(ms) {
 .session-pagination {
   flex-shrink: 0;
   padding: 10px 12px;
-  margin-top: 0;
-  overflow: hidden;
   border-top: 1px solid #e4e7ed;
 }
 
 .session-pagination :deep(.el-pagination) {
   justify-content: center;
-  flex-wrap: nowrap;
-  gap: 4px;
-}
-
-.session-pagination.app-pagination--compact {
-  justify-content: space-between;
 }
 
 .session-pagination :deep(.el-pagination button),
 .session-pagination :deep(.el-pager li) {
   min-width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 28px;
+}
+
+.session-pagination :deep(.el-pager) {
+  gap: 2px;
+}
+
+.session-pagination :deep(.el-pagination) {
+  --el-pagination-button-width: 28px;
+  --el-pagination-button-height: 28px;
+  --el-pagination-font-size: 13px;
+  gap: 2px;
 }
 
 .session-item {

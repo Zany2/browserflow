@@ -1,7 +1,91 @@
-# BrowserFlow backend configuration. BrowserFlow 后端配置。
+package configbootstrap
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/gcfg"
+)
+
+const (
+	configFileName = "config.yaml"
+)
+
+var (
+	executableDirFunc = executableDir
+	runtimeGOOS       = runtime.GOOS
+)
+
+// Ensure prepares the runtime config before any business code reads g.Cfg(). 启动业务前准备运行配置。
+func Ensure() error {
+	if runtimeGOOS != "windows" {
+		return nil
+	}
+
+	exeDir, err := executableDirFunc()
+	if err != nil {
+		return err
+	}
+
+	paths := []string{
+		filepath.Join(".", configFileName),
+		filepath.Join(exeDir, configFileName),
+		filepath.Join("manifest", "config", configFileName),
+		filepath.Join("backend", "manifest", "config", configFileName),
+	}
+	for _, path := range paths {
+		if existsFile(path) {
+			return useConfigFile(path)
+		}
+	}
+
+	configPath := filepath.Join(exeDir, configFileName)
+	if err = os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		return err
+	}
+	if err = os.WriteFile(configPath, []byte(defaultWindowsConfig), 0644); err != nil {
+		return err
+	}
+	return useConfigFile(configPath)
+}
+
+func executableDir() (string, error) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(exePath), nil
+}
+
+func existsFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func useConfigFile(path string) error {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	adapter, err := gcfg.NewAdapterFile(absPath)
+	if err != nil {
+		return err
+	}
+	g.Cfg().SetAdapter(adapter)
+	return nil
+}
+
+const defaultWindowsConfig = `# BrowserFlow backend configuration. BrowserFlow 后端配置。
 
 # -----------------------------------------------------------------------------
-# Common configuration for both Windows mode and Server mode. Windows 模式和 Server 模式共用配置。
+# Common configuration for Windows mode. Windows 模式共用配置。
 # -----------------------------------------------------------------------------
 
 server:
@@ -12,13 +96,14 @@ server:
   # swaggerPath: "/swagger"      # Swagger UI path. Swagger UI 访问路径。
 
 app:
-  mode: "windows"               # Runtime mode: "windows" for local desktop edition, "server" for dispatch center edition. 运行模式："windows" 为本地桌面版，"server" 为服务端调度版。
+  mode: "windows"              # Runtime mode: "windows" for local desktop edition. 运行模式："windows" 为本地桌面版。
 
+# Logger configuration. 日志配置。
 logger:
   path:                  "./logs/"             # Log file path; empty disables file logging and keeps console output only. 日志文件路径，为空表示关闭文件日志，仅输出到终端。
   file:                  "{Y-m-d}.log"         # Log file format. 日志文件格式。
   prefix:                ""                    # Log line prefix. 日志内容输出前缀。
-  level:                 "ALL"                 # Log output level. 日志输出级别。
+  level:                 "ERROR"                 # Log output level. 日志输出级别。
   timeFormat:            "2006-01-02 15:04:05" # Log time format using the Go standard layout. 自定义日志时间格式，使用 Golang 标准时间格式。
   ctxKeys:               []                    # Context keys automatically printed into logs. 自定义 Context 变量名称，自动打印到日志中。
   header:                true                  # Whether to print log header information. 是否打印日志头信息。
@@ -33,7 +118,7 @@ logger:
   writerColorEnable:     false                 # Enable color output in log files. 日志文件是否带颜色。
 
 frontend:
-  url: "http://localhost:5173"  # Frontend base URL used by generated Skill links and local browser launch URLs. 前端访问地址，用于生成 Skill 地址和本地浏览器启动地址。
+  url: "http://127.0.0.1:8001"  # Frontend base URL used by local browser launch URLs. 前端访问地址，用于本地浏览器启动地址。
 
 websocket:
   heartbeatInterval: 15         # Heartbeat send interval in seconds. 心跳发送间隔，单位秒。
@@ -49,22 +134,4 @@ websocket:
 
 localStorage:
   path: "data/browserflow.db"   # Local BoltDB file path for Windows mode business data. Windows 模式本地业务数据的 BoltDB 文件路径。
-
-# -----------------------------------------------------------------------------
-# Server mode only. 仅 Server 服务端调度模式使用。
-# -----------------------------------------------------------------------------
-
-database:
-  logger:
-    path: "./logs/sql"          # SQL log file path. SQL 日志文件路径。
-    level: "all"                # SQL log output level. SQL 日志输出级别。
-    stdout: true                # Whether to also output SQL logs to terminal. SQL 日志是否同时输出到终端。
-  default:
-    link: "pgsql:postgres:daixk@tcp(192.168.19.104:5432)/browserflow" # PostgreSQL connection string for server mode. Server 模式 PostgreSQL 连接字符串。
-    debug: true                 # Whether to enable database debug SQL output. 是否开启数据库调试 SQL 输出。
-
-redis:
-  default:
-    address: "192.168.19.104:6379" # Redis server address for server mode coordination. Server 模式调度协调使用的 Redis 地址。
-    db: 0                          # Redis database index. Redis 数据库编号。
-    pass: "root"                   # Redis password. Redis 密码。
+`

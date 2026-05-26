@@ -1,6 +1,6 @@
 <template>
-  <section class="browser-page">
-    <header class="page-toolbar">
+  <section class="browser-page windows-workspace-page">
+    <header class="page-toolbar windows-workspace-actions">
       <div>
         <h1>浏览器</h1>
         <p>配置启动的浏览器，后续自动化操作会复用当前运行实例。</p>
@@ -25,22 +25,18 @@
       </div>
     </header>
 
-    <div class="browser-layout">
-      <aside class="instance-panel">
-        <div class="panel-title">
+    <div class="browser-layout windows-workspace-layout">
+      <aside
+        class="instance-panel windows-workspace-panel windows-workspace-panel--stack"
+      >
+        <div class="panel-title windows-workspace-panel__header">
           <span>浏览器配置</span>
-          <el-button type="primary" :icon="Plus" @click="handleNew">新建</el-button>
+          <el-button type="primary" :icon="Plus" @click="handleNew"
+            >新建</el-button
+          >
         </div>
 
-        <div class="table-toolbar">
-          <el-checkbox
-            :model-value="isAllInstancesSelected"
-            :indeterminate="isInstanceSelectionIndeterminate"
-            :disabled="instances.length === 0"
-            @change="handleToggleAllInstances"
-          >
-            全选
-          </el-checkbox>
+        <div class="table-toolbar windows-workspace-selection">
           <el-button
             link
             type="danger"
@@ -49,7 +45,10 @@
           >
             删除选中
           </el-button>
-          <AppSelectionSummary :count="selectedInstanceIds.length" unit="配置" />
+          <AppSelectionSummary
+            :count="selectedInstanceIds.length"
+            unit="配置"
+          />
         </div>
 
         <el-table
@@ -63,6 +62,14 @@
           @row-click="selectInstance"
         >
           <el-table-column width="40" align="center" class-name="action-column">
+            <template #header>
+              <el-checkbox
+                :model-value="isAllInstancesSelected"
+                :indeterminate="isInstanceSelectionIndeterminate"
+                :disabled="instances.length === 0"
+                @change="handleToggleAllInstances"
+              />
+            </template>
             <template #default="{ row }">
               <el-checkbox
                 :model-value="selectedInstanceIds.includes(row.id)"
@@ -71,16 +78,30 @@
               />
             </template>
           </el-table-column>
-          <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip>
+          <el-table-column
+            prop="name"
+            label="名称"
+            min-width="120"
+            show-overflow-tooltip
+          >
             <template #default="{ row }">
               <div class="instance-name">
                 <span class="instance-name__text">{{ row.name }}</span>
-                <el-tag v-if="row.is_current" size="small" type="primary">当前</el-tag>
-                <el-tag v-if="row.is_active" size="small" type="success">运行</el-tag>
+                <el-tag v-if="row.is_current" size="small" type="primary"
+                  >当前</el-tag
+                >
+                <el-tag v-if="row.is_active" size="small" type="success"
+                  >运行</el-tag
+                >
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="Automa" width="106" align="center" class-name="action-column">
+          <el-table-column
+            label="Automa"
+            width="106"
+            align="center"
+            class-name="action-column"
+          >
             <template #default="{ row }">
               <div class="automa-status">
                 <el-tag :type="getAutomaTagType(row)" effect="plain">
@@ -92,10 +113,22 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="默认" width="96" align="center" class-name="action-column default-column">
+          <el-table-column
+            label="默认"
+            width="96"
+            align="center"
+            class-name="action-column default-column"
+          >
             <template #default="{ row }">
-              <div :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`" class="quick-edit-cell">
-                <span v-if="row.is_default" class="quick-edit-action quick-edit-badge">默认</span>
+              <div
+                :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`"
+                class="quick-edit-cell"
+              >
+                <span
+                  v-if="row.is_default"
+                  class="quick-edit-action quick-edit-badge"
+                  >默认</span
+                >
                 <button
                   v-else
                   class="quick-edit-action quick-edit-button"
@@ -113,11 +146,33 @@
               {{ row.type === 'remote' ? '远程' : '本地' }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="138" class-name="operation-column">
+          <el-table-column
+            label="操作"
+            width="138"
+            class-name="operation-column"
+          >
             <template #default="{ row }">
-              <el-button link type="primary" :disabled="row.is_active" @click.stop="handleStart(row)">启动</el-button>
-              <el-button link type="danger" :disabled="!row.is_active" @click.stop="handleStop(row)">停止</el-button>
-              <el-button link type="success" :disabled="!row.is_active || row.is_current" @click.stop="handleSwitch(row)">切换</el-button>
+              <el-button
+                link
+                type="primary"
+                :disabled="row.is_active"
+                @click.stop="handleStart(row)"
+                >启动</el-button
+              >
+              <el-button
+                link
+                type="danger"
+                :disabled="!row.is_active"
+                @click.stop="handleStop(row)"
+                >停止</el-button
+              >
+              <el-button
+                link
+                type="success"
+                :disabled="!row.is_active || row.is_current"
+                @click.stop="handleSwitch(row)"
+                >切换</el-button
+              >
             </template>
           </el-table-column>
         </el-table>
@@ -131,12 +186,16 @@
         />
       </aside>
 
-      <main class="config-panel">
-        <div class="panel-title">
+      <main
+        class="config-panel windows-workspace-panel windows-workspace-panel--stack"
+      >
+        <div class="panel-title windows-workspace-panel__header">
           <span>{{ form.id ? '编辑配置' : '新建配置' }}</span>
           <div class="panel-actions">
             <el-button :icon="RefreshRight" @click="loadAll">刷新</el-button>
-            <el-button type="primary" :icon="Check" @click="handleSave">{{ saveButtonText }}</el-button>
+            <el-button type="primary" :icon="Check" @click="handleSave">{{
+              saveButtonText
+            }}</el-button>
           </div>
         </div>
 
@@ -158,26 +217,57 @@
           </el-row>
 
           <el-form-item label="说明">
-            <el-input v-model="form.description" placeholder="用于区分不同浏览器配置" />
+            <el-input
+              v-model="form.description"
+              placeholder="用于区分不同浏览器配置"
+            />
           </el-form-item>
 
           <template v-if="form.type === 'local'">
             <el-form-item label="浏览器路径">
-              <el-input v-model="form.bin_path" placeholder="不填则使用 rod 自动查找的浏览器" />
+              <el-input
+                v-model="form.bin_path"
+                placeholder="不填则自动查找 Chrome / Edge"
+              >
+                <template #append>
+                  <el-button
+                    :loading="selectingBinPath"
+                    @click="handleSelectBinPath"
+                    >选择</el-button
+                  >
+                </template>
+              </el-input>
             </el-form-item>
             <el-form-item label="用户目录">
-              <el-input v-model="form.user_data_dir" placeholder="独立用户数据目录，可保持登录态" />
+              <el-input
+                v-model="form.user_data_dir"
+                placeholder="独立用户数据目录，可保持登录态"
+              >
+                <template #append>
+                  <el-button
+                    :loading="selectingUserDataDir"
+                    @click="handleSelectUserDataDir"
+                    >选择</el-button
+                  >
+                </template>
+              </el-input>
             </el-form-item>
           </template>
 
           <el-form-item v-else label="远程地址">
-            <el-input v-model="form.control_url" placeholder="ws://127.0.0.1:9222/devtools/browser/..." />
+            <el-input
+              v-model="form.control_url"
+              placeholder="ws://127.0.0.1:9222/devtools/browser/..."
+            />
           </el-form-item>
 
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="代理">
-                <el-input v-model="form.proxy" placeholder="例如：http://127.0.0.1:7890" />
+                <el-input
+                  v-model="form.proxy"
+                  placeholder="例如：http://127.0.0.1:7890"
+                />
               </el-form-item>
             </el-col>
             <el-col :span="12">
@@ -209,10 +299,21 @@
           </el-form-item>
 
           <el-form-item>
-            <el-button type="primary" :loading="saving" @click="handleSave">{{ saveButtonText }}</el-button>
-            <el-button :disabled="!form.id" :loading="starting" @click="handleStart(form, true)">启动</el-button>
-            <el-button :disabled="!form.id" @click="handleStop(form)">停止</el-button>
-            <el-button :disabled="!form.id" @click="handleDelete">删除</el-button>
+            <el-button type="primary" :loading="saving" @click="handleSave">{{
+              saveButtonText
+            }}</el-button>
+            <el-button
+              :disabled="!form.id"
+              :loading="starting"
+              @click="handleStart(form, true)"
+              >启动</el-button
+            >
+            <el-button :disabled="!form.id" @click="handleStop(form)"
+              >停止</el-button
+            >
+            <el-button :disabled="!form.id" @click="handleDelete"
+              >删除</el-button
+            >
           </el-form-item>
         </el-form>
 
@@ -233,7 +334,12 @@
                 <span class="runtime-value" :title="status.control_url || ''">
                   {{ status.control_url || '' }}
                 </span>
-                <el-button link type="primary" :disabled="!status.control_url" @click="copyRuntimeValue(status.control_url)">
+                <el-button
+                  link
+                  type="primary"
+                  :disabled="!status.control_url"
+                  @click="copyRuntimeValue(status.control_url)"
+                >
                   复制
                 </el-button>
               </div>
@@ -243,7 +349,12 @@
                 <span class="runtime-value" :title="status.agent_url || ''">
                   {{ status.agent_url || '' }}
                 </span>
-                <el-button link type="primary" :disabled="!status.agent_url" @click="copyRuntimeValue(status.agent_url)">
+                <el-button
+                  link
+                  type="primary"
+                  :disabled="!status.agent_url"
+                  @click="copyRuntimeValue(status.agent_url)"
+                >
                   复制
                 </el-button>
               </div>
@@ -273,12 +384,14 @@ import {
   getAgentStatus,
   getBrowserStatus,
   listBrowserInstances,
+  selectBrowserBinPath,
+  selectBrowserUserDataDir,
   startBrowserInstance,
   stopBrowserInstance,
   subscribeAgentStatus,
   subscribeBrowserStatus,
   switchBrowserInstance,
-  updateBrowserInstance,
+  updateBrowserInstance
 } from '@/services/browser'
 import { exportBrowserExecutorSkill } from '@/services/browserExecutor'
 
@@ -298,12 +411,14 @@ const runtimeNow = ref(Date.now())
 const runtimeClockTimer = ref(null)
 const browserStatusRefreshing = ref(false)
 const executorSkillExporting = ref(false)
+const selectingBinPath = ref(false)
+const selectingUserDataDir = ref(false)
 const stopBrowserStatusSubscribe = ref(null)
 const stopAgentStatusSubscribe = ref(null)
 const status = ref({
   running: false,
   current_instance_id: '',
-  uptime_seconds: 0,
+  uptime_seconds: 0
 })
 
 const form = reactive(createEmptyForm())
@@ -313,22 +428,31 @@ const currentStatusText = computed(() => {
   return `当前：${status.value.instance?.name || status.value.current_instance_id}`
 })
 const currentAgentOnline = computed(() =>
-  agents.value.some((agent) => agent.browser_id === status.value.current_instance_id && agent.online),
+  agents.value.some(
+    (agent) =>
+      agent.browser_id === status.value.current_instance_id && agent.online
+  )
 )
 const saveButtonText = computed(() => (form.id ? '保存修改' : '新增配置'))
 const pagedInstances = computed(() => {
   const start = (instanceCurrentPage.value - 1) * instancePageSize.value
   return instances.value.slice(start, start + instancePageSize.value)
 })
-const pagedInstanceIds = computed(() => pagedInstances.value.map((instance) => instance.id))
+const pagedInstanceIds = computed(() =>
+  pagedInstances.value.map((instance) => instance.id)
+)
 const selectedPagedInstanceIds = computed(() =>
-  selectedInstanceIds.value.filter((id) => pagedInstanceIds.value.includes(id)),
+  selectedInstanceIds.value.filter((id) => pagedInstanceIds.value.includes(id))
 )
 const isAllInstancesSelected = computed(
-  () => pagedInstanceIds.value.length > 0 && selectedPagedInstanceIds.value.length === pagedInstanceIds.value.length,
+  () =>
+    pagedInstanceIds.value.length > 0 &&
+    selectedPagedInstanceIds.value.length === pagedInstanceIds.value.length
 )
 const isInstanceSelectionIndeterminate = computed(
-  () => selectedPagedInstanceIds.value.length > 0 && selectedPagedInstanceIds.value.length < pagedInstanceIds.value.length,
+  () =>
+    selectedPagedInstanceIds.value.length > 0 &&
+    selectedPagedInstanceIds.value.length < pagedInstanceIds.value.length
 )
 
 const uptimeText = computed(() => {
@@ -352,7 +476,7 @@ watch([instances, instancePageSize], () => {
   instanceCurrentPage.value = getSafePage({
     total: instances.value.length,
     page: instanceCurrentPage.value,
-    size: instancePageSize.value,
+    size: instancePageSize.value
   })
 })
 
@@ -360,11 +484,11 @@ async function loadAll() {
   const [instanceData, statusData, agentData] = await Promise.all([
     listBrowserInstances(),
     getBrowserStatus(),
-    getAgentStatus(),
+    getAgentStatus()
   ])
   instances.value = sortByCreatedDesc(instanceData.instances || [])
   selectedInstanceIds.value = selectedInstanceIds.value.filter((id) =>
-    instances.value.some((instance) => instance.id === id),
+    instances.value.some((instance) => instance.id === id)
   )
   status.value = statusData.status || status.value
   agents.value = agentData.agents || []
@@ -372,7 +496,7 @@ async function loadAll() {
   instanceCurrentPage.value = getSafePage({
     total: instances.value.length,
     page: instanceCurrentPage.value,
-    size: instancePageSize.value,
+    size: instancePageSize.value
   })
 
   if (!selectedId.value && instances.value.length > 0) {
@@ -386,12 +510,18 @@ function startRuntimeRefresh() {
   runtimeClockTimer.value = window.setInterval(() => {
     runtimeNow.value = Date.now()
   }, 1000)
-  stopBrowserStatusSubscribe.value = subscribeBrowserStatus(handleBrowserStatusChanged, (error) =>
-    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message }),
+  stopBrowserStatusSubscribe.value = subscribeBrowserStatus(
+    handleBrowserStatusChanged,
+    (error) =>
+      appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
   )
-  stopAgentStatusSubscribe.value = subscribeAgentStatus((nextAgents) => {
-    agents.value = nextAgents || []
-  }, (error) => appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message }))
+  stopAgentStatusSubscribe.value = subscribeAgentStatus(
+    (nextAgents) => {
+      agents.value = nextAgents || []
+    },
+    (error) =>
+      appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message })
+  )
 }
 
 async function handleBrowserStatusChanged(nextStatus) {
@@ -441,7 +571,10 @@ async function handleSave() {
     const data = form.id
       ? await updateBrowserInstance(form.id, payload)
       : await createBrowserInstance(payload)
-    appMessage({ type: APP_MESSAGE_TYPE.success, message: isCreate ? '新增成功' : '保存成功' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.success,
+      message: isCreate ? '新增成功' : '保存成功'
+    })
     await loadAll()
     selectInstance(data.instance)
   } finally {
@@ -459,11 +592,11 @@ async function handleDefaultChange(checked) {
     // Default update 默认配置变更，已有配置切换后立即保存并刷新列表标识
     await updateBrowserInstance(form.id, {
       ...buildPayload(),
-      is_default: nextDefault,
+      is_default: nextDefault
     })
     appMessage({
       type: APP_MESSAGE_TYPE.success,
-      message: nextDefault ? '已设为默认配置' : '已取消默认配置',
+      message: nextDefault ? '已设为默认配置' : '已取消默认配置'
     })
     await loadAll()
     const current = instances.value.find((instance) => instance.id === form.id)
@@ -479,21 +612,55 @@ async function handleDefaultChange(checked) {
 async function handleSetDefaultInstance(instance) {
   if (instance.is_default) return
 
-  defaultUpdatingIds.value = Array.from(new Set([...defaultUpdatingIds.value, instance.id]))
+  defaultUpdatingIds.value = Array.from(
+    new Set([...defaultUpdatingIds.value, instance.id])
+  )
   try {
     // Default shortcut 列表快捷设置默认配置，后端保存时会清理其他默认项
-    await updateBrowserInstance(instance.id, buildInstancePayload(instance, { is_default: true }))
+    await updateBrowserInstance(
+      instance.id,
+      buildInstancePayload(instance, { is_default: true })
+    )
     appMessage({ type: APP_MESSAGE_TYPE.success, message: '已设为默认配置' })
     await loadAll()
     syncSelectedDefaultFlag()
   } finally {
-    defaultUpdatingIds.value = defaultUpdatingIds.value.filter((id) => id !== instance.id)
+    defaultUpdatingIds.value = defaultUpdatingIds.value.filter(
+      (id) => id !== instance.id
+    )
+  }
+}
+
+async function handleSelectBinPath() {
+  selectingBinPath.value = true
+  try {
+    const data = await selectBrowserBinPath()
+    if (data.path) {
+      form.bin_path = data.path
+    }
+  } finally {
+    selectingBinPath.value = false
+  }
+}
+
+async function handleSelectUserDataDir() {
+  selectingUserDataDir.value = true
+  try {
+    const data = await selectBrowserUserDataDir()
+    if (data.path) {
+      form.user_data_dir = data.path
+    }
+  } finally {
+    selectingUserDataDir.value = false
   }
 }
 
 async function handleStart(row, saveBeforeStart = false) {
   if (!row.id) {
-    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请先保存浏览器配置' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.warning,
+      message: '请先保存浏览器配置'
+    })
     return
   }
 
@@ -520,10 +687,16 @@ async function handleExportExecutorSkill() {
   try {
     // Export Skill downloads static browser-control instructions 导出静态浏览器控制 Skill
     const blob = await exportBrowserExecutorSkill()
-    downloadBlob(blob, 'SKILL_BROWSER_EXECUTOR.md')
-    appMessage({ type: APP_MESSAGE_TYPE.success, message: '浏览器控制 Skill 已导出' })
+    downloadBlob(blob, 'SKILL.md')
+    appMessage({
+      type: APP_MESSAGE_TYPE.success,
+      message: '浏览器控制 Skill 已导出'
+    })
   } catch (error) {
-    appMessage({ type: APP_MESSAGE_TYPE.error, message: error.message || '导出浏览器控制 Skill 失败' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.error,
+      message: error.message || '导出浏览器控制 Skill 失败'
+    })
   } finally {
     executorSkillExporting.value = false
   }
@@ -557,7 +730,7 @@ async function handleDelete() {
     title: '删除配置',
     message: '确认删除这个浏览器配置吗？',
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '删除',
+    confirmText: '删除'
   })
   if (!confirmed) return
 
@@ -569,19 +742,27 @@ async function handleDelete() {
 
 function handleToggleInstance(instanceId, checked) {
   if (checked) {
-    selectedInstanceIds.value = Array.from(new Set([...selectedInstanceIds.value, instanceId]))
+    selectedInstanceIds.value = Array.from(
+      new Set([...selectedInstanceIds.value, instanceId])
+    )
     return
   }
-  selectedInstanceIds.value = selectedInstanceIds.value.filter((id) => id !== instanceId)
+  selectedInstanceIds.value = selectedInstanceIds.value.filter(
+    (id) => id !== instanceId
+  )
 }
 
 function handleToggleAllInstances(checked) {
   const pageIds = pagedInstanceIds.value
   if (checked) {
-    selectedInstanceIds.value = Array.from(new Set([...selectedInstanceIds.value, ...pageIds]))
+    selectedInstanceIds.value = Array.from(
+      new Set([...selectedInstanceIds.value, ...pageIds])
+    )
     return
   }
-  selectedInstanceIds.value = selectedInstanceIds.value.filter((id) => !pageIds.includes(id))
+  selectedInstanceIds.value = selectedInstanceIds.value.filter(
+    (id) => !pageIds.includes(id)
+  )
 }
 
 async function handleDeleteSelectedInstances() {
@@ -592,7 +773,7 @@ async function handleDeleteSelectedInstances() {
     title: '批量删除配置',
     message: `确认删除选中的 ${ids.length} 个浏览器配置吗？`,
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '删除',
+    confirmText: '删除'
   })
   if (!confirmed) return
 
@@ -606,13 +787,19 @@ async function handleDeleteSelectedInstances() {
 }
 
 function removeInstancesFromState(instanceIds) {
-  instances.value = instances.value.filter((instance) => !instanceIds.includes(instance.id))
-  selectedInstanceIds.value = selectedInstanceIds.value.filter((id) => !instanceIds.includes(id))
+  instances.value = instances.value.filter(
+    (instance) => !instanceIds.includes(instance.id)
+  )
+  selectedInstanceIds.value = selectedInstanceIds.value.filter(
+    (id) => !instanceIds.includes(id)
+  )
 }
 
 function sortByCreatedDesc(data) {
   // Created order 新增时间倒序，保证列表展示最新配置在前
-  return data.slice().sort((a, b) => getTimeValue(b.created_at) - getTimeValue(a.created_at))
+  return data
+    .slice()
+    .sort((a, b) => getTimeValue(b.created_at) - getTimeValue(a.created_at))
 }
 
 function getTimeValue(value) {
@@ -658,7 +845,7 @@ function buildPayload() {
     launch_args: launchArgsText.value
       .split('\n')
       .map((item) => item.trim())
-      .filter(Boolean),
+      .filter(Boolean)
   })
 }
 
@@ -675,8 +862,10 @@ function buildInstancePayload(instance, overrides = {}) {
     user_agent: nextInstance.user_agent,
     headless: nextInstance.headless,
     no_sandbox: nextInstance.no_sandbox,
-    launch_args: Array.isArray(nextInstance.launch_args) ? nextInstance.launch_args : [],
-    proxy: nextInstance.proxy,
+    launch_args: Array.isArray(nextInstance.launch_args)
+      ? nextInstance.launch_args
+      : [],
+    proxy: nextInstance.proxy
   }
 }
 
@@ -699,8 +888,10 @@ function markActiveInstances() {
   instances.value = instances.value.map((instance) => ({
     ...instance,
     // Active state 保留后端返回的运行状态，同时确保当前实例被标记为运行
-    is_active: hasCurrent ? Boolean(instance.is_active || instance.id === currentId) : false,
-    is_current: Boolean(hasCurrent && instance.id === currentId),
+    is_active: hasCurrent
+      ? Boolean(instance.is_active || instance.id === currentId)
+      : false,
+    is_current: Boolean(hasCurrent && instance.id === currentId)
   }))
 }
 
@@ -709,7 +900,7 @@ function normalizeForm(instance) {
     ...createEmptyForm(),
     ...instance,
     headless: Boolean(instance.headless),
-    no_sandbox: Boolean(instance.no_sandbox),
+    no_sandbox: Boolean(instance.no_sandbox)
   }
 }
 
@@ -726,27 +917,14 @@ function createEmptyForm() {
     proxy: '',
     headless: false,
     no_sandbox: false,
-    launch_args: [],
+    launch_args: []
   }
 }
 </script>
 
 <style scoped>
-.browser-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .page-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
   gap: 16px;
-  flex-shrink: 0;
 }
 
 .page-toolbar > div:first-child:not(.status-card) {
@@ -766,16 +944,10 @@ function createEmptyForm() {
 .browser-layout {
   display: grid;
   grid-template-columns: 700px minmax(0, 1fr);
-  flex: 1;
-  gap: 16px;
-  min-height: 0;
 }
 
 .instance-panel,
 .config-panel {
-  min-width: 0;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
 }
 
 .instance-panel {
@@ -797,14 +969,8 @@ function createEmptyForm() {
 }
 
 .panel-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  color: #303133;
+  font-size: 16px;
   font-weight: 700;
-  border-bottom: 1px solid #e4e7ed;
 }
 
 .panel-actions {
@@ -874,11 +1040,6 @@ function createEmptyForm() {
 }
 
 .table-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #e4e7ed;
 }
 
 .instance-pagination {

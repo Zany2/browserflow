@@ -1,50 +1,9 @@
 <template>
-  <section class="workflow-page">
-    <div class="workflow-filters">
-      <!-- Name filter 名称筛选，按工作流名称做模糊匹配 -->
-      <div class="filter-item filter-item--name">
-        <span class="filter-label">工作流名称：</span>
-        <el-input
-          v-model="searchKeywordInput"
-          clearable
-          placeholder="请输入工作流名称"
-        />
-      </div>
-
-      <!-- Created filter 创建时间筛选，按起止时间过滤 -->
-      <div class="filter-item filter-item--time">
-        <span class="filter-label">创建时间：</span>
-        <AppTimeRangeFilter v-model="createdTimeRange" value-format="x" />
-      </div>
-
-      <!-- Status filter 状态筛选，按启用状态过滤工作流 -->
-      <div class="filter-item filter-item--status">
-        <span class="filter-label">状态：</span>
-        <el-select v-model="statusFilter" placeholder="全部">
-          <el-option label="全部" value="" />
-          <el-option label="启用中" value="enabled" />
-          <el-option label="已禁用" value="disabled" />
-        </el-select>
-      </div>
-
-      <!-- Sort controls 排序控件，对齐 Automa 的排序字段和默认规则 -->
-      <div class="workflow-sort">
-        <el-button class="sort-order-button" @click="toggleSortOrder">
-          <el-icon>
-            <component :is="sortOrder === 'asc' ? SortUp : SortDown" />
-          </el-icon>
-        </el-button>
-        <el-select v-model="sortBy" class="sort-select" placeholder="排序方式">
-          <el-option
-            v-for="item in sortOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-      </div>
-
-      <el-button class="reset-button" @click="resetFilters">重置</el-button>
+  <section class="workflow-page windows-workspace-page">
+    <header class="workflow-toolbar windows-workspace-actions">
+      <el-button :icon="RefreshRight" :loading="loading" @click="loadWorkflows"
+        >刷新</el-button
+      >
       <el-button
         class="export-skill-button"
         type="primary"
@@ -55,116 +14,213 @@
       >
         导出 Skill
       </el-button>
-      <AppSelectionSummary :count="selectedWorkflows.length" unit="工作流" />
-    </div>
+    </header>
 
-    <!-- Error message 错误提示，展示扩展未响应或调用失败原因 -->
-    <el-alert
-      v-if="error"
-      class="workflow-error"
-      type="error"
-      :title="error"
-      show-icon
-      :closable="false"
-    />
-
-    <!-- Workflow table 工作流列表，展示常用元信息 -->
-    <el-table
-      ref="workflowTableRef"
-      v-loading="loading"
-      class="workflow-table adaptive-table"
-      :data="pagedWorkflows"
-      border
-      height="100%"
-      :row-key="getWorkflowId"
-      empty-text="暂无工作流"
-      @selection-change="handleSelectionChange"
+    <section
+      class="workflow-panel windows-workspace-panel windows-workspace-panel--stack"
     >
-      <el-table-column type="selection" width="40" align="center" reserve-selection />
-      <el-table-column prop="name" label="工作流名称" min-width="220" show-overflow-tooltip>
-        <template #default="{ row }">
-          <button class="workflow-name__link" type="button" @click="openWorkflow(getWorkflowId(row))">
-            {{ row.name || '' }}
-          </button>
-        </template>
-      </el-table-column>
+      <div class="workflow-filters windows-workspace-filters">
+        <!-- Name filter 名称筛选，按工作流名称做模糊匹配 -->
+        <div class="filter-item filter-item--name">
+          <span class="filter-label">工作流名称：</span>
+          <el-input
+            v-model="searchKeywordInput"
+            clearable
+            placeholder="请输入工作流名称"
+          />
+        </div>
 
-      <el-table-column prop="description" label="工作流描述" min-width="220" show-overflow-tooltip>
-        <template #default="{ row }">
-          <span class="workflow-description">
-            {{ row.description || '' }}
-          </span>
-        </template>
-      </el-table-column>
+        <!-- Created filter 创建时间筛选，按起止时间过滤 -->
+        <div class="filter-item filter-item--time">
+          <span class="filter-label">创建时间：</span>
+          <AppTimeRangeFilter v-model="createdTimeRange" value-format="x" />
+        </div>
 
-      <el-table-column label="状态" width="72" align="center">
-        <template #default="{ row }">
-          <el-tag :type="row.isDisabled ? 'info' : 'success'" effect="plain">
-            {{ row.isDisabled ? '已禁用' : '启用中' }}
-          </el-tag>
-        </template>
-      </el-table-column>
+        <!-- Status filter 状态筛选，按启用状态过滤工作流 -->
+        <div class="filter-item filter-item--status">
+          <span class="filter-label">状态：</span>
+          <el-select v-model="statusFilter" placeholder="全部">
+            <el-option label="全部" value="" />
+            <el-option label="启用中" value="enabled" />
+            <el-option label="已禁用" value="disabled" />
+          </el-select>
+        </div>
 
-      <el-table-column label="触发器参数" min-width="220">
-        <template #default="{ row }">
-          <div v-if="getTriggerParameters(row).length > 0" class="trigger-param-list">
-            <div
-              v-for="(param, index) in getTriggerParameters(row)"
-              :key="getTriggerParamKey(param, index)"
-              class="trigger-param-item"
-              :title="getTriggerParamTitle(param)"
-            >
-              <span class="trigger-param-field trigger-param-field--name">
-                <small>参数名</small>
-                <strong>{{ formatTriggerParamName(param) }}</strong>
-              </span>
-              <span class="trigger-param-field trigger-param-field--meaning">
-                <small>意义</small>
-                <span>{{ formatTriggerParamMeaning(param) }}</span>
-              </span>
-              <span class="trigger-param-field trigger-param-field--default">
-                <small>默认值</small>
-                <span>{{ formatTriggerParamDefaultText(param?.defaultValue) }}</span>
-              </span>
-            </div>
-          </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="节点数" width="70" align="center">
-        <template #default="{ row }">
-          {{ getNodeCount(row) }}
-        </template>
-      </el-table-column>
-
-      <el-table-column label="创建时间" width="160" class-name="nowrap-column">
-        <template #default="{ row }">
-          {{ formatDate(row.createdAt) }}
-        </template>
-      </el-table-column>
-
-      <el-table-column label="更新时间" width="160" class-name="nowrap-column">
-        <template #default="{ row }">
-          {{ formatDate(row.updatedAt) }}
-        </template>
-      </el-table-column>
-
-      <el-table-column label="操作" width="90" align="center">
-        <template #default="{ row }">
-          <el-button type="primary" link @click="executeWorkflow(row)">
-            执行
+        <!-- Sort controls 排序控件，对齐 Automa 的排序字段和默认规则 -->
+        <div class="workflow-sort">
+          <el-button class="sort-order-button" @click="toggleSortOrder">
+            <el-icon>
+              <component :is="sortOrder === 'asc' ? SortUp : SortDown" />
+            </el-icon>
           </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+          <el-select
+            v-model="sortBy"
+            class="sort-select"
+            placeholder="排序方式"
+          >
+            <el-option
+              v-for="item in sortOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </div>
 
-    <!-- Pagination 分页组件，控制当前列表的本地分页展示 -->
-    <AppPagination
-      v-model:current-page="currentPage"
-      v-model:page-size="pageSize"
-      :page-sizes="pageSizes"
-      :total="sortedWorkflows.length"
-    />
+        <el-button class="reset-button" @click="resetFilters">重置</el-button>
+        <AppSelectionSummary :count="selectedWorkflows.length" unit="工作流" />
+      </div>
+
+      <!-- Error message 错误提示，展示扩展未响应或调用失败原因 -->
+      <el-alert
+        v-if="error"
+        class="workflow-error"
+        type="error"
+        :title="error"
+        show-icon
+        :closable="false"
+      />
+
+      <!-- Workflow table 工作流列表，展示常用元信息 -->
+      <el-table
+        ref="workflowTableRef"
+        v-loading="loading"
+        class="workflow-table windows-workspace-table adaptive-table"
+        :data="pagedWorkflows"
+        border
+        height="100%"
+        :row-key="getWorkflowId"
+        empty-text="暂无工作流"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column
+          type="selection"
+          width="40"
+          align="center"
+          reserve-selection
+        />
+        <el-table-column
+          prop="name"
+          label="工作流名称"
+          min-width="220"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            <button
+              class="workflow-name__link"
+              type="button"
+              @click="openWorkflow(getWorkflowId(row))"
+            >
+              {{ row.name || '' }}
+            </button>
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          prop="description"
+          label="工作流描述"
+          min-width="220"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            <span class="workflow-description">
+              {{ row.description || '' }}
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="状态" width="72" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.isDisabled ? 'info' : 'success'" effect="plain">
+              {{ row.isDisabled ? '已禁用' : '启用中' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="触发器参数" min-width="260">
+          <template #default="{ row }">
+            <div
+              v-if="getTriggerParameters(row).length > 0"
+              class="trigger-param-list"
+            >
+              <div
+                v-for="(param, index) in getTriggerParameters(row)"
+                :key="getTriggerParamKey(param, index)"
+                class="trigger-param-item"
+                :title="getTriggerParamTitle(param)"
+              >
+                <div class="trigger-param-main">
+                  <strong>{{ formatTriggerParamName(param) || '-' }}</strong>
+                  <span class="trigger-param-type">
+                    {{ formatTriggerParamType(param?.type) }}
+                  </span>
+                  <span
+                    v-if="isTriggerParamRequired(param)"
+                    class="trigger-param-required"
+                    >必填</span
+                  >
+                </div>
+                <div class="trigger-param-sub">
+                  <span v-if="formatTriggerParamMeaning(param)">
+                    {{ formatTriggerParamMeaning(param) }}
+                  </span>
+                  <span
+                    v-if="formatTriggerParamDefaultText(param?.defaultValue)"
+                  >
+                    默认：{{
+                      formatTriggerParamDefaultText(param?.defaultValue)
+                    }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="节点数/连线数" width="110" align="center">
+          <template #default="{ row }">
+            {{ formatWorkflowGraphSize(row) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          label="创建时间"
+          width="160"
+          class-name="nowrap-column"
+        >
+          <template #default="{ row }">
+            {{ formatDate(row.createdAt) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          label="更新时间"
+          width="160"
+          class-name="nowrap-column"
+        >
+          <template #default="{ row }">
+            {{ formatDate(row.updatedAt) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="90" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="executeWorkflow(row)">
+              执行
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- Pagination 分页组件，控制当前列表的本地分页展示 -->
+      <AppPagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        class="workflow-pagination"
+        :page-sizes="pageSizes"
+        :total="sortedWorkflows.length"
+      />
+    </section>
 
     <AppDialog
       v-model="paramDialogVisible"
@@ -209,7 +265,12 @@
 </template>
 
 <script setup>
-import { Download, SortDown, SortUp } from '@element-plus/icons-vue'
+import {
+  Download,
+  RefreshRight,
+  SortDown,
+  SortUp
+} from '@element-plus/icons-vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
@@ -222,7 +283,7 @@ import {
   exportAgentAutomaSkill,
   listAgentAutomaWorkflows,
   openAgentAutomaWorkflow,
-  runAgentAutomaWorkflow,
+  runAgentAutomaWorkflow
 } from '@/services/automa'
 import { downloadBlob } from '@/utils/browser'
 import { formatDate } from '@/utils/format'
@@ -242,16 +303,14 @@ const createdTimeRange = ref([])
 const statusFilter = ref('')
 const sortBy = ref(savedSorts.sortBy || 'createdAt')
 const sortOrder = ref(savedSorts.sortOrder || 'desc')
-const {
-  run: debounceSearchKeyword,
-  cancel: clearFilterSearchTimer,
-} = useDebouncedAction(applySearchKeyword, 200)
+const { run: debounceSearchKeyword, cancel: clearFilterSearchTimer } =
+  useDebouncedAction(applySearchKeyword, 200)
 
 const sortOptions = [
   { label: '名称', value: 'name' },
   { label: '创建日期', value: 'createdAt' },
   { label: '上次更新', value: 'updatedAt' },
-  { label: '最常用', value: 'mostUsed' },
+  { label: '最常用', value: 'mostUsed' }
 ]
 
 // Agent state 工作流页面只通过后端读取浏览器执行端，不直接桥接管理端 Automa
@@ -289,7 +348,7 @@ const sortedWorkflows = computed(() => {
   return sortWorkflows({
     data: filteredWorkflows.value,
     key: sortBy.value,
-    order: sortOrder.value,
+    order: sortOrder.value
   })
 })
 
@@ -299,16 +358,18 @@ const pagedWorkflows = computed(() => {
 })
 
 const exportTargetWorkflows = computed(() => {
-  return selectedWorkflows.value.length > 0 ? selectedWorkflows.value : workflows.value
+  return selectedWorkflows.value.length > 0
+    ? selectedWorkflows.value
+    : workflows.value
 })
 const {
   selectedRows: selectedWorkflows,
   handleSelectionChange,
   restoreSelection: restoreWorkflowSelection,
-  resetSelection: resetWorkflowSelection,
+  resetSelection: resetWorkflowSelection
 } = usePagedTableSelection({
   rows: pagedWorkflows,
-  getRowKey: getWorkflowId,
+  getRowKey: getWorkflowId
 })
 
 const toggleSortOrder = () => {
@@ -330,28 +391,42 @@ const saveSorts = () => {
     JSON.stringify({
       sortBy: sortBy.value,
       sortOrder: sortOrder.value,
-      perPage: pageSize.value,
-    }),
+      perPage: pageSize.value
+    })
   )
 }
 
-watch([workflows, pageSize, searchKeyword, createdTimeRange, statusFilter, sortBy, sortOrder], () => {
-  currentPage.value = getSafePage({
-    total: sortedWorkflows.value.length,
-    page: currentPage.value,
-    size: pageSize.value,
-  })
-  saveSorts()
-})
+watch(
+  [
+    workflows,
+    pageSize,
+    searchKeyword,
+    createdTimeRange,
+    statusFilter,
+    sortBy,
+    sortOrder
+  ],
+  () => {
+    currentPage.value = getSafePage({
+      total: sortedWorkflows.value.length,
+      page: currentPage.value,
+      size: pageSize.value
+    })
+    saveSorts()
+  }
+)
 
 watch(searchKeywordInput, () => {
   debounceSearchKeyword()
 })
 
-watch([searchKeyword, createdTimeRange, statusFilter, sortBy, sortOrder], () => {
-  currentPage.value = 1
-  resetWorkflowSelection(workflowTableRef)
-})
+watch(
+  [searchKeyword, createdTimeRange, statusFilter, sortBy, sortOrder],
+  () => {
+    currentPage.value = 1
+    resetWorkflowSelection(workflowTableRef)
+  }
+)
 
 watch(pagedWorkflows, () => {
   restoreWorkflowSelection(workflowTableRef)
@@ -415,7 +490,9 @@ async function executeWorkflow(workflow) {
 function openParamDialog(workflow, params) {
   // Param dialog 复用公共弹窗，在 BrowserFlow 侧完成参数填写与校验
   paramWorkflow.value = workflow
-  paramFormItems.value = params.map((param, index) => createParamFormItem(param, index))
+  paramFormItems.value = params.map((param, index) =>
+    createParamFormItem(param, index)
+  )
   paramDialogVisible.value = true
 }
 
@@ -456,7 +533,7 @@ function createParamFormItem(param, index) {
     placeholder: param?.placeholder || '',
     required: isTriggerParamRequired(param),
     defaultText: formatTriggerParamDefaultValue(defaultValue),
-    value: normalizeParamInputValue(param, defaultValue),
+    value: normalizeParamInputValue(param, defaultValue)
   }
 }
 
@@ -465,12 +542,20 @@ function buildRunVariablesFromParamForm() {
 
   for (const item of paramFormItems.value) {
     if (isMissingRequiredParam(item)) {
-      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `请填写必填参数：${item.name}` })
+      appMessage({
+        type: APP_MESSAGE_TYPE.warning,
+        message: `请填写必填参数：${item.name}`
+      })
       return null
     }
 
     const parsedValue = parseParamFormValue(item)
-    if (parsedValue === undefined && item.type === 'json' && !isEmptyParamValue(item.value)) return null
+    if (
+      parsedValue === undefined &&
+      item.type === 'json' &&
+      !isEmptyParamValue(item.value)
+    )
+      return null
     variables[item.name] = parsedValue
   }
 
@@ -487,7 +572,10 @@ function parseParamFormValue(item) {
     try {
       return JSON.parse(item.value)
     } catch {
-      appMessage({ type: APP_MESSAGE_TYPE.warning, message: `参数 ${item.name} 不是有效 JSON` })
+      appMessage({
+        type: APP_MESSAGE_TYPE.warning,
+        message: `参数 ${item.name} 不是有效 JSON`
+      })
       return undefined
     }
   }
@@ -497,7 +585,10 @@ function parseParamFormValue(item) {
 
 async function handleExportSkill() {
   if (exportTargetWorkflows.value.length === 0) {
-    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '暂无可导出的工作流' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.warning,
+      message: '暂无可导出的工作流'
+    })
     return
   }
 
@@ -506,17 +597,22 @@ async function handleExportSkill() {
 
   try {
     // Export scope 复用表格多选；有选中导出选中项，否则导出当前浏览器全部工作流
-    const workflowIds = exportTargetWorkflows.value.map(getWorkflowId).filter(Boolean)
+    const workflowIds = exportTargetWorkflows.value
+      .map(getWorkflowId)
+      .filter(Boolean)
     const blob = await exportAgentAutomaSkill({
       browserId: agentBrowserId.value,
       scope: selectedWorkflows.value.length > 0 ? 'selected' : 'all',
-      workflowIds,
+      workflowIds
     })
     downloadBlob(blob, 'SKILL.md')
     appMessage({ type: APP_MESSAGE_TYPE.success, message: 'Skill 已导出' })
   } catch (err) {
     error.value = err.message
-    appMessage({ type: APP_MESSAGE_TYPE.error, message: err.message || '导出 Skill 失败' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.error,
+      message: err.message || '导出 Skill 失败'
+    })
   } finally {
     skillExporting.value = false
   }
@@ -582,13 +678,18 @@ function getUniqueTriggerParameters(workflow) {
 function getTriggerNode(workflow) {
   // Trigger node Automa 新版流程图中触发器通常是 label 为 trigger 的节点
   if (workflow?.drawflow?.nodes) {
-    return workflow.drawflow.nodes.find((node) => node?.label === 'trigger') || null
+    return (
+      workflow.drawflow.nodes.find((node) => node?.label === 'trigger') || null
+    )
   }
 
   // Legacy drawflow 兼容 Automa 旧版 drawflow.Home.data 结构
   const legacyNodes = workflow?.drawflow?.drawflow?.Home?.data
   if (legacyNodes) {
-    return Object.values(legacyNodes).find((node) => node?.name === 'trigger') || null
+    return (
+      Object.values(legacyNodes).find((node) => node?.name === 'trigger') ||
+      null
+    )
   }
 
   return null
@@ -603,7 +704,7 @@ function getTriggerParamTitle(param) {
   const parts = [
     `名称：${param?.name || ''}`,
     `类型：${formatTriggerParamType(param?.type)}`,
-    `默认值：${formatTriggerParamDefaultValue(param?.defaultValue)}`,
+    `默认值：${formatTriggerParamDefaultValue(param?.defaultValue)}`
   ]
   if (param?.placeholder) parts.push(`占位提示：${param.placeholder}`)
   if (param?.description) parts.push(`说明：${param.description}`)
@@ -622,13 +723,17 @@ function formatTriggerParamMeaning(param) {
 }
 
 function formatTriggerParamType(type) {
+  const normalizedType = String(type || '').toLocaleLowerCase()
   const typeMap = {
-    string: '文本',
-    number: '数字',
+    string: 'String',
+    text: 'String',
+    number: 'Number',
     json: 'JSON',
-    checkbox: '勾选框',
+    checkbox: 'True/False',
+    boolean: 'True/False',
+    bool: 'True/False'
   }
-  return typeMap[type] || type || '未知'
+  return typeMap[normalizedType] || type || 'Unknown'
 }
 
 function formatTriggerParamDefaultValue(value) {
@@ -655,7 +760,8 @@ function isTriggerParamRequired(param) {
 
 function normalizeParamInputValue(param, value) {
   if (param?.type === 'checkbox') return Boolean(value)
-  if (param?.type === 'json' && value && typeof value === 'object') return JSON.stringify(value, null, 2)
+  if (param?.type === 'json' && value && typeof value === 'object')
+    return JSON.stringify(value, null, 2)
   return formatTriggerParamDefaultValue(value)
 }
 
@@ -670,39 +776,66 @@ function isMissingRequiredParam(item) {
 }
 
 function getNodeCount(workflow) {
-  return workflow.drawflow?.nodes?.length || 0
+  if (Array.isArray(workflow?.drawflow?.nodes))
+    return workflow.drawflow.nodes.length
+
+  const legacyNodes = workflow?.drawflow?.drawflow?.Home?.data
+  if (legacyNodes) return Object.keys(legacyNodes).length
+
+  return Number(workflow?.node_count ?? workflow?.nodeCount ?? 0) || 0
+}
+
+function getEdgeCount(workflow) {
+  if (Array.isArray(workflow?.drawflow?.edges))
+    return workflow.drawflow.edges.length
+
+  const legacyNodes = workflow?.drawflow?.drawflow?.Home?.data
+  if (legacyNodes) {
+    return Object.values(legacyNodes).reduce((count, node) => {
+      const outputs = node?.outputs || {}
+      return (
+        count +
+        Object.values(outputs).reduce((outputCount, output) => {
+          return (
+            outputCount +
+            (Array.isArray(output?.connections) ? output.connections.length : 0)
+          )
+        }, 0)
+      )
+    }, 0)
+  }
+
+  return Number(workflow?.edge_count ?? workflow?.edgeCount ?? 0) || 0
+}
+
+function formatWorkflowGraphSize(workflow) {
+  return `${getNodeCount(workflow)} / ${getEdgeCount(workflow)}`
 }
 
 function getWorkflowId(workflow) {
-  return workflow?.id || workflow?.workflowId || workflow?.workflow_id || workflow?.automaId || workflow?.automa_id || ''
+  return (
+    workflow?.id ||
+    workflow?.workflowId ||
+    workflow?.workflow_id ||
+    workflow?.automaId ||
+    workflow?.automa_id ||
+    ''
+  )
 }
 
 function getCreatedTimeRange() {
-  const range = Array.isArray(createdTimeRange.value) ? createdTimeRange.value : []
+  const range = Array.isArray(createdTimeRange.value)
+    ? createdTimeRange.value
+    : []
   return [range[0] || '', range[1] || '']
 }
-
 </script>
 
 <style scoped>
-.workflow-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: 100%;
+.workflow-panel {
+  flex: 1;
   min-height: 0;
-  overflow: hidden;
   padding: 16px;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
-}
-
-.workflow-filters {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  gap: 12px 16px;
 }
 
 .filter-item {
@@ -741,7 +874,6 @@ function getCreatedTimeRange() {
 }
 
 .reset-button {
-  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -772,13 +904,14 @@ function getCreatedTimeRange() {
 }
 
 .workflow-table {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   width: 100%;
 }
 
-.workflow-page > :deep(.app-pagination) {
+.workflow-pagination {
   flex-shrink: 0;
+  margin-top: 12px;
 }
 
 .workflow-name__link {
@@ -810,58 +943,83 @@ function getCreatedTimeRange() {
 
 .trigger-param-list {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
 }
 
 .trigger-param-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
   max-width: 100%;
-  padding: 4px 8px;
+  padding: 5px 8px;
   overflow: hidden;
   background: #f8fbff;
   border: 1px solid #dce8f5;
   border-radius: 6px;
 }
 
-.trigger-param-field {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+.trigger-param-main {
+  display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
   min-width: 0;
-  max-width: 160px;
 }
 
-.trigger-param-field small {
-  color: #909399;
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.trigger-param-field span,
-.trigger-param-field strong {
+.trigger-param-main strong,
+.trigger-param-sub span {
   min-width: 0;
   overflow: hidden;
   color: #303133;
-  font-size: 13px;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.trigger-param-field strong {
+.trigger-param-main strong {
+  flex: 1;
+  font-size: 13px;
   font-weight: 700;
 }
 
+.trigger-param-type,
+.trigger-param-required {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  font-size: 12px;
+  line-height: 16px;
+  border-radius: 999px;
+}
+
+.trigger-param-type {
+  color: #409eff;
+  background: #ecf5ff;
+  border: 1px solid #d9ecff;
+}
+
+.trigger-param-required {
+  color: #e6a23c;
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+}
+
+.trigger-param-sub {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  color: #909399;
+  font-size: 12px;
+}
+
+.trigger-param-sub span {
+  color: #909399;
+}
+
 .workflow-error {
-  margin-bottom: 4px;
+  margin-bottom: 12px;
 }
 
 .workflow-param-form {

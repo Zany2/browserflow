@@ -15,6 +15,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/utility/browserruntime"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/go-rod/rod"
@@ -126,21 +127,12 @@ func (c *ControllerV1) BrowserInstanceStart(ctx context.Context, req *v1.Browser
 		runtime = &state.BrowserRuntime{Instance: instance, Browser: browser, StartTime: time.Now(), ControlURL: controlURL, AgentURL: agentURL}
 	} else {
 		launcherInstance := launcher.New()
-		binPath := strings.TrimSpace(instance.BinPath)
-		if binPath == "" {
-			for _, path := range []string{
-				"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-				"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-			} {
-				if _, statErr := os.Stat(path); statErr == nil {
-					binPath = path
-					break
-				}
-			}
+		binPath, binPathMessage := resolveLocalBrowserBinPath(instance.BinPath)
+		if binPathMessage != "" {
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), binPathMessage)
+			return nil, nil
 		}
-		if binPath != "" {
-			launcherInstance.Bin(binPath)
-		}
+		launcherInstance.Bin(binPath)
 		if instance.UserDataDir != "" {
 			if mkdirErr := os.MkdirAll(instance.UserDataDir, 0o755); mkdirErr != nil {
 				return nil, mkdirErr

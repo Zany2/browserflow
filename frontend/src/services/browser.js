@@ -1,4 +1,5 @@
-﻿import request, { API_BASE_URL } from '@/api/request'
+import request from '@/api/request'
+import { subscribeDesktopStatus } from '@/services/desktopWs'
 
 export function listBrowserInstances() {
   return request({
@@ -57,6 +58,22 @@ export function switchBrowserInstance(id) {
   })
 }
 
+export function selectBrowserBinPath() {
+  return request({
+    url: '/browser/paths/browser-bin/select',
+    method: 'POST',
+    showSuccessMessage: false,
+  })
+}
+
+export function selectBrowserUserDataDir() {
+  return request({
+    url: '/browser/paths/user-data-dir/select',
+    method: 'POST',
+    showSuccessMessage: false,
+  })
+}
+
 export function getBrowserStatus() {
   return request({
     url: '/browser/status',
@@ -87,7 +104,7 @@ export function syncAutomaWorkflows(browserId) {
 }
 
 export function subscribeBrowserStatus(onStatus, onError) {
-  return createStatusSubscriber({
+  return subscribeDesktopStatus({
     type: 'browser_subscribe',
     responseType: 'browser_status',
     getPayload: (payload) => payload.browser,
@@ -98,7 +115,7 @@ export function subscribeBrowserStatus(onStatus, onError) {
 }
 
 export function subscribeAgentStatus(onStatus, onError) {
-  return createStatusSubscriber({
+  return subscribeDesktopStatus({
     type: 'agent_status_subscribe',
     responseType: 'agent_status',
     getPayload: (payload) => payload.agents || [],
@@ -106,69 +123,4 @@ export function subscribeAgentStatus(onStatus, onError) {
     onError,
     errorMessage: '执行端状态监听失败',
   })
-}
-
-function createStatusSubscriber({ type, responseType, getPayload, onMessage, onError, errorMessage }) {
-  let socket = null
-  let reconnectTimer = null
-  let stopped = false
-  let reconnectCount = 0
-  let connectionErrorNotified = false
-
-  const connect = () => {
-    socket = new WebSocket(getWSURL())
-
-    socket.addEventListener('open', () => {
-      reconnectCount = 0
-      connectionErrorNotified = false
-      // Status subscribe only listens status and does not send agent_register. 状态订阅只监听状态，不发送 agent_register。
-      socket.send(JSON.stringify({ type }))
-    })
-
-    socket.addEventListener('message', (event) => {
-      const payload = JSON.parse(event.data)
-      if (payload.type === responseType) {
-        onMessage(getPayload(payload))
-      }
-      if (payload.type === 'error') {
-        onError?.(new Error(payload.error || errorMessage))
-      }
-    })
-
-    socket.addEventListener('close', scheduleReconnect)
-    socket.addEventListener('error', () => {
-      if (connectionErrorNotified) return
-      connectionErrorNotified = true
-      onError?.(new Error(`${errorMessage}，正在重连`))
-    })
-  }
-
-  const scheduleReconnect = () => {
-    if (stopped) return
-    reconnectCount += 1
-    const delay = Math.min(1000 * reconnectCount, 10000)
-    reconnectTimer = window.setTimeout(connect, delay)
-  }
-
-  connect()
-
-  return () => {
-    stopped = true
-    if (reconnectTimer) window.clearTimeout(reconnectTimer)
-    socket?.close()
-  }
-}
-
-function getWSURL() {
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL
-  }
-
-  const baseURL = API_BASE_URL.replace(/\/$/, '')
-  if (baseURL.startsWith('http')) {
-    return `${baseURL.replace(/^http/, 'ws')}/ws`
-  }
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}${baseURL}/ws`
 }

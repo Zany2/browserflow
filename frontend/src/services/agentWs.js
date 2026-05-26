@@ -40,6 +40,7 @@ export function createAgentSocket({
   onStatus,
   onError,
   onRegistered,
+  onAutomaStatus,
   onMessage,
   beforeConnect,
   onNoReconnect,
@@ -150,6 +151,7 @@ export function createAgentSocket({
 
   const registerAgent = async () => {
     const automaInfo = await getCurrentAutomaInfo()
+    onAutomaStatus?.(automaInfo)
     const clientInfo = getClientInfo()
     lastAutomaStatusHash = getAutomaStatusHash(automaInfo)
     sendJSON({
@@ -167,6 +169,7 @@ export function createAgentSocket({
 
   const sendAutomaStatus = async () => {
     const automaInfo = await getCurrentAutomaInfo()
+    onAutomaStatus?.(automaInfo)
     const automaStatusHash = getAutomaStatusHash(automaInfo)
     const statusChanged = automaStatusHash !== lastAutomaStatusHash
 

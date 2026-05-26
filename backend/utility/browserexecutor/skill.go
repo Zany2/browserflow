@@ -10,7 +10,7 @@ import (
 func GenerateSkill(baseURL string) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
-	sb.WriteString("name: browserflow-browser-executor\n")
+	sb.WriteString("name: browserflow-browser-executor-executor\n")
 	sb.WriteString("description: Control the current BrowserFlow Windows browser directly through HTTP APIs. Use observe, act, accessibility snapshots, RefIDs, page structure, element diagnostics, page text, page HTML, cookies, storage, and compact actions to navigate, click, type, fill forms, upload files, drag, handle dialogs, scroll, reload, extract data, screenshot, operate mouse/window, run JavaScript, and manage tabs without Automa workflows.\n")
 	sb.WriteString("---\n\n")
 
@@ -22,7 +22,7 @@ func GenerateSkill(baseURL string) string {
 
 	sb.WriteString("## Mandatory Workflow\n\n")
 	sb.WriteString("1. Check `status` before controlling the browser.\n")
-	sb.WriteString("2. Before running a task, decide the concrete steps first, then execute them one by one and verify the page state after each meaningful step.\n")
+	sb.WriteString("2. Before running a task, inspect the current page and create a concrete step plan. Do not start clicking, typing, navigating, or evaluating JavaScript before the plan exists.\n")
 	sb.WriteString("3. If only a `#/browser-agent` tab exists, use `tabs` with `action:\"new\"` or call `navigate`; the backend will create a business tab instead of navigating the agent tab.\n")
 	sb.WriteString("4. Prefer `observe` first. It returns status, page info, snapshot text, and optional page text in one call. Use `clickable-elements` or `input-elements` when you only need compact RefID lists.\n")
 	sb.WriteString("5. After navigation or a page-changing action, call `observe` or `snapshot` again.\n")
@@ -34,6 +34,40 @@ func GenerateSkill(baseURL string) string {
 	sb.WriteString("11. Use `wait` states precisely: `load`, `visible`, `hidden`, `enabled`, `interactable`, `writable`, `stable`, `dom-stable`, `request-idle`, `elements-more-than`, or `time`. For navigation, set `wait_until` to `load`, `dom-stable`, `request-idle`, `page-stable`, or `none`.\n")
 	sb.WriteString("12. Use `cookies` and `storage` when the task needs to inspect login/session state or clean up page state. Prefer these semantic APIs over ad hoc JavaScript.\n")
 	sb.WriteString("13. Never close the BrowserFlow browser or any `#/browser-agent` client tab. Before using `close-page` or `tabs` with `action:\"close\"`, call `tabs` with `action:\"list\"` and close only task-related business tabs.\n\n")
+
+	sb.WriteString("## Required Step-By-Step Procedure\n\n")
+	sb.WriteString("Always work in this order. Do not perform page operations until the planning checks are complete.\n\n")
+	sb.WriteString("1. Detect runtime: call `/app/runtime` and `/browser-executor/status`. Confirm the backend is reachable and `status.running` is true.\n")
+	sb.WriteString("2. Inspect context: call `observe` on the current page. If the current page is `#/browser-agent` or no useful business page exists, open or navigate to the required business page first, then call `observe` again.\n")
+	sb.WriteString("3. Build a plan: write a short numbered plan with the intended browser actions, expected page changes, and the data or final state needed for success.\n")
+	sb.WriteString("4. Execute one meaningful step at a time. After every navigation, click, submit, form fill, scroll that reveals content, or JavaScript mutation, call `observe`, `snapshot`, `page-structure`, or a targeted getter to verify the result.\n")
+	sb.WriteString("5. If verification fails, stop the current action chain, inspect again, revise the plan, and continue from the verified page state. Do not blindly repeat stale RefIDs or selectors.\n")
+	sb.WriteString("6. Use `batch` only for deterministic mini-sequences where no observation is needed between operations. Do not batch an entire unknown workflow.\n")
+	sb.WriteString("7. Before reporting success, verify the final page state or extracted data. If the task is incomplete, report the exact blocking condition and the last verified state.\n\n")
+
+	sb.WriteString("## Planning Format\n\n")
+	sb.WriteString("Before executing a non-trivial task, produce a compact plan like this:\n\n")
+	sb.WriteString("```text\n")
+	sb.WriteString("Plan:\n")
+	sb.WriteString("1. Verify current browser/page state.\n")
+	sb.WriteString("2. Navigate or select the target page.\n")
+	sb.WriteString("3. Locate the required controls or data.\n")
+	sb.WriteString("4. Perform the action or extraction.\n")
+	sb.WriteString("5. Verify the final state and report the result.\n")
+	sb.WriteString("```\n\n")
+	sb.WriteString("For simple tasks such as reading the current title or URL, the plan can be one sentence, but you still must verify with an API response before answering.\n\n")
+
+	sb.WriteString("## Safety Boundaries\n\n")
+	sb.WriteString("Ask the user for explicit confirmation before destructive, irreversible, or externally visible actions, including submitting purchases, orders, payments, account/security changes, deleting data, sending messages or emails, uploading files, clearing cookies/storage, or changing important settings. If the user already gave clear permission for that exact action in the current request, proceed carefully and verify before submitting.\n\n")
+	sb.WriteString("Do not use `evaluate` to bypass user confirmation, disable site protections, read unrelated secrets, or mutate sensitive page state when a semantic BrowserFlow API can do the task. Prefer high-level APIs such as `click`, `type`, `fill-form`, `cookies`, and `storage` over custom JavaScript.\n\n")
+
+	sb.WriteString("## Failure Recovery\n\n")
+	sb.WriteString("If an action fails or the page state is not what you expected, follow this recovery loop before trying again:\n\n")
+	sb.WriteString("1. Stop the current action chain and do not repeat the same stale RefID or selector more than once.\n")
+	sb.WriteString("2. Call `observe`, `snapshot`, `page-structure`, or `tabs` to discover the current state.\n")
+	sb.WriteString("3. Check for navigation, slow loading, a newly opened tab, modal/dialog, disabled element, validation error, login/session problem, or changed DOM.\n")
+	sb.WriteString("4. Revise the plan based on the verified state and continue with fresh RefIDs or a more reliable identifier.\n")
+	sb.WriteString("5. If recovery would require a destructive action, credential entry, payment, upload, or account change, ask the user before continuing.\n\n")
 
 	sb.WriteString("## Preflight\n\n")
 	sb.WriteString("```bash\n")
@@ -94,6 +128,8 @@ func GenerateSkill(baseURL string) string {
 
 	sb.WriteString("## Response Format\n\n")
 	sb.WriteString("GoFrame wraps responses as `{code,message,data}`. Browser operation data is usually in `data.result`. Check `data.result.success`, `data.result.error`, and `data.result.data` before reporting success.\n\n")
+	sb.WriteString("## Final Response Rules\n\n")
+	sb.WriteString("When the task ends, report the outcome with verified evidence. Include what was completed, the final verified page state, and any extracted data the user requested. If the task failed or is incomplete, report the blocker, the last verified page state, and the next suggested action. Do not claim success unless a BrowserFlow API response or observed page state confirms it.\n\n")
 
 	sb.WriteString("## Troubleshooting\n\n")
 	sb.WriteString("- If unsure about a command or parameters, call `help` or `help?command=<name>` before guessing.\n")

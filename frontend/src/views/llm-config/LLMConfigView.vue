@@ -1,25 +1,36 @@
 <template>
-  <section class="llm-config-page">
-    <header class="page-header">
+  <section class="llm-config-page windows-workspace-page">
+    <header class="page-header windows-workspace-actions">
       <div>
         <h1>大模型配置</h1>
-        <p>配置名称、提供商、模型名称和 API Key；Base URL 可留空，由后端按提供商自动选择。</p>
+        <p>
+          配置名称、提供商、模型名称和 API Key；Base URL
+          可留空，由后端按提供商自动选择。
+        </p>
       </div>
-      <el-button type="primary" :icon="RefreshRight" @click="loadAll">刷新</el-button>
+      <el-button type="primary" :icon="RefreshRight" @click="loadAll"
+        >刷新</el-button
+      >
     </header>
 
-    <main class="config-layout">
-      <section class="config-form-panel">
-        <div class="panel-title">
+    <main class="config-layout windows-workspace-layout">
+      <section class="config-form-panel windows-workspace-panel">
+        <div class="panel-title windows-workspace-panel__header">
           <span>{{ configForm.id ? '编辑配置' : '新增配置' }}</span>
-          <el-button type="primary" :icon="Plus" @click="handleNewConfig">新建</el-button>
+          <el-button type="primary" :icon="Plus" @click="handleNewConfig"
+            >新建</el-button
+          >
         </div>
         <el-form label-width="96px" :model="configForm">
           <el-form-item label="配置名称">
             <el-input v-model="configForm.name" placeholder="例如：deepseek" />
           </el-form-item>
           <el-form-item label="提供商">
-            <el-select v-model="configForm.provider" filterable @change="handleProviderChange">
+            <el-select
+              v-model="configForm.provider"
+              filterable
+              @change="handleProviderChange"
+            >
               <el-option
                 v-for="provider in providerCatalog"
                 :key="provider.id"
@@ -29,7 +40,10 @@
             </el-select>
           </el-form-item>
           <el-form-item label="模型名称">
-            <el-input v-model="configForm.model" placeholder="请输入模型名称，例如：deepseek-chat" />
+            <el-input
+              v-model="configForm.model"
+              placeholder="请输入模型名称，例如：deepseek-chat"
+            />
           </el-form-item>
           <el-form-item label="API Key">
             <el-input
@@ -41,33 +55,54 @@
             />
           </el-form-item>
           <el-form-item label="Base URL">
-            <el-input v-model="configForm.base_url" placeholder="可不填，不填时后端使用提供商默认地址" />
+            <el-input
+              v-model="configForm.base_url"
+              placeholder="可不填，不填时后端使用提供商默认地址"
+            />
           </el-form-item>
           <el-form-item>
             <el-checkbox v-model="configForm.is_default">设为默认</el-checkbox>
             <el-checkbox v-model="configForm.is_active">启用</el-checkbox>
           </el-form-item>
           <el-form-item>
-            <el-button :loading="testing" @click="handleTestConfig">测试连接</el-button>
-            <el-button type="primary" :loading="saving" @click="handleSaveConfig">{{ saveButtonText }}</el-button>
+            <el-button :loading="testing" @click="handleTestConfig"
+              >测试连接</el-button
+            >
+            <el-button
+              type="primary"
+              :loading="saving"
+              @click="handleSaveConfig"
+              >{{ saveButtonText }}</el-button
+            >
           </el-form-item>
         </el-form>
       </section>
 
-      <section class="config-list-panel">
-        <div class="panel-title">配置列表</div>
+      <section
+        class="config-list-panel windows-workspace-panel windows-workspace-panel--stack"
+      >
+        <div class="panel-title windows-workspace-panel__header">配置列表</div>
 
-        <div class="config-filters">
+        <div class="config-filters windows-workspace-filters">
           <!-- Name filter 名称筛选，按配置名称模糊检索 -->
           <div class="filter-item filter-item--name">
             <span class="filter-label">名称：</span>
-            <el-input v-model="searchKeyword" clearable placeholder="请输入配置名称" />
+            <el-input
+              v-model="searchKeyword"
+              clearable
+              placeholder="请输入配置名称"
+            />
           </div>
 
           <!-- Provider filter 提供商筛选，单选过滤模型提供商 -->
           <div class="filter-item filter-item--provider">
             <span class="filter-label">模型提供商：</span>
-            <el-select v-model="providerFilter" clearable filterable placeholder="全部提供商">
+            <el-select
+              v-model="providerFilter"
+              clearable
+              filterable
+              placeholder="全部提供商"
+            >
               <el-option label="全部" value="" />
               <el-option
                 v-for="provider in providerCatalog"
@@ -75,16 +110,6 @@
                 :label="provider.name"
                 :value="provider.id"
               />
-            </el-select>
-          </div>
-
-          <!-- Default filter 默认筛选，按是否默认过滤配置 -->
-          <div class="filter-item filter-item--default">
-            <span class="filter-label">是否默认：</span>
-            <el-select v-model="defaultFilter" clearable placeholder="全部">
-              <el-option label="全部" value="" />
-              <el-option label="默认" value="default" />
-              <el-option label="非默认" value="normal" />
             </el-select>
           </div>
 
@@ -101,15 +126,7 @@
           <el-button class="reset-button" @click="resetFilters">重置</el-button>
         </div>
 
-        <div class="table-toolbar">
-          <el-checkbox
-            :model-value="isAllConfigsSelected"
-            :indeterminate="isConfigSelectionIndeterminate"
-            :disabled="filteredConfigs.length === 0"
-            @change="handleToggleAllConfigs"
-          >
-            全选
-          </el-checkbox>
+        <div class="table-toolbar windows-workspace-selection">
           <el-button
             link
             type="danger"
@@ -123,7 +140,7 @@
 
         <el-table
           v-loading="loading"
-          class="config-table adaptive-table"
+          class="config-table windows-workspace-table adaptive-table"
           :data="pagedConfigs"
           border
           highlight-current-row
@@ -134,6 +151,14 @@
           @row-click="selectConfig"
         >
           <el-table-column width="40" align="center" class-name="action-column">
+            <template #header>
+              <el-checkbox
+                :model-value="isAllConfigsSelected"
+                :indeterminate="isConfigSelectionIndeterminate"
+                :disabled="filteredConfigs.length === 0"
+                @change="handleToggleAllConfigs"
+              />
+            </template>
             <template #default="{ row }">
               <el-checkbox
                 :model-value="selectedConfigIds.includes(row.id)"
@@ -149,7 +174,12 @@
             class-name="ellipsis-column"
             show-overflow-tooltip
           />
-          <el-table-column label="提供商" width="90" class-name="ellipsis-column" show-overflow-tooltip>
+          <el-table-column
+            label="提供商"
+            width="90"
+            class-name="ellipsis-column"
+            show-overflow-tooltip
+          >
             <template #default="{ row }">
               {{ getProviderName(row.provider) }}
             </template>
@@ -168,10 +198,22 @@
             class-name="ellipsis-column"
             show-overflow-tooltip
           />
-          <el-table-column label="默认" width="96" align="center" class-name="action-column default-column">
+          <el-table-column
+            label="默认"
+            width="96"
+            align="center"
+            class-name="action-column default-column"
+          >
             <template #default="{ row }">
-              <div :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`" class="quick-edit-cell">
-                <span v-if="row.is_default" class="quick-edit-action quick-edit-badge">默认</span>
+              <div
+                :key="`${row.id}-${Boolean(row.is_default)}-${isDefaultUpdating(row.id)}`"
+                class="quick-edit-cell"
+              >
+                <span
+                  v-if="row.is_default"
+                  class="quick-edit-action quick-edit-badge"
+                  >默认</span
+                >
                 <button
                   v-else
                   class="quick-edit-action quick-edit-button"
@@ -184,7 +226,12 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="86" align="center" class-name="action-column quick-edit-column">
+          <el-table-column
+            label="状态"
+            width="86"
+            align="center"
+            class-name="action-column quick-edit-column"
+          >
             <template #default="{ row }">
               <el-switch
                 class="quick-edit-switch"
@@ -195,9 +242,19 @@
               />
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="70" align="center" class-name="action-column">
+          <el-table-column
+            label="操作"
+            width="70"
+            align="center"
+            class-name="action-column"
+          >
             <template #default="{ row }">
-              <el-button link type="danger" @click.stop="handleDeleteConfig(row.id)">删除</el-button>
+              <el-button
+                link
+                type="danger"
+                @click.stop="handleDeleteConfig(row.id)"
+                >删除</el-button
+              >
             </template>
           </el-table-column>
         </el-table>
@@ -228,7 +285,7 @@ import {
   listLLMConfigs,
   listLLMProviders,
   testLLMConfig,
-  updateLLMConfig,
+  updateLLMConfig
 } from '@/services/llmChat'
 
 const configs = ref([])
@@ -241,7 +298,6 @@ const pageSize = ref(10)
 const pageSizes = DEFAULT_PAGE_SIZES
 const searchKeyword = ref('')
 const providerFilter = ref('')
-const defaultFilter = ref('')
 const statusFilter = ref('')
 const selectedConfigId = ref('')
 const selectedConfigIds = ref([])
@@ -256,16 +312,13 @@ const filteredConfigs = computed(() => {
   return configs.value.filter((config) => {
     const name = config.name || ''
     const isNameMatched = !keyword || name.toLocaleLowerCase().includes(keyword)
-    const isProviderMatched = !providerFilter.value || config.provider === providerFilter.value
-    const isDefaultMatched =
-      !defaultFilter.value ||
-      (defaultFilter.value === 'default' && config.is_default) ||
-      (defaultFilter.value === 'normal' && !config.is_default)
+    const isProviderMatched =
+      !providerFilter.value || config.provider === providerFilter.value
     const isStatusMatched =
       !statusFilter.value ||
       (statusFilter.value === 'active' && config.is_active) ||
       (statusFilter.value === 'inactive' && !config.is_active)
-    return isNameMatched && isProviderMatched && isDefaultMatched && isStatusMatched
+    return isNameMatched && isProviderMatched && isStatusMatched
   })
 })
 
@@ -274,10 +327,14 @@ const pagedConfigs = computed(() => {
   return filteredConfigs.value.slice(start, start + pageSize.value)
 })
 const isAllConfigsSelected = computed(
-  () => filteredConfigs.value.length > 0 && selectedConfigIds.value.length === filteredConfigs.value.length,
+  () =>
+    filteredConfigs.value.length > 0 &&
+    selectedConfigIds.value.length === filteredConfigs.value.length
 )
 const isConfigSelectionIndeterminate = computed(
-  () => selectedConfigIds.value.length > 0 && selectedConfigIds.value.length < filteredConfigs.value.length,
+  () =>
+    selectedConfigIds.value.length > 0 &&
+    selectedConfigIds.value.length < filteredConfigs.value.length
 )
 
 onMounted(() => {
@@ -288,11 +345,11 @@ watch([filteredConfigs, pageSize], () => {
   currentPage.value = getSafePage({
     total: filteredConfigs.value.length,
     page: currentPage.value,
-    size: pageSize.value,
+    size: pageSize.value
   })
 })
 
-watch([searchKeyword, providerFilter, defaultFilter, statusFilter], () => {
+watch([searchKeyword, providerFilter, statusFilter], () => {
   currentPage.value = 1
 })
 
@@ -314,15 +371,20 @@ async function loadConfigs() {
   const data = await listLLMConfigs()
   configs.value = sortByCreatedDesc(data.configs || [])
   selectedConfigIds.value = selectedConfigIds.value.filter((id) =>
-    configs.value.some((config) => config.id === id),
+    configs.value.some((config) => config.id === id)
   )
-  if (selectedConfigId.value && !configs.value.some((config) => config.id === selectedConfigId.value)) {
+  if (
+    selectedConfigId.value &&
+    !configs.value.some((config) => config.id === selectedConfigId.value)
+  ) {
     resetConfigForm()
   }
 }
 
 function handleProviderChange() {
-  const provider = providerCatalog.value.find((item) => item.id === configForm.provider)
+  const provider = providerCatalog.value.find(
+    (item) => item.id === configForm.provider
+  )
   if (provider && !configForm.name) {
     configForm.name = provider.name
   }
@@ -335,7 +397,10 @@ async function handleSaveConfig() {
     const data = isCreate
       ? await createLLMConfig(buildPayload())
       : await updateLLMConfig(configForm.id, buildPayload())
-    appMessage({ type: APP_MESSAGE_TYPE.success, message: isCreate ? '新增成功' : '保存成功' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.success,
+      message: isCreate ? '新增成功' : '保存成功'
+    })
     await loadConfigs()
     selectSavedConfig(data?.config || configForm)
   } finally {
@@ -348,10 +413,16 @@ async function handleTestConfig() {
   try {
     const data = await testLLMConfig(buildPayload())
     if (data.success === false) {
-      appMessage({ type: APP_MESSAGE_TYPE.error, message: data.message || '连接失败' })
+      appMessage({
+        type: APP_MESSAGE_TYPE.error,
+        message: data.message || '连接失败'
+      })
       return
     }
-    appMessage({ type: APP_MESSAGE_TYPE.success, message: data.message || '连接成功' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.success,
+      message: data.message || '连接成功'
+    })
   } finally {
     testing.value = false
   }
@@ -362,7 +433,7 @@ async function handleDeleteConfig(configId) {
     title: '删除配置',
     message: '确认删除这个模型配置吗？',
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '删除',
+    confirmText: '删除'
   })
   if (!confirmed) return
 
@@ -377,16 +448,24 @@ async function handleDeleteConfig(configId) {
 async function handleToggleConfigStatus(config, checked) {
   const nextActive = Boolean(checked)
   const previousActive = config.is_active
-  statusUpdatingIds.value = Array.from(new Set([...statusUpdatingIds.value, config.id]))
+  statusUpdatingIds.value = Array.from(
+    new Set([...statusUpdatingIds.value, config.id])
+  )
   config.is_active = nextActive
 
   try {
     // Status update 状态更新，复用完整配置更新接口避免新增后端路由
-    await updateLLMConfig(config.id, buildConfigPayload(config, { is_active: nextActive }))
+    await updateLLMConfig(
+      config.id,
+      buildConfigPayload(config, { is_active: nextActive })
+    )
     if (configForm.id === config.id) {
       configForm.is_active = nextActive
     }
-    appMessage({ type: APP_MESSAGE_TYPE.success, message: nextActive ? '已启用' : '已停用' })
+    appMessage({
+      type: APP_MESSAGE_TYPE.success,
+      message: nextActive ? '已启用' : '已停用'
+    })
   } catch (error) {
     config.is_active = previousActive
     if (configForm.id === config.id) {
@@ -394,35 +473,50 @@ async function handleToggleConfigStatus(config, checked) {
     }
     throw error
   } finally {
-    statusUpdatingIds.value = statusUpdatingIds.value.filter((id) => id !== config.id)
+    statusUpdatingIds.value = statusUpdatingIds.value.filter(
+      (id) => id !== config.id
+    )
   }
 }
 
 async function handleSetDefaultConfig(config) {
   if (config.is_default) return
 
-  defaultUpdatingIds.value = Array.from(new Set([...defaultUpdatingIds.value, config.id]))
+  defaultUpdatingIds.value = Array.from(
+    new Set([...defaultUpdatingIds.value, config.id])
+  )
   try {
     // Default update 默认配置只允许一个，后端保存时会清理其他默认项
-    await updateLLMConfig(config.id, buildConfigPayload(config, { is_default: true }))
+    await updateLLMConfig(
+      config.id,
+      buildConfigPayload(config, { is_default: true })
+    )
     appMessage({ type: APP_MESSAGE_TYPE.success, message: '已设为默认模型' })
     await loadConfigs()
     syncSelectedConfigFlags()
   } finally {
-    defaultUpdatingIds.value = defaultUpdatingIds.value.filter((id) => id !== config.id)
+    defaultUpdatingIds.value = defaultUpdatingIds.value.filter(
+      (id) => id !== config.id
+    )
   }
 }
 
 function handleToggleConfig(configId, checked) {
   if (checked) {
-    selectedConfigIds.value = Array.from(new Set([...selectedConfigIds.value, configId]))
+    selectedConfigIds.value = Array.from(
+      new Set([...selectedConfigIds.value, configId])
+    )
     return
   }
-  selectedConfigIds.value = selectedConfigIds.value.filter((id) => id !== configId)
+  selectedConfigIds.value = selectedConfigIds.value.filter(
+    (id) => id !== configId
+  )
 }
 
 function handleToggleAllConfigs(checked) {
-  selectedConfigIds.value = checked ? filteredConfigs.value.map((config) => config.id) : []
+  selectedConfigIds.value = checked
+    ? filteredConfigs.value.map((config) => config.id)
+    : []
 }
 
 async function handleDeleteSelectedConfigs() {
@@ -433,7 +527,7 @@ async function handleDeleteSelectedConfigs() {
     title: '批量删除配置',
     message: `确认删除选中的 ${ids.length} 个模型配置吗？`,
     type: APP_CONFIRM_TYPE.danger,
-    confirmText: '删除',
+    confirmText: '删除'
   })
   if (!confirmed) return
 
@@ -448,19 +542,24 @@ async function handleDeleteSelectedConfigs() {
 function resetFilters() {
   searchKeyword.value = ''
   providerFilter.value = ''
-  defaultFilter.value = ''
   statusFilter.value = ''
   currentPage.value = 1
 }
 
 function removeConfigsFromState(configIds) {
-  configs.value = configs.value.filter((config) => !configIds.includes(config.id))
-  selectedConfigIds.value = selectedConfigIds.value.filter((id) => !configIds.includes(id))
+  configs.value = configs.value.filter(
+    (config) => !configIds.includes(config.id)
+  )
+  selectedConfigIds.value = selectedConfigIds.value.filter(
+    (id) => !configIds.includes(id)
+  )
 }
 
 function sortByCreatedDesc(data) {
   // Created order 新增时间倒序，保证列表展示最新配置在前
-  return data.slice().sort((a, b) => getTimeValue(b.created_at) - getTimeValue(a.created_at))
+  return data
+    .slice()
+    .sort((a, b) => getTimeValue(b.created_at) - getTimeValue(a.created_at))
 }
 
 function getTimeValue(value) {
@@ -491,7 +590,12 @@ function resetConfigForm() {
 }
 
 function getProviderName(providerId) {
-  return providerCatalog.value.find((provider) => provider.id === providerId)?.name || providerId || ''
+  return (
+    providerCatalog.value.find((provider) => provider.id === providerId)
+      ?.name ||
+    providerId ||
+    ''
+  )
 }
 
 function isStatusUpdating(configId) {
@@ -517,7 +621,7 @@ function buildConfigPayload(config, overrides = {}) {
     model: nextConfig.model,
     base_url: nextConfig.base_url,
     is_default: Boolean(nextConfig.is_default),
-    is_active: Boolean(nextConfig.is_active),
+    is_active: Boolean(nextConfig.is_active)
   }
 }
 
@@ -536,7 +640,7 @@ function normalizeConfigForm(config) {
     ...createEmptyForm(),
     ...config,
     is_default: Boolean(config.is_default),
-    is_active: Boolean(config.is_active),
+    is_active: Boolean(config.is_active)
   }
 }
 
@@ -549,25 +653,13 @@ function createEmptyForm() {
     model: '',
     base_url: '',
     is_default: false,
-    is_active: true,
+    is_active: true
   }
 }
 </script>
 
 <style scoped>
-.llm-config-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .page-header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
   gap: 16px;
 }
 
@@ -578,16 +670,10 @@ function createEmptyForm() {
 .config-layout {
   display: grid;
   grid-template-columns: 420px minmax(0, 1fr);
-  flex: 1;
-  gap: 16px;
-  min-height: 0;
 }
 
 .config-form-panel,
 .config-list-panel {
-  min-width: 0;
-  background: #ffffff;
-  border: 1px solid #e4e7ed;
 }
 
 .config-form-panel {
@@ -596,10 +682,6 @@ function createEmptyForm() {
 }
 
 .config-list-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
   padding: 16px;
 }
 
@@ -628,14 +710,9 @@ function createEmptyForm() {
 }
 
 .panel-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-  color: #303133;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
+  margin-bottom: 16px;
 }
 
 .config-table :deep(.el-table__row) {
@@ -643,11 +720,8 @@ function createEmptyForm() {
 }
 
 .config-filters {
-  display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
 }
 
 .filter-item {
@@ -657,35 +731,35 @@ function createEmptyForm() {
 }
 
 .filter-item--name {
-  width: 320px;
+  width: clamp(260px, 32%, 320px);
 }
 
 .filter-item--provider {
-  width: 300px;
-}
-
-.filter-item--default {
-  width: 220px;
+  width: clamp(260px, 28%, 300px);
 }
 
 .filter-item--status {
-  width: 180px;
+  width: 184px;
 }
 
 .filter-label {
   flex-shrink: 0;
   color: #606266;
+  white-space: nowrap;
+}
+
+.filter-item :deep(.el-input),
+.filter-item :deep(.el-select) {
+  flex: 1;
+  min-width: 0;
 }
 
 .reset-button {
-  margin-left: auto;
+  flex-shrink: 0;
+  margin-left: 0;
 }
 
 .table-toolbar {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: 16px;
   margin-bottom: 12px;
 }
 
@@ -710,21 +784,23 @@ function createEmptyForm() {
 }
 
 @media (max-width: 640px) {
-  .config-filters,
-  .filter-item {
+  .config-filters {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .filter-item {
+    align-items: center;
+  }
+
   .filter-item--name,
   .filter-item--provider,
-  .filter-item--default,
   .filter-item--status {
     width: 100%;
   }
 
   .reset-button {
-    margin-left: 0;
+    width: 100%;
   }
 }
 </style>
