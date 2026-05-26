@@ -271,6 +271,7 @@ function normalizeListParams(params) {
     page_num: params.page_num || 1,
     page_size: params.page_size || 60,
     source,
+    source_node_ids: normalizeMultiValue(params.source_node_ids),
   }
 }
 
@@ -290,6 +291,16 @@ function normalizeSourceNodeId(sourceIp = '', sourceNodeId = '') {
     sourceNodeId = sourceNodeId.slice(prefix.length)
   }
   return sourceNodeId
+}
+
+function normalizeMultiValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .join(',')
+  }
+  return String(value || '').trim()
 }
 
 function buildWorkflowFormData(workflows) {

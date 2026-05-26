@@ -28,17 +28,17 @@ func Validate(path string) error {
 func ValidatePath(path string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return errors.New("Chrome 路径为空")
+		return errors.New("Chrome path is empty")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return err
 	}
 	if info.IsDir() {
-		return fmt.Errorf("%s 是目录，不是 chrome.exe", path)
+		return fmt.Errorf("%s is a directory, not an executable file", path)
 	}
-	if runtime.GOOS == "windows" && !strings.EqualFold(filepath.Base(path), "chrome.exe") {
-		return fmt.Errorf("%s 不是 chrome.exe", path)
+	if runtime.GOOS == "windows" && !strings.EqualFold(filepath.Ext(path), ".exe") {
+		return fmt.Errorf("%s is not a .exe executable file", path)
 	}
 	return nil
 }

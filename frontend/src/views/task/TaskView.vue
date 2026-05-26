@@ -10,11 +10,7 @@
         <div class="task-filter-fields">
           <div class="filter-item filter-item--keyword">
             <span class="filter-label">关键词</span>
-            <el-input v-model="taskFilters.keyword" clearable placeholder="任务名称或任务说明" />
-          </div>
-          <div class="filter-item filter-item--workflow">
-            <span class="filter-label">自定义工作流名称</span>
-            <el-input v-model="taskFilters.workflow_name" clearable placeholder="自定义工作流名称" />
+            <el-input v-model="taskFilters.keyword" clearable placeholder="任务名称、任务说明或自定义工作流名称" />
           </div>
           <div class="filter-item filter-item--created-time">
             <span class="filter-label">创建时间</span>
@@ -505,7 +501,6 @@ const {
 const taskForm = reactive(createEmptyTaskForm())
 const taskFilters = reactive({
   keyword: '',
-  workflow_name: '',
   created_time_range: [],
   enabled: '',
 })
@@ -571,7 +566,7 @@ onMounted(() => {
   loadClients()
 })
 
-watch(() => [taskFilters.keyword, taskFilters.workflow_name], () => {
+watch(() => taskFilters.keyword, () => {
   scheduleFilterSearch()
 })
 
@@ -598,7 +593,6 @@ async function loadTasks() {
     const [startTime, endTime] = getCreatedTimeRange()
     const data = await listTasks({
       keyword: taskFilters.keyword.trim(),
-      workflow_name: taskFilters.workflow_name.trim(),
       start_time: startTime,
       end_time: endTime,
       enabled: taskFilters.enabled,
@@ -1174,7 +1168,6 @@ function resetTaskForm() {
 
 function resetTaskFilters() {
   taskFilters.keyword = ''
-  taskFilters.workflow_name = ''
   taskFilters.created_time_range = []
   taskFilters.enabled = ''
 }
@@ -1524,7 +1517,7 @@ function createEmptyTaskForm() {
 .task-filter-fields {
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.1fr) minmax(380px, 1.4fr) minmax(140px, 0.6fr);
+  grid-template-columns: minmax(360px, 1.4fr) minmax(380px, 1.4fr) minmax(140px, 0.6fr);
   gap: 12px 16px;
   min-width: 0;
 }

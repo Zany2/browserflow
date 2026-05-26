@@ -9,7 +9,7 @@ BrowserFlow Windows Worker 是一个 Windows 桌面执行器原型，用来让�
 ## 功能
 
 - 提供 Windows 原生 GUI 窗口，支持双击运行。
-- 自动检测本机 Chrome，也支持手动选择 `chrome.exe`。
+- 自动检测本机 Chrome，也支持手动选择 Chrome 可执行文件（任意 `.exe`）。
 - 支持配置 BrowserFlow 服务端地址和执行节点数。
 - 为每个执行节点创建独立 Chrome profile 目录。
 - 每个节点启动一个独立 Chrome 窗口。
@@ -52,7 +52,7 @@ windows-worker/
 
 1. 双击 `BrowserFlowWorker.exe`。
 2. 填写 BrowserFlow 服务端地址，例如公司提供的管理端地址。
-3. 点击“自动检测”检测 Chrome，或点击“浏览...”手动选择 `chrome.exe`。
+3. 点击“自动检测”检测 Chrome，或点击“浏览...”手动选择 Chrome 可执行文件（任意 `.exe`）。
 4. 设置“执行节点数”。
 5. 设置“下载目录”，可以手动填写，也可以点击旁边的“浏览...”选择目录。
 6. 点击“保存配置”。

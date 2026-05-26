@@ -6,12 +6,8 @@
         <el-button @click="importDialogVisible = true">导入</el-button>
         <el-button type="primary" @click="syncDialogVisible = true">客户端同步</el-button>
         <el-button type="success" @click="maintenanceDialogVisible = true">客户端维护</el-button>
-        <el-button
-          :icon="Download"
-          :loading="skillExporting"
-          :disabled="workflows.length === 0"
-          @click="handleExportSkill"
-        >
+        <el-button :icon="Download" :loading="skillExporting" :disabled="workflows.length === 0"
+          @click="handleExportSkill">
           导出 Skill
         </el-button>
         <el-button :icon="RefreshRight" @click="loadWorkflows">刷新</el-button>
@@ -22,7 +18,7 @@
       <div class="workflow-filters server-list-filters">
         <div class="filter-item filter-item--keyword">
           <span class="filter-label">关键词</span>
-          <el-input v-model="filters.keyword" clearable placeholder="自定义工作流名称、工作流名称" />
+          <el-input v-model="filters.keyword" clearable placeholder="检索自定义工作流名称、描述" />
         </div>
 
         <div class="filter-item filter-item--source">
@@ -35,12 +31,21 @@
         </div>
 
         <div class="filter-item filter-item--ip">
-          <span class="filter-label">来源节点</span>
-          <el-select v-model="filters.source_node_key" clearable filterable placeholder="选择或检索来源节点"
+          <span class="filter-label">客户端 IP</span>
+          <el-select v-model="filters.source_ip" clearable filterable placeholder="选择或检索客户端 IP"
             :loading="clientIpLoading" :value-on-clear="''" @clear="handleClientIpClear"
             @visible-change="handleClientIpSelectVisible">
-            <el-option label="全部" value="" />
-            <el-option v-for="client in clientOptions" :key="client.key" :label="client.label" :value="client.key" />
+            <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
+          </el-select>
+        </div>
+
+        <div class="filter-item filter-item--node">
+          <span class="filter-label">来源节点</span>
+          <el-select v-model="filters.source_node_ids" clearable filterable multiple collapse-tags collapse-tags-tooltip
+            placeholder="请先选择客户端 IP" :disabled="!filters.source_ip" :loading="clientIpLoading"
+            @visible-change="handleClientIpSelectVisible">
+            <el-option v-for="client in filteredClientNodeOptions" :key="client.source_node_id" :label="client.label"
+              :value="client.source_node_id" />
           </el-select>
         </div>
 
@@ -51,8 +56,9 @@
         <AppSelectionSummary :count="selectedWorkflowIds.length" unit="工作流" />
       </div>
 
-      <el-table ref="workflowTableRef" v-loading="loading" class="workflow-table server-list-table adaptive-table" :data="pagedWorkflows" border height="100%"
-        :row-key="getWorkflowId" empty-text="暂无工作流" @selection-change="handleSelectionChange">
+      <el-table ref="workflowTableRef" v-loading="loading" class="workflow-table server-list-table adaptive-table"
+        :data="pagedWorkflows" border height="100%" :row-key="getWorkflowId" empty-text="暂无工作流"
+        @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
 
         <el-table-column label="自定义工作流名称" min-width="120" show-overflow-tooltip>
@@ -88,11 +94,8 @@
         <el-table-column label="是否可同步" width="104" align="center" class-name="quick-edit-column">
           <template #default="{ row }">
             <div class="quick-edit-cell">
-              <el-switch
-                class="quick-edit-switch"
-                :model-value="!row.is_protected"
-                :before-change="() => handleToggleSyncable(row)"
-              />
+              <el-switch class="quick-edit-switch" :model-value="!row.is_protected"
+                :before-change="() => handleToggleSyncable(row)" />
             </div>
           </template>
         </el-table-column>
@@ -203,6 +206,7 @@ const workflowTableRef = ref(null)
 const skillExporting = ref(false)
 const clientIpLoading = ref(false)
 const clientOptions = ref([])
+const clientIpOptions = ref([])
 const createDialogVisible = ref(false)
 const importDialogVisible = ref(false)
 const syncDialogVisible = ref(false)
@@ -212,13 +216,17 @@ const filters = reactive({
   keyword: '',
   source: '',
   source_ip: '',
-  source_node_id: '',
-  source_node_key: '',
+  source_node_ids: [],
 })
 
 const pagedWorkflows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return workflows.value.slice(start, start + pageSize.value)
+})
+const filteredClientNodeOptions = computed(() => {
+  const sourceIp = normalizeText(filters.source_ip)
+  if (!sourceIp) return []
+  return clientOptions.value.filter((client) => client.source_ip === sourceIp && client.source_node_id)
 })
 const {
   selectedKeys: selectedWorkflowIds,
@@ -273,12 +281,19 @@ watch(() => filters.source, () => {
   loadWorkflows()
 })
 
-watch(() => filters.source_node_key, () => {
+watch(() => filters.source_ip, () => {
   clearFilterSearchTimer()
-  syncSourceNodeFilter()
+  const validNodeIds = new Set(filteredClientNodeOptions.value.map((client) => client.source_node_id))
+  filters.source_node_ids = filters.source_node_ids.filter((nodeId) => validNodeIds.has(nodeId))
   currentPage.value = 1
   loadWorkflows()
 })
+
+watch(() => filters.source_node_ids, () => {
+  clearFilterSearchTimer()
+  currentPage.value = 1
+  loadWorkflows()
+}, { deep: true })
 
 watch(() => filters.keyword, () => {
   scheduleFilterSearch()
@@ -303,7 +318,7 @@ async function loadWorkflows() {
       keyword: filters.keyword.trim(),
       source: filters.source,
       source_ip: normalizeText(filters.source_ip),
-      source_node_id: normalizeText(filters.source_node_id),
+      source_node_ids: filters.source_node_ids,
       page_num: 1,
       page_size: 60,
     })
@@ -337,6 +352,7 @@ async function loadClientIpOptions() {
         seen.add(client.key)
         return true
       })
+    clientIpOptions.value = Array.from(new Set(clientOptions.value.map((client) => client.source_ip).filter(Boolean)))
   } finally {
     clientIpLoading.value = false
   }
@@ -348,8 +364,7 @@ function handleClientIpSelectVisible(opened) {
 
 function handleClientIpClear() {
   filters.source_ip = ''
-  filters.source_node_id = ''
-  filters.source_node_key = ''
+  filters.source_node_ids = []
   searchFiltersNow()
 }
 
@@ -484,8 +499,7 @@ function resetFilters() {
   filters.keyword = ''
   filters.source = ''
   filters.source_ip = ''
-  filters.source_node_id = ''
-  filters.source_node_key = ''
+  filters.source_node_ids = []
 }
 
 function createDetailForm() {
@@ -536,18 +550,6 @@ function getWorkflowId(row) {
 
 function getClientIp(row) {
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
-}
-
-function syncSourceNodeFilter() {
-  const key = normalizeText(filters.source_node_key)
-  const selectedClient = clientOptions.value.find((client) => client.key === key)
-  if (selectedClient) {
-    filters.source_ip = selectedClient.source_ip
-    filters.source_node_id = selectedClient.source_node_id
-    return
-  }
-  filters.source_ip = key.includes('|') ? key.split('|')[0] : key
-  filters.source_node_id = key.includes('|') ? key.split('|').slice(1).join('|') : ''
 }
 
 function buildNodeIdentity(clientIp, nodeId) {
@@ -663,6 +665,10 @@ function formatListDate(value) {
 }
 
 .filter-item--ip {
+  width: 240px;
+}
+
+.filter-item--node {
   width: 260px;
 }
 
@@ -708,7 +714,8 @@ function formatListDate(value) {
 
   .filter-item--keyword,
   .filter-item--source,
-  .filter-item--ip {
+  .filter-item--ip,
+  .filter-item--node {
     width: 100%;
   }
 

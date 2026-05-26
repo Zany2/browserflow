@@ -8,7 +8,7 @@
       <div class="client-filters server-list-filters">
         <div class="filter-item filter-item--keyword">
           <span class="filter-label">关键字</span>
-          <el-input v-model="keywordFilter" clearable placeholder="客户端 IP、节点、客户端名称、主机名" />
+          <el-input v-model="keywordFilter" clearable placeholder="客户端 IP、执行节点、客户端名称" />
         </div>
 
         <div class="filter-item filter-item--status">
@@ -22,36 +22,20 @@
         </div>
 
         <el-button @click="resetFilters">重置</el-button>
-        <el-button
-          type="warning"
-          :disabled="selectedClientIds.length === 0 || batchOfflineLoading"
-          :loading="batchOfflineLoading"
-          @click="handleBatchOffline"
-        >
+        <el-button type="warning" :disabled="selectedClientIds.length === 0 || batchOfflineLoading"
+          :loading="batchOfflineLoading" @click="handleBatchOffline">
           下线重连
         </el-button>
-        <el-button
-          type="danger"
-          :disabled="selectedClientIds.length === 0 || batchBanLoading"
-          :loading="batchBanLoading"
-          @click="handleBatchBan"
-        >
+        <el-button type="danger" :disabled="selectedClientIds.length === 0 || batchBanLoading"
+          :loading="batchBanLoading" @click="handleBatchBan">
           拉黑
         </el-button>
         <AppSelectionSummary :count="selectedClientIds.length" unit="客户端" />
       </div>
 
-      <el-table
-        ref="clientTableRef"
-        v-loading="loading"
-        class="client-table server-list-table adaptive-table"
-        :data="pagedClients"
-        border
-        height="100%"
-        :row-key="getClientId"
-        empty-text="暂无客户端"
-        @selection-change="handleSelectionChange"
-      >
+      <el-table ref="clientTableRef" v-loading="loading" class="client-table server-list-table adaptive-table"
+        :data="pagedClients" border height="100%" :row-key="getClientId" empty-text="暂无客户端"
+        @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
         <el-table-column label="客户端 IP" width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ getClientIp(row) || '' }}</template>
@@ -94,59 +78,28 @@
         <el-table-column label="操作" width="168" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button
-              v-if="!isBanned(row)"
-              link
-              type="warning"
-              :disabled="isClientActionLoading(row)"
-              :loading="isClientActionLoading(row)"
-              @click="handleOffline(row)"
-            >
+            <el-button v-if="!isBanned(row)" link type="warning" :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)" @click="handleOffline(row)">
               下线重连
             </el-button>
-            <el-button
-              v-if="!isBanned(row)"
-              link
-              type="danger"
-              :disabled="isClientActionLoading(row)"
-              :loading="isClientActionLoading(row)"
-              @click="handleBan(row)"
-            >
+            <el-button v-if="!isBanned(row)" link type="danger" :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)" @click="handleBan(row)">
               拉黑
             </el-button>
-            <el-button
-              v-else
-              link
-              type="success"
-              :disabled="isClientActionLoading(row)"
-              :loading="isClientActionLoading(row)"
-              @click="handleUnban(row)"
-            >
+            <el-button v-else link type="success" :disabled="isClientActionLoading(row)"
+              :loading="isClientActionLoading(row)" @click="handleUnban(row)">
               解除拉黑
             </el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <AppPagination
-        v-model:current-page="currentPage"
-        v-model:page-size="pageSize"
-        :page-sizes="pageSizes"
-        :total="clients.length"
-      />
+      <AppPagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="pageSizes"
+        :total="clients.length" />
     </section>
 
-    <AppDialog
-      v-model="detailVisible"
-      title="客户端详情"
-      width="720px"
-      class="client-detail-dialog"
-      confirm-text="保存"
-      cancel-text="关闭"
-      :loading="detailSaving"
-      :confirm-disabled="detailLoading"
-      @confirm="handleSaveDetail"
-    >
+    <AppDialog v-model="detailVisible" title="客户端详情" width="720px" class="client-detail-dialog" confirm-text="保存"
+      cancel-text="关闭" :loading="detailSaving" :confirm-disabled="detailLoading" @confirm="handleSaveDetail">
       <div v-loading="detailLoading" class="detail-form server-detail-form">
         <div v-for="field in detailFields" :key="field.key" class="detail-field server-detail-field">
           <span class="detail-label server-detail-label">{{ field.label }}</span>
@@ -154,12 +107,8 @@
             <el-input v-if="field.type === 'textarea'" :model-value="field.value" disabled type="textarea" :rows="3" />
             <el-input v-else-if="field.editable" v-model="detailForm[field.key]" clearable />
             <el-input v-else :model-value="field.value" disabled />
-            <el-button
-              v-if="!field.editable"
-              :icon="CopyDocument"
-              :disabled="!field.value"
-              @click="copyDetailValue(field.value)"
-            >
+            <el-button v-if="!field.editable" :icon="CopyDocument" :disabled="!field.value"
+              @click="copyDetailValue(field.value)">
               复制
             </el-button>
           </div>

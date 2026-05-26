@@ -67,8 +67,8 @@ func (l Launcher) Start() ([]Node, error) {
 			return nil, err
 		}
 		downloadDir := l.nodeDownloadDir(nodeID)
-		if err := configureDownloadDir(profileDir, downloadDir); err != nil {
-			l.writeLog("node=%s configure download dir failed profile=%q download_dir=%q error=%v", nodeID, profileDir, downloadDir, err)
+		if err := configureBrowserProfile(profileDir, downloadDir); err != nil {
+			l.writeLog("node=%s configure browser profile failed profile=%q download_dir=%q error=%v", nodeID, profileDir, downloadDir, err)
 			return nil, err
 		}
 
@@ -82,6 +82,8 @@ func (l Launcher) Start() ([]Node, error) {
 			"--user-data-dir=" + profileDir,
 			"--no-first-run",
 			"--no-default-browser-check",
+			"--disable-popup-blocking",
+			"--allow-running-insecure-content",
 			"--new-window",
 			agentURL,
 		}
@@ -194,12 +196,11 @@ func (l Launcher) nodeDownloadDir(nodeID string) string {
 	return filepath.Join(baseDir, nodeID)
 }
 
-func configureDownloadDir(profileDir string, downloadDir string) error {
-	if strings.TrimSpace(downloadDir) == "" {
-		return nil
-	}
-	if err := os.MkdirAll(downloadDir, 0o755); err != nil {
-		return err
+func configureBrowserProfile(profileDir string, downloadDir string) error {
+	if strings.TrimSpace(downloadDir) != "" {
+		if err := os.MkdirAll(downloadDir, 0o755); err != nil {
+			return err
+		}
 	}
 	defaultDir := filepath.Join(profileDir, "Default")
 	if err := os.MkdirAll(defaultDir, 0o755); err != nil {
@@ -212,14 +213,39 @@ func configureDownloadDir(profileDir string, downloadDir string) error {
 			return err
 		}
 	}
-	download, _ := preferences["download"].(map[string]any)
-	if download == nil {
-		download = map[string]any{}
+	if strings.TrimSpace(downloadDir) != "" {
+		download, _ := preferences["download"].(map[string]any)
+		if download == nil {
+			download = map[string]any{}
+		}
+		download["default_directory"] = downloadDir
+		download["directory_upgrade"] = true
+		download["prompt_for_download"] = false
+		preferences["download"] = download
 	}
-	download["default_directory"] = downloadDir
-	download["directory_upgrade"] = true
-	download["prompt_for_download"] = false
-	preferences["download"] = download
+
+	profile, _ := preferences["profile"].(map[string]any)
+	if profile == nil {
+		profile = map[string]any{}
+	}
+	defaultContentSettings, _ := profile["default_content_setting_values"].(map[string]any)
+	if defaultContentSettings == nil {
+		defaultContentSettings = map[string]any{}
+	}
+	for key, value := range map[string]any{
+		"automatic_downloads": 1,
+		"clipboard":           1,
+		"geolocation":         1,
+		"media_stream_camera": 1,
+		"media_stream_mic":    1,
+		"midi_sysex":          1,
+		"notifications":       1,
+		"popups":              1,
+	} {
+		defaultContentSettings[key] = value
+	}
+	profile["default_content_setting_values"] = defaultContentSettings
+	preferences["profile"] = profile
 
 	body, err := json.MarshalIndent(preferences, "", "  ")
 	if err != nil {

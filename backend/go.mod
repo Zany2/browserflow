@@ -4,9 +4,9 @@ go 1.25.0
 
 require (
 	github.com/go-rod/rod v0.116.2
-	github.com/gogf/gf/contrib/drivers/pgsql/v2 v2.10.0
-	github.com/gogf/gf/contrib/nosql/redis/v2 v2.10.0
-	github.com/gogf/gf/v2 v2.10.0
+	github.com/gogf/gf/contrib/drivers/pgsql/v2 v2.10.2
+	github.com/gogf/gf/contrib/nosql/redis/v2 v2.10.2
+	github.com/gogf/gf/v2 v2.10.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/sashabaranov/go-openai v1.41.2
 	go.etcd.io/bbolt v1.4.3
