@@ -180,6 +180,9 @@ import {
 } from '@/services/browser'
 import { subscribeDesktopConnectionState } from '@/services/desktopWs'
 import { copyText } from '@/utils/browser'
+import { localCache } from '@/utils/storage'
+
+const WORKFLOW_READY_STORAGE_KEY = 'browserflow-windows-workflow-ready'
 
 const runtimeMode = ref('')
 const backendAvailable = ref(true)
@@ -371,6 +374,13 @@ const currentAgent = computed(() => {
 
 const agentOnline = computed(() => Boolean(currentAgent.value?.online))
 const automaReady = computed(() => Boolean(currentAgent.value?.online && currentAgent.value?.automa_installed))
+const workflowReady = computed(() => {
+  const browserId = String(browserStatus.value.current_instance_id || '').trim()
+  if (!automaReady.value || !browserId) return false
+
+  const readyMap = localCache.get(WORKFLOW_READY_STORAGE_KEY, {})
+  return Boolean(readyMap?.[browserId]?.read_at)
+})
 
 const desktopConnectionStatus = computed(() => {
   switch (desktopConnection.value.status) {
@@ -467,10 +477,12 @@ const windowsNextSteps = computed(() => {
   const workflowStep = {
     index: '03',
     title: '读取工作流',
-    desc: automaReady.value ? '可以读取 Automa 工作流并执行验证' : '确认 Automa 插件可用后继续',
-    action: automaReady.value ? '去读取' : '待准备',
+    desc: workflowReady.value
+      ? '已读取 Automa 工作流，可以执行验证'
+      : automaReady.value ? '可以读取 Automa 工作流并执行验证' : '确认 Automa 插件可用后继续',
+    action: workflowReady.value ? '已完成' : automaReady.value ? '去读取' : '待准备',
     to: automaReady.value ? '/workflows' : '/browser',
-    stateClass: automaReady.value ? 'is-current' : '',
+    stateClass: workflowReady.value ? 'is-done' : automaReady.value ? 'is-current' : '',
   }
 
   if (!browserStatus.value.running) {

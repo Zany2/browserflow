@@ -288,9 +288,11 @@ import {
 import { downloadBlob } from '@/utils/browser'
 import { formatDate } from '@/utils/format'
 import { DEFAULT_PAGE_SIZES, getSafePage } from '@/utils/list'
+import { localCache } from '@/utils/storage'
 
 const PAGE_SIZE = 10
 const SORT_STORAGE_KEY = 'workflow-sorts'
+const WORKFLOW_READY_STORAGE_KEY = 'browserflow-windows-workflow-ready'
 
 const savedSorts = JSON.parse(localStorage.getItem(SORT_STORAGE_KEY) || '{}')
 
@@ -446,6 +448,7 @@ async function loadWorkflows() {
     workflows.value = normalizeAgentWorkflows(data)
     resetWorkflowSelection(workflowTableRef)
     agentBrowserId.value = data?.browser_id || ''
+    markWorkflowReady(agentBrowserId.value, workflows.value.length)
   } catch (err) {
     workflows.value = []
     resetWorkflowSelection(workflowTableRef)
@@ -454,6 +457,18 @@ async function loadWorkflows() {
   } finally {
     loading.value = false
   }
+}
+
+function markWorkflowReady(browserId, workflowCount) {
+  const safeBrowserId = String(browserId || '').trim()
+  if (!safeBrowserId) return
+
+  const readyMap = localCache.get(WORKFLOW_READY_STORAGE_KEY, {})
+  readyMap[safeBrowserId] = {
+    count: Number(workflowCount || 0),
+    read_at: Date.now()
+  }
+  localCache.set(WORKFLOW_READY_STORAGE_KEY, readyMap)
 }
 
 async function openWorkflow(workflowId) {
