@@ -3,7 +3,6 @@ package workflows
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
@@ -43,13 +42,7 @@ func (c *ServerControllerV1) WorkflowExportSkill(ctx context.Context, req *v1.Wo
 	}
 
 	request := g.RequestFromCtx(ctx)
-	baseURL := workflowskill.BaseURLFromFrontendURL(g.Cfg().MustGet(ctx, "frontend.url", "").String())
-	if baseURL == "" {
-		baseURL = workflowskill.BaseURLFromFrontendURL(os.Getenv("FRONTEND_URL"))
-	}
-	if baseURL == "" {
-		baseURL = workflowskill.BaseURL(request.Host, request.TLS != nil)
-	}
+	baseURL := workflowskill.BaseURLFromServerAddress(g.Cfg().MustGet(ctx, "server.address", "").String(), request.TLS != nil)
 	request.Response.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	request.Response.Header().Set("Content-Disposition", workflowskill.ContentDisposition(workflowskill.FileName))
 	request.Response.Write(workflowskill.GenerateServerMarkdown(workflows, baseURL))

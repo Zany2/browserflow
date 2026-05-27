@@ -12,6 +12,8 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
+const maxChatContextMessages = 20
+
 // OpenAICompatibleClient OpenAI compatible client OpenAI 兼容客户端
 type OpenAICompatibleClient struct{}
 
@@ -82,7 +84,7 @@ func buildMessages(messages []model.ChatMessage) []openai.ChatCompletionMessage 
 		Role:    openai.ChatMessageRoleSystem,
 		Content: "You are a helpful assistant. Reply in the same language as the user.",
 	}}
-	for _, message := range messages {
+	for _, message := range latestChatContextMessages(messages) {
 		if message.Role == "" || message.Content == "" {
 			continue
 		}
@@ -92,4 +94,11 @@ func buildMessages(messages []model.ChatMessage) []openai.ChatCompletionMessage 
 		})
 	}
 	return result
+}
+
+func latestChatContextMessages(messages []model.ChatMessage) []model.ChatMessage {
+	if len(messages) <= maxChatContextMessages {
+		return messages
+	}
+	return messages[len(messages)-maxChatContextMessages:]
 }

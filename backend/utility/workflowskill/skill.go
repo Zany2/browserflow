@@ -45,6 +45,11 @@ func BaseURL(host string, tls bool) string {
 	return agentSkillBaseURL(host, tls)
 }
 
+// BaseURLFromServerAddress builds api base url from server.address.
+func BaseURLFromServerAddress(address string, tls bool) string {
+	return agentSkillBaseURLFromServerAddress(address, tls)
+}
+
 // BaseURLFromFrontendURL builds api base url from configured frontend url.
 func BaseURLFromFrontendURL(frontendURL string) string {
 	return agentSkillBaseURLFromFrontendURL(frontendURL)
@@ -127,8 +132,33 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 		sb.WriteString(fmt.Sprintf("**Browser Instance ID:** `%s`\n\n", inlineCode(browserID)))
 	}
 
+	sb.WriteString("## Quick Start\n\n")
+	sb.WriteString("Use this Skill with a compact workflow-call loop:\n\n")
+	sb.WriteString("1. Choose the workflow that matches the user's request.\n")
+	sb.WriteString("2. Inspect the workflow parameters and collect missing required values.\n")
+	sb.WriteString("3. Decide async submit or sync result mode based on whether the user needs returned data.\n")
+	sb.WriteString("4. Call the run API with the exported `browser_id` and the exact `variables` object.\n")
+	sb.WriteString("5. For sync runs, read returned variables, table data, status, and errors before answering.\n\n")
+
+	sb.WriteString("## Skill Map\n\n")
+	sb.WriteString("- `Lightweight Preflight Strategy`: when to verify backend and agent status.\n")
+	sb.WriteString("- `Required Step-By-Step Procedure`: required order before running a workflow.\n")
+	sb.WriteString("- `Parameter Rules`: how to pass trigger parameters through `variables`.\n")
+	sb.WriteString("- `Workflow Listing Response Rules`: how to explain available workflows to users.\n")
+	sb.WriteString("- `Execution Mode Rules`: async submit vs sync result mode.\n")
+	sb.WriteString("- `API Endpoints`: reusable HTTP examples.\n")
+	sb.WriteString("- `Available Workflows`: workflow IDs, parameters, and per-workflow examples.\n\n")
+
+	sb.WriteString("## Lightweight Preflight Strategy\n\n")
+	sb.WriteString("Use a lightweight preflight strategy instead of repeating every check before every call:\n\n")
+	sb.WriteString("- Before the first workflow call in a conversation, verify `/app/runtime` and `/agents/status`.\n")
+	sb.WriteString("- Reuse a successful preflight result for short follow-up calls in the same conversation, especially when they target the same exported `browser_id`.\n")
+	sb.WriteString("- For sync result mode, long-running workflows, returned data, or table output, perform preflight unless a recent successful preflight is already available.\n")
+	sb.WriteString("- For simple async submit requests, it is acceptable to call directly after a recent successful preflight; if the API fails, inspect status and report the exact reason.\n")
+	sb.WriteString("- If any call returns an offline, disconnected, missing Automa, timeout, or unreachable backend error, run preflight again before retrying.\n\n")
+
 	sb.WriteString("## Mandatory Preflight\n\n")
-	sb.WriteString("Before running any workflow, first verify that the BrowserFlow backend is reachable.\n\n")
+	sb.WriteString("For the first workflow call, or when no recent successful preflight is available, verify that the BrowserFlow backend is reachable.\n\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("curl '%s/app/runtime'\n", baseURL))
 	sb.WriteString("```\n\n")
@@ -143,9 +173,9 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("Do not close the browser-agent tab that exported this Skill. It is the control channel for workflow detection and execution. When closing business tabs, keep every BrowserFlow `browser-agent` tab open unless the user explicitly asks to stop that browser instance.\n\n")
 
 	sb.WriteString("## Required Step-By-Step Procedure\n\n")
-	sb.WriteString("Always work in this order. Do not run or open a workflow until the checks are complete.\n\n")
-	sb.WriteString("1. Detect runtime: call `/app/runtime` and confirm the BrowserFlow backend is reachable.\n")
-	sb.WriteString("2. Detect client: call `/agents/status`, find the exported `browser_id`, confirm it is online, and confirm `automa_installed: true`.\n")
+	sb.WriteString("Always work in this order. Do not run or open a workflow until the needed checks are complete.\n\n")
+	sb.WriteString("1. Decide preflight depth: use a recent successful preflight for short follow-up calls; otherwise call `/app/runtime` and `/agents/status`.\n")
+	sb.WriteString("2. Detect client when needed: find the exported `browser_id`, confirm it is online, and confirm `automa_installed: true`.\n")
 	sb.WriteString("3. Plan first: break the user request into concrete steps, choose the best matching workflow from this Skill, inspect its `Parameters`, and ask the user for any missing required values.\n")
 	sb.WriteString("4. Decide execution mode: use async for action-only requests, sync for requests that need returned data or final completion.\n")
 	sb.WriteString("5. Execute only after steps 1-4 pass. If any check fails, stop and report the exact reason instead of calling the run API.\n")
@@ -160,6 +190,8 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("- `json`: pass a valid JSON object or array. If the user provides plain text, ask them to confirm the JSON structure before executing.\n")
 	sb.WriteString("- `checkbox` or boolean parameters: pass a boolean `true` or `false`.\n")
 	sb.WriteString("- Example values like `\"\"` are placeholders. Replace required placeholders with real user-provided values before executing.\n\n")
+
+	appendAgentWorkflowListingResponseRules(&sb)
 
 	sb.WriteString("## Execution Mode Rules\n\n")
 	sb.WriteString("Before running a workflow, decide whether the user needs the final workflow result.\n\n")
@@ -272,25 +304,9 @@ func appendAgentWorkflowSkillSection(sb *strings.Builder, index int, workflow ma
 	}
 
 	sb.WriteString("Parameters:\n")
-	for _, param := range params {
-		name := firstAgentSkillString(param, "name", "key")
-		if name == "" {
-			continue
-		}
-		paramType := defaultText(firstAgentSkillString(param, "type"), "string")
-		description := defaultText(firstAgentSkillString(param, "description", "placeholder"), "-")
-		required := ""
-		if isAgentSkillParamRequired(param) {
-			required = ", required"
-		}
-		defaultValue := formatAgentSkillDefaultValue(firstAgentSkillValue(param, "defaultValue", "default", "value"))
-		if defaultValue != "" {
-			sb.WriteString(fmt.Sprintf("- `%s` (%s%s): %s Default: `%s`\n", inlineCode(name), markdownLine(paramType), required, markdownLine(description), inlineCode(defaultValue)))
-		} else {
-			sb.WriteString(fmt.Sprintf("- `%s` (%s%s): %s\n", inlineCode(name), markdownLine(paramType), required, markdownLine(description)))
-		}
-	}
+	appendAgentWorkflowParameterDetails(sb, params)
 	sb.WriteString("\n")
+	appendAgentWorkflowInvocationGuide(sb)
 	appendAgentWorkflowRunExample(sb, baseURL, workflowID, browserID, buildAgentSkillVariableExample(params))
 }
 
@@ -313,6 +329,67 @@ func appendAgentWorkflowRunExample(sb *strings.Builder, baseURL string, workflow
 	}))))
 	sb.WriteString("```\n\n")
 	sb.WriteString("For data-returning requests, use the sync example in the API Endpoints section and keep the same workflow ID and variables.\n\n")
+}
+
+func appendAgentWorkflowListingResponseRules(sb *strings.Builder) {
+	sb.WriteString("## Workflow Listing Response Rules\n\n")
+	sb.WriteString("When the user asks what workflows are available, do not only list names and IDs. For each workflow, also explain how it can be called:\n\n")
+	sb.WriteString("- Show the workflow name, ID, status, required parameters, and optional parameters.\n")
+	sb.WriteString("- Explain async submit mode: set `wait_result` to `false`; the API only dispatches the workflow and returns `execution.execution_id`; it does not wait for completion and does not return workflow output.\n")
+	sb.WriteString("- Explain sync result mode: set `wait_result` to `true`; set `timeout` to the maximum wait time in seconds. The exported examples use `timeout: 300`, so the default recommendation is to wait up to 300 seconds.\n")
+	sb.WriteString("- Explain variable output: add `return_data.variables: [\"browserflow_output\"]` and read `execution.result.data.variables.browserflow_output` or `result.data.variables.browserflow_output`.\n")
+	sb.WriteString("- Explain table output only when needed: set `return_data.include_table` to `true` and choose a `table_limit`.\n")
+	sb.WriteString("- If the user wants to start a workflow without waiting, use async submit mode. If the user wants final data, search results, extracted content, success/failure, or returned variables, use sync result mode.\n")
+	sb.WriteString("- Reply in the user's language, but keep API field names exactly as written.\n\n")
+}
+
+func appendAgentWorkflowInvocationGuide(sb *strings.Builder) {
+	sb.WriteString("Invocation guide:\n")
+	sb.WriteString("- Async submit: use `wait_result: false`. This starts the workflow and returns `execution.execution_id`; it does not wait for completion or return workflow data.\n")
+	sb.WriteString("- Sync result: use `wait_result: true` with `timeout: 300` unless the user asks for a different maximum wait time. This waits up to 300 seconds for a final status.\n")
+	sb.WriteString("- Variable result: add `return_data.variables: [\"browserflow_output\"]` and read `execution.result.data.variables.browserflow_output` first.\n")
+	sb.WriteString("- Table result: set `return_data.include_table: true` and set `table_limit` when the user asks for table data.\n\n")
+}
+
+func appendAgentWorkflowParameterDetails(sb *strings.Builder, params []map[string]any) {
+	for index, param := range params {
+		name := firstAgentSkillString(param, "name", "key")
+		if name == "" {
+			continue
+		}
+
+		defaultValue := formatAgentSkillDefaultValue(firstAgentSkillValue(param, "defaultValue", "default", "value"))
+		if defaultValue == "" {
+			defaultValue = "none"
+		}
+
+		sb.WriteString(fmt.Sprintf("%d. Parameter `%s`\n", index+1, inlineCode(name)))
+		sb.WriteString(fmt.Sprintf("   - Key: `%s`\n", inlineCode(name)))
+		sb.WriteString(fmt.Sprintf("   - Meaning: %s\n", markdownLine(defaultText(firstAgentSkillString(param, "description", "placeholder"), "-"))))
+		sb.WriteString(fmt.Sprintf("   - Type: `%s`\n", inlineCode(defaultText(firstAgentSkillString(param, "type"), "string"))))
+		sb.WriteString(fmt.Sprintf("   - Required: %s\n", requiredText(isAgentSkillParamRequired(param))))
+		sb.WriteString(fmt.Sprintf("   - Default: `%s`\n", inlineCode(defaultValue)))
+	}
+}
+
+func appendServerWorkflowListingResponseRules(sb *strings.Builder) {
+	sb.WriteString("## Workflow Listing Response Rules\n\n")
+	sb.WriteString("When the user asks what workflows are available, do not only list names and IDs. For each workflow, also explain how it can be called through Server-mode tasks:\n\n")
+	sb.WriteString("- Show the workflow name, workflow ID, status, dispatch target rules, required parameters, and optional parameters.\n")
+	sb.WriteString("- Explain async execution: execute a task without `wait_result: true`; the API dispatches the task and returns task record information, but does not wait for final workflow output.\n")
+	sb.WriteString("- Explain sync result mode: set `wait_result` to `true`; set `timeout` to the maximum wait time in seconds. The exported examples use `timeout: 300`, so the default recommendation is to wait up to 300 seconds.\n")
+	sb.WriteString("- Explain variable output: add `return_data.variables: [\"browserflow_output\"]` and read `result.data.variables.browserflow_output`, `record.result.data.variables.browserflow_output`, or the task record detail.\n")
+	sb.WriteString("- Explain table output only when needed: set `return_data.include_table` to `true`, choose a `table_limit`, then inspect the task record files if the table is stored as a file.\n")
+	sb.WriteString("- If the user wants to start a workflow without waiting, use async execution. If the user wants final data, search results, extracted content, success/failure, returned variables, or table data, use sync result mode.\n")
+	sb.WriteString("- Reply in the user's language, but keep API field names exactly as written.\n\n")
+}
+
+func appendServerWorkflowInvocationGuide(sb *strings.Builder) {
+	sb.WriteString("Invocation guide:\n")
+	sb.WriteString("- Async execution: execute or create a task without `wait_result: true`. This dispatches the workflow and returns task record information; it does not wait for completion or return final workflow data.\n")
+	sb.WriteString("- Sync result: use `wait_result: true` with `timeout: 300` unless the user asks for a different maximum wait time. This waits up to 300 seconds for a final status.\n")
+	sb.WriteString("- Variable result: add `return_data.variables: [\"browserflow_output\"]` and read `result.data.variables.browserflow_output` first, then the task record detail if needed.\n")
+	sb.WriteString("- Table result: set `return_data.include_table: true` and set `table_limit`; inspect task record files when the returned table is stored as a file.\n\n")
 }
 
 // generateServerWorkflowSkillMD builds Server-mode SKILL.md content.
@@ -360,6 +437,9 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("- `json`: pass a valid JSON object or array. If the user provides plain text, ask them to confirm the JSON structure before executing.\n")
 	sb.WriteString("- `checkbox`: pass a boolean `true` or `false`.\n")
 	sb.WriteString("- Example values like `\"\"` are placeholders. Replace required placeholders with real user-provided values before executing.\n\n")
+
+	appendServerWorkflowListingResponseRules(&sb)
+
 	sb.WriteString("## Dispatch Rules\n\n")
 	sb.WriteString("- Leave both `client_ip` and `node_id` empty when any online node that owns the workflow may execute it.\n")
 	sb.WriteString("- Set both `client_ip` and `node_id` when the user explicitly wants a specific execution node.\n")
@@ -501,25 +581,9 @@ func appendServerWorkflowSkillSection(sb *strings.Builder, index int, workflow m
 	}
 
 	sb.WriteString("Parameters:\n")
-	for _, param := range params {
-		name := firstAgentSkillString(param, "name", "key")
-		if name == "" {
-			continue
-		}
-		paramType := defaultText(firstAgentSkillString(param, "type"), "string")
-		description := defaultText(firstAgentSkillString(param, "description", "placeholder"), "-")
-		required := ""
-		if isAgentSkillParamRequired(param) {
-			required = ", required"
-		}
-		defaultValue := formatAgentSkillDefaultValue(firstAgentSkillValue(param, "defaultValue", "default", "value"))
-		if defaultValue != "" {
-			sb.WriteString(fmt.Sprintf("- `%s` (%s%s): %s Default: `%s`\n", inlineCode(name), markdownLine(paramType), required, markdownLine(description), inlineCode(defaultValue)))
-		} else {
-			sb.WriteString(fmt.Sprintf("- `%s` (%s%s): %s\n", inlineCode(name), markdownLine(paramType), required, markdownLine(description)))
-		}
-	}
+	appendAgentWorkflowParameterDetails(sb, params)
 	sb.WriteString("\n")
+	appendServerWorkflowInvocationGuide(sb)
 	appendServerWorkflowTaskExample(sb, baseURL, workflowID, buildAgentSkillVariableExample(params))
 }
 
@@ -906,6 +970,35 @@ func agentSkillBaseURL(host string, tls bool) string {
 	return fmt.Sprintf("%s://%s/api/v1", scheme, host)
 }
 
+func agentSkillBaseURLFromServerAddress(address string, tls bool) string {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return agentSkillBaseURL("", tls)
+	}
+
+	if parsedURL, err := url.Parse(address); err == nil && parsedURL.Scheme != "" && parsedURL.Host != "" {
+		return fmt.Sprintf("%s://%s/api/v1", parsedURL.Scheme, normalizeAgentSkillServerHost(parsedURL.Host))
+	}
+
+	return agentSkillBaseURL(normalizeAgentSkillServerHost(address), tls)
+}
+
+func normalizeAgentSkillServerHost(host string) string {
+	host = strings.TrimRight(strings.TrimSpace(host), "/")
+	if strings.HasPrefix(host, ":") {
+		return "127.0.0.1" + host
+	}
+
+	lowerHost := strings.ToLower(host)
+	if strings.HasPrefix(lowerHost, "0.0.0.0:") {
+		return "127.0.0.1:" + host[len("0.0.0.0:"):]
+	}
+	if strings.HasPrefix(lowerHost, "[::]:") {
+		return "127.0.0.1:" + host[len("[::]:"):]
+	}
+	return host
+}
+
 func agentSkillBaseURLFromFrontendURL(frontendURL string) string {
 	frontendURL = strings.TrimRight(strings.TrimSpace(frontendURL), "/")
 	if frontendURL == "" {
@@ -934,6 +1027,13 @@ func defaultText(value string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func requiredText(required bool) string {
+	if required {
+		return "Yes"
+	}
+	return "No"
 }
 
 func normalizeSkillJSONValue(value any) any {
