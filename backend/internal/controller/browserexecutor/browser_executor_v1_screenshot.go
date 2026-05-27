@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorScreenshot(ctx context.Context, req *v1.BrowserExecutorScreenshotReq) (res *v1.BrowserExecutorScreenshotRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Screenshot(ctx, req.FullPage, req.Format, req.Quality)
-	return &v1.BrowserExecutorScreenshotRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorScreenshotRes{Result: result}, nil
 }

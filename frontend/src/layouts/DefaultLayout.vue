@@ -35,6 +35,7 @@
 import { computed, onMounted, ref } from 'vue'
 import layoutLogo from '@/assets/images/layout-logo.png'
 import { getRuntimeConfig } from '@/services/app'
+import { connectDesktopWs } from '@/services/desktopWs'
 
 const runtimeConfig = ref({
   mode: '',
@@ -76,6 +77,9 @@ async function loadRuntimeConfig() {
     runtimeConfig.value = {
       ...(await getRuntimeConfig()),
       backend_available: true,
+    }
+    if (runtimeConfig.value.mode === 'windows') {
+      connectDesktopWs()
     }
   } catch {
     runtimeConfig.value = {

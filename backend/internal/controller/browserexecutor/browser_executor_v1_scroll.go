@@ -11,6 +11,9 @@ import (
 func (c *ControllerV1) BrowserExecutorScroll(ctx context.Context, req *v1.BrowserExecutorScrollReq) (res *v1.BrowserExecutorScrollRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Scroll(ctx, req.Direction, req.Pixels, req.Identifier)
@@ -18,5 +21,11 @@ func (c *ControllerV1) BrowserExecutorScroll(ctx context.Context, req *v1.Browse
 	if opErr == nil {
 		opErr = observeErr
 	}
-	return &v1.BrowserExecutorScrollRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorScrollRes{Result: result}, nil
 }

@@ -11,6 +11,9 @@ import (
 func (c *ControllerV1) BrowserExecutorClick(ctx context.Context, req *v1.BrowserExecutorClickReq) (res *v1.BrowserExecutorClickRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Click(ctx, req.Identifier)
@@ -18,5 +21,11 @@ func (c *ControllerV1) BrowserExecutorClick(ctx context.Context, req *v1.Browser
 	if opErr == nil {
 		opErr = observeErr
 	}
-	return &v1.BrowserExecutorClickRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorClickRes{Result: result}, nil
 }

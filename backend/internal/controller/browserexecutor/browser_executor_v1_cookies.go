@@ -12,6 +12,9 @@ import (
 func (c *ControllerV1) BrowserExecutorCookies(ctx context.Context, req *v1.BrowserExecutorCookiesReq) (res *v1.BrowserExecutorCookiesRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Cookies(ctx, model.BrowserExecutorCookieOptions{
@@ -26,5 +29,11 @@ func (c *ControllerV1) BrowserExecutorCookies(ctx context.Context, req *v1.Brows
 		SameSite: req.SameSite,
 		Expires:  req.Expires,
 	})
-	return &v1.BrowserExecutorCookiesRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorCookiesRes{Result: result}, nil
 }

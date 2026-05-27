@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -113,7 +112,8 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 			agent = state.AgentConnections[browserID]
 			if agent == nil {
 				state.AgentMu.Unlock()
-				return &v1.WorkflowSyncRes{}, errors.New("browser agent is offline")
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "浏览器执行端离线，请先启动对应浏览器并保持 browser-agent 页面连接")
+				return nil, nil
 			}
 		} else {
 			for _, item := range state.AgentConnections {
@@ -122,7 +122,8 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 			}
 			if agent == nil {
 				state.AgentMu.Unlock()
-				return &v1.WorkflowSyncRes{}, errors.New("no browser agent online")
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "没有在线的浏览器执行端，请先启动浏览器")
+				return nil, nil
 			}
 		}
 		commandID := "cmd_" + guid.S()
@@ -134,15 +135,18 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 			state.AgentMu.Lock()
 			state.RemovePendingCommand(commandID)
 			state.AgentMu.Unlock()
-			return &v1.WorkflowSyncRes{}, errors.New("browser agent is offline")
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "浏览器执行端离线，请刷新 browser-agent 页面后重试")
+			return nil, nil
 		}
 		select {
 		case result := <-resultCh:
 			if !result.Success {
 				if strings.TrimSpace(result.Error) != "" {
-					return &v1.WorkflowSyncRes{}, errors.New(result.Error)
+					rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), result.Error)
+					return nil, nil
 				}
-				return &v1.WorkflowSyncRes{}, errors.New("browser agent workflow list failed")
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "读取浏览器执行端工作流失败")
+				return nil, nil
 			}
 			if result.Success {
 				data := result.Data

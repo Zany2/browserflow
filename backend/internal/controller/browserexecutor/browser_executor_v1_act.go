@@ -12,6 +12,9 @@ import (
 func (c *ControllerV1) BrowserExecutorAct(ctx context.Context, req *v1.BrowserExecutorActReq) (res *v1.BrowserExecutorActRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	fields := make([]model.BrowserExecutorFormField, 0, len(req.Fields))
@@ -42,5 +45,11 @@ func (c *ControllerV1) BrowserExecutorAct(ctx context.Context, req *v1.BrowserEx
 	if opErr == nil {
 		opErr = observeErr
 	}
-	return &v1.BrowserExecutorActRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorActRes{Result: result}, nil
 }

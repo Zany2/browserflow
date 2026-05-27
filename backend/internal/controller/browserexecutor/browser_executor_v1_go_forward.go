@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorGoForward(ctx context.Context, req *v1.BrowserExecutorGoForwardReq) (res *v1.BrowserExecutorGoForwardRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.GoForward(ctx)
-	return &v1.BrowserExecutorGoForwardRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorGoForwardRes{Result: result}, nil
 }

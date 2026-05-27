@@ -15,6 +15,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/utility/browserruntime"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/go-rod/rod"
@@ -100,7 +101,8 @@ func (c *ControllerV1) BrowserStart(ctx context.Context, req *v1.BrowserStartReq
 	if instance.Type == "remote" {
 		controlURL := strings.TrimSpace(instance.ControlURL)
 		if controlURL == "" {
-			return nil, fmt.Errorf("远程浏览器控制地址不能为空")
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "远程浏览器控制地址不能为空")
+			return nil, nil
 		}
 		if !strings.HasPrefix(controlURL, "ws://") && !strings.HasPrefix(controlURL, "wss://") {
 			// Resolve HTTP debug endpoint to WebSocket debugger URL 解析 HTTP 调试端点为 WebSocket 调试地址
@@ -108,21 +110,25 @@ func (c *ControllerV1) BrowserStart(ctx context.Context, req *v1.BrowserStartReq
 			httpClient := &http.Client{Timeout: 5 * time.Second}
 			resp, httpErr := httpClient.Get(versionURL)
 			if httpErr != nil {
-				return nil, fmt.Errorf("解析远程浏览器 WebSocket 地址失败: %w", httpErr)
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("解析远程浏览器 WebSocket 地址失败：%s", httpErr.Error()))
+				return nil, nil
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
 				body, _ := io.ReadAll(resp.Body)
-				return nil, fmt.Errorf("解析远程浏览器 WebSocket 地址失败: %s", strings.TrimSpace(string(body)))
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("解析远程浏览器 WebSocket 地址失败：%s", strings.TrimSpace(string(body))))
+				return nil, nil
 			}
 			var version struct {
 				WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 			}
 			if decodeErr := json.NewDecoder(resp.Body).Decode(&version); decodeErr != nil {
-				return nil, fmt.Errorf("解析远程浏览器 WebSocket 地址失败: %w", decodeErr)
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("解析远程浏览器 WebSocket 地址失败：%s", decodeErr.Error()))
+				return nil, nil
 			}
 			if strings.TrimSpace(version.WebSocketDebuggerURL) == "" {
-				return nil, fmt.Errorf("远程浏览器未返回 webSocketDebuggerUrl")
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "远程浏览器未返回 webSocketDebuggerUrl")
+				return nil, nil
 			}
 			controlURL = strings.TrimSpace(version.WebSocketDebuggerURL)
 		}
@@ -153,21 +159,12 @@ func (c *ControllerV1) BrowserStart(ctx context.Context, req *v1.BrowserStartReq
 		}
 	} else {
 		launcherInstance := launcher.New()
-		binPath := strings.TrimSpace(instance.BinPath)
-		if binPath == "" {
-			for _, path := range []string{
-				"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-				"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-			} {
-				if _, statErr := os.Stat(path); statErr == nil {
-					binPath = path
-					break
-				}
-			}
+		binPath, binPathMessage := resolveLocalBrowserBinPath(instance.BinPath)
+		if binPathMessage != "" {
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), binPathMessage)
+			return nil, nil
 		}
-		if binPath != "" {
-			launcherInstance.Bin(binPath)
-		}
+		launcherInstance.Bin(binPath)
 		if instance.UserDataDir != "" {
 			if mkdirErr := os.MkdirAll(instance.UserDataDir, 0o755); mkdirErr != nil {
 				return nil, mkdirErr

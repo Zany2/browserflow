@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorPageText(ctx context.Context, req *v1.BrowserExecutorPageTextReq) (res *v1.BrowserExecutorPageTextRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.PageText(ctx, req.Limit)
-	return &v1.BrowserExecutorPageTextRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorPageTextRes{Result: result}, nil
 }

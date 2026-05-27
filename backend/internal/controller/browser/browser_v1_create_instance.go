@@ -2,13 +2,13 @@ package browser
 
 import (
 	"context"
-	"errors"
 	"os"
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/browser/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/gogf/gf/v2/frame/g"
@@ -57,7 +57,8 @@ func (c *ControllerV1) BrowserInstanceCreate(ctx context.Context, req *v1.Browse
 		instance.Type = "local"
 	}
 	if instance.Type == "remote" && strings.TrimSpace(instance.ControlURL) == "" {
-		return nil, errors.New("远程浏览器控制地址不能为空")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "远程浏览器控制地址不能为空")
+		return nil, nil
 	}
 	if err = db.SaveBrowserInstance(instance); err != nil {
 		return nil, err

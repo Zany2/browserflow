@@ -12,6 +12,9 @@ import (
 func (c *ControllerV1) BrowserExecutorMouse(ctx context.Context, req *v1.BrowserExecutorMouseReq) (res *v1.BrowserExecutorMouseRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Mouse(ctx, model.BrowserExecutorMouseOptions{
@@ -23,5 +26,11 @@ func (c *ControllerV1) BrowserExecutorMouse(ctx context.Context, req *v1.Browser
 		Steps:  req.Steps,
 		Button: req.Button,
 	})
-	return &v1.BrowserExecutorMouseRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorMouseRes{Result: result}, nil
 }

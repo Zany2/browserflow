@@ -1,4 +1,5 @@
-﻿import request, { API_BASE_URL } from '@/api/request'
+import request, { API_BASE_URL } from '@/api/request'
+import { sendDesktopChatMessage } from '@/services/desktopWs'
 
 export function listLLMConfigs() {
   return request({
@@ -141,44 +142,7 @@ export async function streamChatMessage(sessionId, message, onChunk) {
 }
 
 export function sendChatMessageWS(sessionId, message, onChunk) {
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(getWSURL())
-
-    socket.addEventListener('open', () => {
-      socket.send(
-        JSON.stringify({
-          type: 'chat_send',
-          session_id: sessionId,
-          message,
-        }),
-      )
-    })
-
-    socket.addEventListener('message', (event) => {
-      const chunk = normalizeChatChunk(JSON.parse(event.data))
-      try {
-        onChunk(chunk)
-      } catch (error) {
-        socket.close()
-        reject(error)
-        return
-      }
-
-      if (chunk.type === 'done') {
-        socket.close()
-        resolve()
-      }
-
-      if (chunk.type === 'error') {
-        socket.close()
-        reject(new Error(chunk.error || '生成失败'))
-      }
-    })
-
-    socket.addEventListener('error', () => {
-      reject(new Error('WebSocket 连接失败'))
-    })
-  })
+  return sendDesktopChatMessage(sessionId, message, (chunk) => onChunk(normalizeChatChunk(chunk)))
 }
 
 function normalizeChatChunk(chunk) {
@@ -195,18 +159,4 @@ function normalizeChatChunk(chunk) {
 async function readFetchErrorMessage(response, fallbackMessage) {
   const data = await response.json().catch(() => ({}))
   return data?.message || data?.error || data?.data?.message || fallbackMessage
-}
-
-function getWSURL() {
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL
-  }
-
-  const baseURL = API_BASE_URL.replace(/\/$/, '')
-  if (baseURL.startsWith('http')) {
-    return baseURL.replace(/^http/, 'ws') + '/ws'
-  }
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}${baseURL}/ws`
 }

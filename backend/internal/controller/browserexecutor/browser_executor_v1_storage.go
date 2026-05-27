@@ -12,6 +12,9 @@ import (
 func (c *ControllerV1) BrowserExecutorStorage(ctx context.Context, req *v1.BrowserExecutorStorageReq) (res *v1.BrowserExecutorStorageRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Storage(ctx, model.BrowserExecutorStorageOptions{
@@ -20,5 +23,11 @@ func (c *ControllerV1) BrowserExecutorStorage(ctx context.Context, req *v1.Brows
 		Key:    req.Key,
 		Value:  req.Value,
 	})
-	return &v1.BrowserExecutorStorageRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorStorageRes{Result: result}, nil
 }

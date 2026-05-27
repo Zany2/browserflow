@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorClickableElements(ctx context.Context, req *v1.BrowserExecutorClickableElementsReq) (res *v1.BrowserExecutorClickableElementsRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.ElementRefs(ctx, "clickable", req.Limit)
-	return &v1.BrowserExecutorClickableElementsRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorClickableElementsRes{Result: result}, nil
 }

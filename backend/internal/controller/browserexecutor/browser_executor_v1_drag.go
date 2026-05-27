@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorDrag(ctx context.Context, req *v1.BrowserExecutorDragReq) (res *v1.BrowserExecutorDragRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Drag(ctx, req.FromIdentifier, req.ToIdentifier)
-	return &v1.BrowserExecutorDragRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorDragRes{Result: result}, nil
 }

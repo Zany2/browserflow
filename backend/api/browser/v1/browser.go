@@ -155,3 +155,18 @@ type BrowserInstanceSwitchReq struct {
 type BrowserInstanceSwitchRes struct {
 	Status *BrowserStatusResModel `json:"status,omitempty" dc:"浏览器状态"`
 }
+
+// BrowserSelectBinPathReq 选择浏览器可执行文件路径
+type BrowserSelectBinPathReq struct {
+	g.Meta `path:"/paths/browser-bin/select" method:"post" tags:"浏览器" summary:"选择浏览器可执行文件路径"`
+}
+
+// BrowserSelectUserDataDirReq 选择浏览器用户数据目录
+type BrowserSelectUserDataDirReq struct {
+	g.Meta `path:"/paths/user-data-dir/select" method:"post" tags:"浏览器" summary:"选择浏览器用户数据目录"`
+}
+
+// BrowserPathSelectRes 路径选择响应
+type BrowserPathSelectRes struct {
+	Path string `json:"path,omitempty" dc:"选择的路径"`
+}

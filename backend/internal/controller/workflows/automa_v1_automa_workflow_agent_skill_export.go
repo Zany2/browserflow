@@ -2,7 +2,6 @@ package workflows
 
 import (
 	"context"
-	"os"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
 	"github.com/Zany2/browserflow/backend/utility/rr"
@@ -31,13 +30,7 @@ func (c *ControllerV1) WorkflowAgentExportSkill(ctx context.Context, req *v1.Wor
 	}
 
 	request := g.RequestFromCtx(ctx)
-	baseURL := workflowskill.BaseURLFromFrontendURL(g.Cfg().MustGet(ctx, "frontend.url", "").String())
-	if baseURL == "" {
-		baseURL = workflowskill.BaseURLFromFrontendURL(os.Getenv("FRONTEND_URL"))
-	}
-	if baseURL == "" {
-		baseURL = workflowskill.BaseURL(request.Host, request.TLS != nil)
-	}
+	baseURL := workflowskill.BaseURLFromServerAddress(g.Cfg().MustGet(ctx, "server.address", "").String(), request.TLS != nil)
 
 	// Raw markdown response 原始 Markdown 响应，绕过统一 JSON 包装
 	request.Response.Header().Set("Content-Type", "text/markdown; charset=utf-8")
