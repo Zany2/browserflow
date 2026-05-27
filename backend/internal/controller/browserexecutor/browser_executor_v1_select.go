@@ -11,6 +11,9 @@ import (
 func (c *ControllerV1) BrowserExecutorSelect(ctx context.Context, req *v1.BrowserExecutorSelectReq) (res *v1.BrowserExecutorSelectRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Select(ctx, req.Identifier, req.Value)
@@ -18,5 +21,11 @@ func (c *ControllerV1) BrowserExecutorSelect(ctx context.Context, req *v1.Browse
 	if opErr == nil {
 		opErr = observeErr
 	}
-	return &v1.BrowserExecutorSelectRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorSelectRes{Result: result}, nil
 }

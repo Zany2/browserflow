@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorExtract(ctx context.Context, req *v1.BrowserExecutorExtractReq) (res *v1.BrowserExecutorExtractRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Extract(ctx, req.Selector, req.Fields, req.Multiple)
-	return &v1.BrowserExecutorExtractRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorExtractRes{Result: result}, nil
 }

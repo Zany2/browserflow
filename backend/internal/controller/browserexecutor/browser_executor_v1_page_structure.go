@@ -12,6 +12,9 @@ import (
 func (c *ControllerV1) BrowserExecutorPageStructure(ctx context.Context, req *v1.BrowserExecutorPageStructureReq) (res *v1.BrowserExecutorPageStructureRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.PageStructure(ctx, model.BrowserExecutorPageStructureOptions{
@@ -22,5 +25,11 @@ func (c *ControllerV1) BrowserExecutorPageStructure(ctx context.Context, req *v1
 		IncludeButtons: req.IncludeButtons,
 		Limit:          req.Limit,
 	})
-	return &v1.BrowserExecutorPageStructureRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorPageStructureRes{Result: result}, nil
 }

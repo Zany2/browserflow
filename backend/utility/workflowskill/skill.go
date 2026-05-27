@@ -139,13 +139,17 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("3. Decide async submit or sync result mode based on whether the user needs returned data.\n")
 	sb.WriteString("4. Call the run API with the exported `browser_id` and the exact `variables` object.\n")
 	sb.WriteString("5. For sync runs, read returned variables, table data, status, and errors before answering.\n\n")
+	sb.WriteString("Fast default for data questions: use sync mode with `wait_result:true`, `timeout:300`, and `return_data.variables:[\"browserflow_output\"]`. Add `return_data.include_table:true` only when the user asks for table rows or tabular output.\n\n")
 
 	sb.WriteString("## Skill Map\n\n")
 	sb.WriteString("- `Lightweight Preflight Strategy`: when to verify backend and agent status.\n")
 	sb.WriteString("- `Required Step-By-Step Procedure`: required order before running a workflow.\n")
+	sb.WriteString("- `Fast Call Decision Table`: how to choose async, sync, variables, and table output.\n")
+	sb.WriteString("- `Run Request Parameter Reference`: exact request fields and meanings.\n")
 	sb.WriteString("- `Parameter Rules`: how to pass trigger parameters through `variables`.\n")
 	sb.WriteString("- `Workflow Listing Response Rules`: how to explain available workflows to users.\n")
 	sb.WriteString("- `Execution Mode Rules`: async submit vs sync result mode.\n")
+	sb.WriteString("- `All API Parameter Reference`: complete request fields, variables, and allowed values.\n")
 	sb.WriteString("- `API Endpoints`: reusable HTTP examples.\n")
 	sb.WriteString("- `Available Workflows`: workflow IDs, parameters, and per-workflow examples.\n\n")
 
@@ -180,6 +184,10 @@ func generateAgentWorkflowSkillMD(workflows []map[string]any, baseURL string, br
 	sb.WriteString("4. Decide execution mode: use async for action-only requests, sync for requests that need returned data or final completion.\n")
 	sb.WriteString("5. Execute only after steps 1-4 pass. If any check fails, stop and report the exact reason instead of calling the run API.\n")
 	sb.WriteString("6. For sync runs, inspect the execution result before answering. For async runs, return the `execution_id` and explain that status can be queried later.\n\n")
+
+	appendAgentWorkflowFastCallDecisionTable(&sb)
+	appendAgentWorkflowRunParameterReference(&sb)
+	appendAgentWorkflowAllAPIParameterReference(&sb)
 
 	sb.WriteString("## Parameter Rules\n\n")
 	sb.WriteString("Before running a workflow, inspect its `Parameters` section. If a required parameter has no value, ask the user for it before calling the API. If an optional parameter has a default value, use the default unless the user provides another value. Pass parameters through the `variables` object, and keep parameter names exactly as listed in this skill. BrowserFlow treats this `variables` object as the completed parameter set and instructs Automa not to open its own parameter input page.\n\n")
@@ -341,6 +349,78 @@ func appendAgentWorkflowListingResponseRules(sb *strings.Builder) {
 	sb.WriteString("- Explain table output only when needed: set `return_data.include_table` to `true` and choose a `table_limit`.\n")
 	sb.WriteString("- If the user wants to start a workflow without waiting, use async submit mode. If the user wants final data, search results, extracted content, success/failure, or returned variables, use sync result mode.\n")
 	sb.WriteString("- Reply in the user's language, but keep API field names exactly as written.\n\n")
+	sb.WriteString("Suggested wording when listing workflows:\n\n")
+	sb.WriteString("```text\n")
+	sb.WriteString("This workflow can be called in two ways:\n")
+	sb.WriteString("- Async submit: starts the workflow with wait_result=false and returns execution_id only.\n")
+	sb.WriteString("- Sync result: waits up to 300 seconds with wait_result=true. Use return_data.variables=[\"browserflow_output\"] for returned data, and include_table=true when table rows are needed.\n")
+	sb.WriteString("Required parameters: ... Optional parameters: ...\n")
+	sb.WriteString("```\n\n")
+}
+
+func appendAgentWorkflowFastCallDecisionTable(sb *strings.Builder) {
+	sb.WriteString("## Fast Call Decision Table\n\n")
+	sb.WriteString("Use this table to avoid overthinking the request mode.\n\n")
+	sb.WriteString("| User intent | Request mode | Required payload choices | What to tell the user |\n")
+	sb.WriteString("|---|---|---|---|\n")
+	sb.WriteString("| Start/run/trigger only | Async submit | `wait_result:false` | Return `execution.execution_id`; no final output is available yet. |\n")
+	sb.WriteString("| Search/get/query/extract/return data | Sync result | `wait_result:true`, `timeout:300`, `return_data.variables:[\"browserflow_output\"]` | Wait for final status and report returned output or readable error. |\n")
+	sb.WriteString("| Need table rows | Sync result with table | Add `return_data.include_table:true` and `table_limit` | Read returned table data or report where the table result is stored. |\n")
+	sb.WriteString("| User asks status of previous run | Status query | Call `/workflows/executions/{execution_id}` | Do not rerun the workflow unless the user asks. |\n")
+	sb.WriteString("| Missing required parameter | Ask before calling | Do not send placeholder values for required fields | Ask for only the missing values. |\n\n")
+}
+
+func appendAgentWorkflowRunParameterReference(sb *strings.Builder) {
+	sb.WriteString("## Run Request Parameter Reference\n\n")
+	sb.WriteString("The run API is `POST /workflows/{workflow_id}/run`. Build the JSON body with these fields:\n\n")
+	sb.WriteString("| Field | Type | Required | Meaning | Example |\n")
+	sb.WriteString("|---|---|---|---|---|\n")
+	sb.WriteString("| `browser_id` | string | yes | Browser instance that exported this Skill. Keep the exact exported value unless the user confirms another browser owns the same workflow. | `browser_...` |\n")
+	sb.WriteString("| `variables` | object | yes | Trigger parameter object. Keys must exactly match each workflow's `Parameters` section. | `{\"key_word\":\"ai智能体\"}` |\n")
+	sb.WriteString("| `wait_result` | boolean | yes | `false` submits only; `true` waits for final completion or timeout. | `true` |\n")
+	sb.WriteString("| `timeout` | number | no | Maximum wait seconds for sync mode. Use `300` by default unless the user asks otherwise. | `300` |\n")
+	sb.WriteString("| `return_data` | object | no | Controls which workflow outputs are returned in sync mode. | `{\"variables\":[\"browserflow_output\"]}` |\n")
+	sb.WriteString("| `return_data.variables` | string array | no | Automa variables to return. Use `browserflow_output` for normal data-returning workflows. | `[\"browserflow_output\"]` |\n")
+	sb.WriteString("| `return_data.include_table` | boolean | no | Return table output when the user asks for table rows or tabular data. | `true` |\n")
+	sb.WriteString("| `return_data.table_limit` | number | no | Maximum table rows to include directly. | `20` |\n")
+	sb.WriteString("| `return_data.include_history` | boolean | no | Include execution history details. Usually false for speed. | `false` |\n\n")
+	sb.WriteString("Do not invent variables. If a workflow has no parameter named `keyword`, do not send `keyword`; use the exact listed key such as `key_word`.\n\n")
+}
+
+func appendAgentWorkflowAllAPIParameterReference(sb *strings.Builder) {
+	sb.WriteString("## All API Parameter Reference\n\n")
+	sb.WriteString("Use this as the complete parameter reference for the Windows/browser-agent Automa workflow Skill. Keep field names exactly as shown.\n\n")
+	appendWorkflowSharedParameterConcepts(sb, false)
+
+	appendWorkflowEndpointReference(sb, "Runtime preflight", "GET `/app/runtime`", "No parameters. Confirms the backend is reachable and reports runtime mode.", nil)
+	appendWorkflowEndpointReference(sb, "Agent status", "GET `/agents/status`", "No parameters. Use this to find an online agent whose `browser_id` matches this exported Skill and to confirm Automa is installed.", nil)
+	appendWorkflowEndpointReference(sb, "List agent workflows", "GET `/workflows/agent/workflows`", "Lists workflows from one connected browser-agent.", []skillAPIParamDoc{
+		{"browser_id", "string", "query", "no", "Browser instance ID to inspect. Use the exported Browser Instance ID when available.", "A BrowserFlow browser id such as `browser_...`. Empty means backend may use the current/default agent context.", "browser_1tgxl..."},
+	})
+	appendWorkflowEndpointReference(sb, "Export agent workflow Skill", "POST `/workflows/agent/export/skill`", "Exports a Windows/browser-agent workflow Skill. This is normally used by BrowserFlow UI, not by the model during workflow execution.", []skillAPIParamDoc{
+		{"browser_id", "string", "body", "no", "Browser instance ID whose detected workflows should be exported.", "A BrowserFlow browser id such as `browser_...`.", "browser_1tgxl..."},
+		{"scope", "string", "body", "no", "Export range. Default is `filtered`.", "`selected`: export only selected workflow IDs; `filtered`: export the current filtered list; `all`: export all detected workflows.", "filtered"},
+		{"workflow_ids", "array<string>", "body", "conditional", "Workflow IDs used by `selected` and filtered exports.", "Automa workflow IDs exactly as listed in the UI/export data.", "[\"7KKfW4mVvDFBGux2kMgft\"]"},
+	})
+	appendWorkflowEndpointReference(sb, "Run workflow", "POST `/workflows/{workflow_id}/run`", "Runs a detected workflow through the browser-agent. Use async for submit-only tasks and sync when the user needs final data or status.", []skillAPIParamDoc{
+		{"workflow_id", "string", "path", "yes", "Workflow ID from the `Available Workflows` section.", "Automa workflow ID. Keep it exact.", "7KKfW4mVvDFBGux2kMgft"},
+		{"browser_id", "string", "body", "yes", "Browser instance that exported this Skill and owns the workflow.", "A BrowserFlow browser id such as `browser_...`. Do not replace it unless the user confirms another browser owns the same workflow.", "browser_1tgxl..."},
+		{"variables", "object", "body", "yes", "Trigger parameter object passed to Automa.", "Keys must exactly match the workflow `Parameters` section. Values follow each parameter type: string, number, JSON object/array, or boolean.", "{\"key_word\":\"ai智能体\"}"},
+		{"wait_result", "boolean", "body", "yes", "Execution mode.", "`false`: submit only and return `execution.execution_id`; `true`: wait for final status or timeout.", "true"},
+		{"timeout", "number", "body", "no", "Maximum wait seconds when `wait_result` is true. Default recommendation is 300.", "Positive integer seconds.", "300"},
+		{"return_data", "object", "body", "no", "Returned data configuration for sync runs.", "Use when the user needs workflow output, variables, table rows, or history.", "{\"variables\":[\"browserflow_output\"],\"include_table\":true}"},
+		{"return_data.variables", "array<string>", "body", "no", "Automa variable names to return.", "`browserflow_output`: recommended standard variable for workflow output; any custom Automa variable name created by the workflow may also be listed.", "[\"browserflow_output\"]"},
+		{"return_data.include_table", "boolean", "body", "no", "Whether to return Automa table data.", "`true` when the user asks for rows/table/list data stored as table output; otherwise `false` for speed.", "false"},
+		{"return_data.table_limit", "number", "body", "no", "Maximum table rows to include directly.", "Positive integer row count. Use 20 for concise answers, 100 when the user requests all visible rows.", "20"},
+		{"return_data.include_history", "boolean", "body", "no", "Whether to include workflow execution history details.", "`true` only for debugging/auditing; normally `false`.", "false"},
+	})
+	appendWorkflowEndpointReference(sb, "Query workflow execution", "GET `/workflows/executions/{execution_id}`", "Queries a previous Windows/browser-agent workflow execution.", []skillAPIParamDoc{
+		{"execution_id", "string", "path", "yes", "Execution ID returned by an async or sync run response.", "Value from `execution.execution_id`.", "exec_..."},
+	})
+	appendWorkflowEndpointReference(sb, "Open workflow editor", "POST `/workflows/{workflow_id}/open`", "Opens the workflow editor in the browser-agent. Use only when the user wants to inspect/edit the workflow, not for normal execution.", []skillAPIParamDoc{
+		{"workflow_id", "string", "path", "yes", "Workflow ID from the `Available Workflows` section.", "Automa workflow ID. Keep it exact.", "7KKfW4mVvDFBGux2kMgft"},
+		{"browser_id", "string", "body", "yes", "Browser instance that should open the workflow editor.", "A BrowserFlow browser id such as `browser_...`.", "browser_1tgxl..."},
+	})
 }
 
 func appendAgentWorkflowInvocationGuide(sb *strings.Builder) {
@@ -392,6 +472,93 @@ func appendServerWorkflowInvocationGuide(sb *strings.Builder) {
 	sb.WriteString("- Table result: set `return_data.include_table: true` and set `table_limit`; inspect task record files when the returned table is stored as a file.\n\n")
 }
 
+func appendServerWorkflowAllAPIParameterReference(sb *strings.Builder) {
+	sb.WriteString("## All API Parameter Reference\n\n")
+	sb.WriteString("Use this as the complete parameter reference for the Server-mode Automa workflow Skill. Keep field names exactly as shown.\n\n")
+	appendWorkflowSharedParameterConcepts(sb, true)
+
+	appendWorkflowEndpointReference(sb, "Runtime preflight", "GET `/app/runtime`", "No parameters. Confirms the backend is reachable and running in Server mode.", nil)
+	appendWorkflowEndpointReference(sb, "List clients", "GET `/clients`", "Lists connected client nodes. Use it to confirm an online node owns the workflow before dispatch.", []skillAPIParamDoc{
+		{"page_num", "number", "query", "no", "Page number when pagination is supported.", "Positive integer, starts from 1.", "1"},
+		{"page_size", "number", "query", "no", "Page size when pagination is supported.", "Allowed by common pagination: 10, 30, or 60.", "30"},
+	})
+	appendWorkflowEndpointReference(sb, "Query existing tasks", "GET `/tasks`", "Find reusable tasks before creating a new one.", []skillAPIParamDoc{
+		{"page_num", "number", "query", "no", "Page number.", "Positive integer, starts from 1.", "1"},
+		{"page_size", "number", "query", "no", "Page size.", "`10`, `30`, or `60`.", "10"},
+		{"start_time", "string", "query", "no", "Created/updated time filter start.", "Datetime string accepted by backend validation.", "2026-05-27 00:00:00"},
+		{"end_time", "string", "query", "no", "Created/updated time filter end.", "Datetime string accepted by backend validation.", "2026-05-27 23:59:59"},
+		{"keyword", "string", "query", "no", "Keyword search over task fields.", "Any search text.", "Skill task"},
+		{"workflow_id", "string", "query", "no", "Filter by workflow ID.", "Automa workflow ID from this Skill.", "7KKfW4mVvDFBGux2kMgft"},
+		{"workflow_name", "string", "query", "no", "Filter by workflow name.", "Workflow name text.", "普通检索"},
+		{"client_id", "string", "query", "no", "Filter by client ID.", "Server client ID.", "client_..."},
+		{"machine_id", "string", "query", "no", "Filter by machine ID.", "Client machine ID.", "machine_..."},
+		{"node_id", "string", "query", "no", "Filter by node ID.", "Browser/client node ID.", "node_..."},
+		{"enabled", "string", "query", "no", "Filter by enabled state.", "Common values are `true` or `false`.", "true"},
+	})
+	appendWorkflowEndpointReference(sb, "Create task", "POST `/tasks`", "Creates a reusable Server-mode task. Use `run_once_after_create:true` only when the user wants to create and immediately run it.", []skillAPIParamDoc{
+		{"name", "string", "body", "yes", "Task name.", "Any readable name.", "Skill task for 普通检索"},
+		{"description", "string", "body", "no", "Task description.", "Any readable description.", "Created by BrowserFlow exported Skill"},
+		{"workflow_id", "string", "body", "yes", "Workflow ID to run.", "Automa workflow ID from this Skill.", "7KKfW4mVvDFBGux2kMgft"},
+		{"workflow_name", "string", "body", "no", "Workflow display name snapshot.", "Workflow name from this Skill.", "普通检索"},
+		{"client_id", "string", "body", "no", "Target client ID.", "Use only when targeting a specific client. Prefer leaving empty for automatic dispatch.", "client_..."},
+		{"client_name", "string", "body", "no", "Target client name snapshot.", "Readable client name.", "Office PC"},
+		{"client_ip", "string", "body", "no", "Target client IP.", "Leave empty for automatic dispatch. If set, also set `node_id` when targeting a specific node.", "192.168.1.10"},
+		{"machine_id", "string", "body", "no", "Target machine ID.", "Use only when known and needed.", "machine_..."},
+		{"node_id", "string", "body", "no", "Target execution node ID.", "Leave empty for automatic dispatch. If set, also set `client_ip` for specific-node dispatch.", "node_..."},
+		{"target_group_id", "number", "body", "no", "Target node group ID.", "Integer group ID when group dispatch is configured.", "1"},
+		{"dispatch_mode", "string", "body", "no", "Dispatch mode.", "Use existing project modes when configured; otherwise leave empty for default dispatch.", ""},
+		{"queue_policy", "string", "body", "no", "Queue/busy handling policy.", "Use existing project policy values when configured; otherwise leave empty for default behavior.", ""},
+		{"max_attempts", "number", "body", "no", "Maximum retry attempts.", "Positive integer. Leave empty/0 for backend default.", "1"},
+		{"timeout_seconds", "number", "body", "no", "Task execution timeout seconds.", "Positive integer seconds. Leave empty/0 for backend default.", "300"},
+		{"queue_wait_seconds", "number", "body", "no", "Maximum time to wait for an available node.", "Positive integer seconds.", "60"},
+		{"queue_retry_interval_seconds", "number", "body", "no", "Retry interval while waiting for a node.", "Positive integer seconds.", "5"},
+		{"cron_expression", "string", "body", "no", "Cron schedule. Empty means no schedule.", "Cron expression supported by the backend scheduler.", ""},
+		{"run_once_after_create", "boolean", "body", "no", "Whether to immediately execute once after creating.", "`true` or `false`.", "false"},
+		{"params", "object", "body", "no", "Workflow trigger parameters.", "Keys must exactly match the workflow `Parameters` section. Values follow parameter type rules.", "{\"key_word\":\"ai智能体\"}"},
+		{"enabled", "boolean", "body", "no", "Whether the task is enabled.", "`true` or `false`.", "true"},
+	})
+	appendWorkflowEndpointReference(sb, "Execute existing task", "POST `/tasks/{task_id}/execute`", "Dispatches an existing task to a client node.", []skillAPIParamDoc{
+		{"task_id", "string", "path", "yes", "Task ID to execute.", "Task id from `/tasks` or create response.", "123"},
+		{"client_id", "string", "body", "no", "Override target client ID for this execution.", "Use only when selecting a specific client.", "client_..."},
+		{"client_ip", "string", "body", "no", "Override target client IP for this execution.", "Leave empty for automatic dispatch. If set with specific node targeting, also set `node_id`.", "192.168.1.10"},
+		{"machine_id", "string", "body", "no", "Override target machine ID.", "Use only when known and needed.", "machine_..."},
+		{"node_id", "string", "body", "no", "Override target node ID.", "Leave empty for automatic dispatch. If set, also set `client_ip` for a specific node.", "node_..."},
+		{"trigger_type", "string", "body", "no", "Execution trigger label.", "Use `skill` for executions started from this Skill. Other common labels may include manual/schedule/system depending on backend usage.", "skill"},
+		{"params", "object", "body", "no", "Execution parameter override.", "Keys must exactly match the workflow `Parameters` section. Overrides task saved params for this run.", "{\"key_word\":\"ai智能体\"}"},
+		{"wait_result", "boolean", "body", "no", "Execution mode.", "`false`: dispatch only; `true`: wait for final status or timeout.", "true"},
+		{"timeout", "number", "body", "no", "Maximum wait seconds when `wait_result` is true. Default recommendation is 300.", "Positive integer seconds.", "300"},
+		{"return_data", "object", "body", "no", "Returned data configuration for sync runs.", "Use when the user needs workflow output, variables, table rows, or history.", "{\"variables\":[\"browserflow_output\"],\"include_table\":true}"},
+		{"return_data.variables", "array<string>", "body", "no", "Automa variable names to return.", "`browserflow_output`: recommended standard variable for workflow output; any custom Automa variable name created by the workflow may also be listed.", "[\"browserflow_output\"]"},
+		{"return_data.include_table", "boolean", "body", "no", "Whether to return Automa table data.", "`true` when the user asks for rows/table/list data stored as table output; otherwise `false` for speed.", "true"},
+		{"return_data.table_limit", "number", "body", "no", "Maximum table rows to include directly.", "Positive integer row count.", "100"},
+		{"return_data.include_history", "boolean", "body", "no", "Whether to include workflow execution history details.", "`true` only for debugging/auditing; normally `false`.", "false"},
+	})
+	appendWorkflowEndpointReference(sb, "Query task records", "GET `/task-records`", "Lists task execution records. Use after async execution or when the user asks for historical results.", []skillAPIParamDoc{
+		{"page_num", "number", "query", "no", "Page number.", "Positive integer, starts from 1.", "1"},
+		{"page_size", "number", "query", "no", "Page size.", "`10`, `30`, or `60`.", "10"},
+		{"start_time", "string", "query", "no", "Execution record time filter start.", "Datetime string accepted by backend validation.", "2026-05-27 00:00:00"},
+		{"end_time", "string", "query", "no", "Execution record time filter end.", "Datetime string accepted by backend validation.", "2026-05-27 23:59:59"},
+		{"task_id", "string", "query", "no", "Filter by task ID.", "Task ID.", "123"},
+		{"task_name", "string", "query", "no", "Filter by task name.", "Task name text.", "Skill task"},
+		{"workflow_id", "string", "query", "no", "Filter by workflow ID.", "Automa workflow ID from this Skill.", "7KKfW4mVvDFBGux2kMgft"},
+		{"workflow_name", "string", "query", "no", "Filter by workflow name.", "Workflow name text.", "普通检索"},
+		{"client_id", "string", "query", "no", "Filter by client ID.", "Server client ID.", "client_..."},
+		{"client_ip", "string", "query", "no", "Filter by one client IP.", "Client IP.", "192.168.1.10"},
+		{"client_ips", "string", "query", "no", "Filter by multiple client IPs.", "Comma-separated client IPs.", "192.168.1.10,192.168.1.11"},
+		{"machine_id", "string", "query", "no", "Filter by machine ID.", "Machine ID.", "machine_..."},
+		{"node_id", "string", "query", "no", "Filter by one node ID.", "Node ID.", "node_..."},
+		{"node_ids", "string", "query", "no", "Filter by multiple node IDs.", "Comma-separated node IDs.", "node_a,node_b"},
+		{"status", "string", "query", "no", "Filter by execution status.", "`queued`, `running`, `success`, `error`, `stopped`, `timeout`.", "success"},
+		{"keyword", "string", "query", "no", "Keyword search over record fields.", "Any search text.", "ai智能体"},
+	})
+	appendWorkflowEndpointReference(sb, "Query task record detail", "GET `/task-records/{record_id}`", "Reads one execution record and its result files.", []skillAPIParamDoc{
+		{"record_id", "string", "path", "yes", "Task record ID.", "Record id from execute response or `/task-records` list.", "456"},
+	})
+	appendWorkflowEndpointReference(sb, "Download task record file", "GET `/task-records/files/{file_id}/download`", "Downloads one result file, commonly table output stored as a file.", []skillAPIParamDoc{
+		{"file_id", "string", "path", "yes", "Task record file ID.", "File id from task record detail `files` array.", "789"},
+	})
+}
+
 // generateServerWorkflowSkillMD builds Server-mode SKILL.md content.
 func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) string {
 	var sb strings.Builder
@@ -438,6 +605,7 @@ func generateServerWorkflowSkillMD(workflows []map[string]any, baseURL string) s
 	sb.WriteString("- `checkbox`: pass a boolean `true` or `false`.\n")
 	sb.WriteString("- Example values like `\"\"` are placeholders. Replace required placeholders with real user-provided values before executing.\n\n")
 
+	appendServerWorkflowAllAPIParameterReference(&sb)
 	appendServerWorkflowListingResponseRules(&sb)
 
 	sb.WriteString("## Dispatch Rules\n\n")
@@ -1034,6 +1202,74 @@ func requiredText(required bool) string {
 		return "Yes"
 	}
 	return "No"
+}
+
+type skillAPIParamDoc struct {
+	Name      string
+	Type      string
+	Location  string
+	Required  string
+	Meaning   string
+	Available string
+	Example   string
+}
+
+func appendWorkflowSharedParameterConcepts(sb *strings.Builder, serverMode bool) {
+	sb.WriteString("### Shared Variables And Response Rules\n\n")
+	sb.WriteString("| Variable / concept | Available values | Meaning |\n")
+	sb.WriteString("|---|---|---|\n")
+	sb.WriteString("| Workflow trigger parameters | Keys listed under each workflow's `Parameters` section | Pass them through `variables` in Windows/agent mode or `params` in Server mode. Do not invent keys or send placeholders for required values. |\n")
+	sb.WriteString("| Parameter types | `string`, `number`, `json`, `checkbox`/boolean | Send JSON values matching the declared type. For `json`, send an object or array; for checkbox/boolean, send `true` or `false`. |\n")
+	sb.WriteString("| `browserflow_output` | Automa variable name | Recommended standard output variable. Workflows must set this variable if the model should read a returned value. |\n")
+	sb.WriteString("| `wait_result` | `false`, `true` | `false` dispatches only. `true` waits for final success/error/stopped/timeout and can return variables/table data. |\n")
+	sb.WriteString("| `timeout` | Positive integer seconds | Maximum sync wait time. Exported examples recommend `300` seconds. |\n")
+	sb.WriteString("| `return_data.variables` | `browserflow_output` or custom Automa variable names | Controls which Automa variables should be returned after sync execution. |\n")
+	sb.WriteString("| `return_data.include_table` | `true`, `false` | Return table output when the user asks for rows, table data, list data, or tabular results. |\n")
+	sb.WriteString("| `return_data.table_limit` | Positive integer rows | Caps directly returned table rows. Use a small value for summaries and a larger value when the user asks for all visible rows. |\n")
+	sb.WriteString("| `return_data.include_history` | `true`, `false` | Include detailed execution history only for debugging or auditing. Keep false for normal data requests. |\n")
+	sb.WriteString("| Execution statuses | `queued`, `running`, `success`, `error`, `stopped`, `timeout` | Treat `queued`/`running` as incomplete. Treat `success` as completed. Report readable errors for `error`, `stopped`, or `timeout`. |\n")
+	if serverMode {
+		sb.WriteString("| Dispatch target | Empty `client_ip` and `node_id`, or both set | Leave both empty for automatic dispatch to any online node owning the workflow. Set both only when the user requests a specific node. |\n")
+		sb.WriteString("| Server result location | `result`, `record`, task record detail, record files | Read immediate `result` first, then `record.result`, then `/task-records/{record_id}` and files for larger tables. |\n")
+	} else {
+		sb.WriteString("| Browser target | Exported `browser_id` | Use the browser id embedded in this Skill. Change it only after user confirms the same workflow exists in another browser instance. |\n")
+		sb.WriteString("| Windows result location | `result`, `execution.result`, execution detail | Read immediate `result.data.variables`, then `execution.result.data.variables`, then `/workflows/executions/{execution_id}`. |\n")
+	}
+	sb.WriteString("\n")
+}
+
+func appendWorkflowEndpointReference(sb *strings.Builder, title string, route string, note string, docs []skillAPIParamDoc) {
+	sb.WriteString("### " + title + "\n\n")
+	sb.WriteString("- Route: " + route + "\n")
+	if strings.TrimSpace(note) != "" {
+		sb.WriteString("- Notes: " + note + "\n")
+	}
+	if len(docs) == 0 {
+		sb.WriteString("- Parameters: none.\n\n")
+		return
+	}
+	sb.WriteString("\n")
+	sb.WriteString("| Field | Type | Location | Required | Meaning | Available values / variables | Example |\n")
+	sb.WriteString("|---|---|---|---|---|---|---|\n")
+	for _, doc := range docs {
+		sb.WriteString(fmt.Sprintf("| `%s` | `%s` | %s | %s | %s | %s | `%s` |\n",
+			inlineCode(doc.Name),
+			inlineCode(doc.Type),
+			workflowSkillTableCell(doc.Location),
+			workflowSkillTableCell(doc.Required),
+			workflowSkillTableCell(doc.Meaning),
+			workflowSkillTableCell(doc.Available),
+			workflowSkillTableCell(doc.Example),
+		))
+	}
+	sb.WriteString("\n")
+}
+
+func workflowSkillTableCell(value string) string {
+	value = strings.ReplaceAll(value, "|", "\\|")
+	value = strings.ReplaceAll(value, "\r", " ")
+	value = strings.ReplaceAll(value, "\n", " ")
+	return value
 }
 
 func normalizeSkillJSONValue(value any) any {

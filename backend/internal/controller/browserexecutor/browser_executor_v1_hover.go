@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorHover(ctx context.Context, req *v1.BrowserExecutorHoverReq) (res *v1.BrowserExecutorHoverRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Hover(ctx, req.Identifier)
-	return &v1.BrowserExecutorHoverRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorHoverRes{Result: result}, nil
 }

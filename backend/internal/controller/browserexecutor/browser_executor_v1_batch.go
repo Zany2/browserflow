@@ -12,6 +12,9 @@ import (
 func (c *ControllerV1) BrowserExecutorBatch(ctx context.Context, req *v1.BrowserExecutorBatchReq) (res *v1.BrowserExecutorBatchRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	actions := make([]model.BrowserExecutorBatchAction, 0, len(req.Operations))
@@ -24,5 +27,11 @@ func (c *ControllerV1) BrowserExecutorBatch(ctx context.Context, req *v1.Browser
 		})
 	}
 	result, err := executor.Batch(ctx, actions)
-	return &v1.BrowserExecutorBatchRes{Result: result}, err
+	if err != nil {
+		if failBrowserExecutor(ctx, result, err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &v1.BrowserExecutorBatchRes{Result: result}, nil
 }

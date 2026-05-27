@@ -2,14 +2,15 @@ package browser
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
 	"github.com/Zany2/browserflow/backend/api/browser/v1"
 	"github.com/Zany2/browserflow/backend/internal/model"
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 // BrowserInstanceStop stops browser instance 停止浏览器实例
@@ -22,7 +23,8 @@ func (c *ControllerV1) BrowserInstanceStop(ctx context.Context, req *v1.BrowserI
 	runtime, ok := state.BrowserInstances[instanceID]
 	if !ok {
 		state.BrowserMu.Unlock()
-		return nil, errors.New("浏览器实例未运行")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "浏览器实例未运行")
+		return nil, nil
 	}
 	delete(state.BrowserInstances, instanceID)
 	if state.BrowserCurrentInstanceID == instanceID {

@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorWait(ctx context.Context, req *v1.BrowserExecutorWaitReq) (res *v1.BrowserExecutorWaitRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Wait(ctx, req.Identifier, req.State, req.Timeout, req.Count)
-	return &v1.BrowserExecutorWaitRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorWaitRes{Result: result}, nil
 }

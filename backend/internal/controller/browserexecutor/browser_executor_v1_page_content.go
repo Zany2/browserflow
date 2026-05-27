@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorPageContent(ctx context.Context, req *v1.BrowserExecutorPageContentReq) (res *v1.BrowserExecutorPageContentRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.PageContent(ctx, req.Limit)
-	return &v1.BrowserExecutorPageContentRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorPageContentRes{Result: result}, nil
 }

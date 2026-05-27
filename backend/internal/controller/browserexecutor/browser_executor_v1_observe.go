@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorObserve(ctx context.Context, req *v1.BrowserExecutorObserveReq) (res *v1.BrowserExecutorObserveRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Observe(ctx, req.IncludeText, req.TextLimit)
-	return &v1.BrowserExecutorObserveRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorObserveRes{Result: result}, nil
 }

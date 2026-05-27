@@ -11,8 +11,17 @@ import (
 func (c *ControllerV1) BrowserExecutorEvaluate(ctx context.Context, req *v1.BrowserExecutorEvaluateReq) (res *v1.BrowserExecutorEvaluateRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {
+		if failBrowserExecutor(ctx, nil, err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result, opErr := executor.Evaluate(ctx, req.Script)
-	return &v1.BrowserExecutorEvaluateRes{Result: result}, opErr
+	if opErr != nil {
+		if failBrowserExecutor(ctx, result, opErr) {
+			return nil, nil
+		}
+		return nil, opErr
+	}
+	return &v1.BrowserExecutorEvaluateRes{Result: result}, nil
 }
