@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Zany2/browserflow/backend/internal/consts"
@@ -36,9 +38,19 @@ var (
 		Name:  "main",
 		Usage: "main",
 		Brief: "start http server",
+		Arguments: []gcmd.Argument{
+			{Name: "port", Short: "p", Brief: "HTTP listen port for Windows mode, for example --port 8080"},
+		},
 		Func: func(ctx context.Context, parser *gcmd.Parser) (err error) {
 			s := g.Server()
 			runtimeMode := consts.ResolveRuntimeMode(ctx)
+			if portValue := parser.GetOpt("port"); portValue != nil && portValue.String() != "" {
+				port, parseErr := strconv.Atoi(portValue.String())
+				if parseErr != nil || port < 1 || port > 65535 {
+					return fmt.Errorf("invalid --port value %q, expected 1-65535", portValue.String())
+				}
+				s.SetPort(port)
+			}
 
 			if runtimeMode == consts.RuntimeModeServer {
 				// Reset stale node state before accepting reconnects. 启动监听前重置遗留在线节点状态

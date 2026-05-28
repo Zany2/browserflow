@@ -1,9 +1,12 @@
 package configbootstrap
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcfg"
@@ -16,10 +19,16 @@ const (
 var (
 	executableDirFunc = executableDir
 	runtimeGOOS       = runtime.GOOS
+	osArgs            = os.Args
 )
 
 // Ensure prepares the runtime config before any business code reads g.Cfg(). 启动业务前准备运行配置。
 func Ensure() error {
+	port, err := commandPort()
+	if err != nil {
+		return err
+	}
+
 	if runtimeGOOS != "windows" {
 		return nil
 	}
@@ -37,7 +46,10 @@ func Ensure() error {
 	}
 	for _, path := range paths {
 		if existsFile(path) {
-			return useConfigFile(path)
+			if err = useConfigFile(path); err != nil {
+				return err
+			}
+			return applyPortOverride(port)
 		}
 	}
 
@@ -45,10 +57,51 @@ func Ensure() error {
 	if err = os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 		return err
 	}
-	if err = os.WriteFile(configPath, []byte(defaultWindowsConfig), 0644); err != nil {
+	configContent := buildDefaultWindowsConfig(port)
+	if err = os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		return err
 	}
-	return useConfigFile(configPath)
+	if err = useConfigFile(configPath); err != nil {
+		return err
+	}
+	return applyPortOverride(port)
+}
+
+func commandPort() (int, error) {
+	for index, arg := range osArgs {
+		if arg == "--port" {
+			if index+1 >= len(osArgs) {
+				return 0, fmt.Errorf("--port requires a value")
+			}
+			return normalizePort(osArgs[index+1])
+		}
+		if strings.HasPrefix(arg, "--port=") {
+			return normalizePort(strings.TrimPrefix(arg, "--port="))
+		}
+	}
+	return 0, nil
+}
+
+func normalizePort(value string) (int, error) {
+	port, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || port < 1 || port > 65535 {
+		return 0, fmt.Errorf("invalid --port value %q, expected 1-65535", value)
+	}
+	return port, nil
+}
+
+func applyPortOverride(port int) error {
+	if port <= 0 {
+		return nil
+	}
+	adapter, ok := g.Cfg().GetAdapter().(*gcfg.AdapterFile)
+	if !ok {
+		return fmt.Errorf("config adapter does not support runtime port override")
+	}
+	if err := adapter.Set("server.address", fmt.Sprintf(":%d", port)); err != nil {
+		return err
+	}
+	return adapter.Set("frontend.url", fmt.Sprintf("http://127.0.0.1:%d", port))
 }
 
 func executableDir() (string, error) {
@@ -80,6 +133,14 @@ func useConfigFile(path string) error {
 	}
 	g.Cfg().SetAdapter(adapter)
 	return nil
+}
+
+func buildDefaultWindowsConfig(port int) string {
+	if port <= 0 {
+		port = 8001
+	}
+	config := strings.ReplaceAll(defaultWindowsConfig, `address: ":8001"`, fmt.Sprintf(`address: ":%d"`, port))
+	return strings.ReplaceAll(config, `url: "http://127.0.0.1:8001"`, fmt.Sprintf(`url: "http://127.0.0.1:%d"`, port))
 }
 
 const defaultWindowsConfig = `# BrowserFlow backend configuration. BrowserFlow 后端配置。
