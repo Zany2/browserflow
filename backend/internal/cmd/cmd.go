@@ -21,6 +21,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/controller/ws"
 	"github.com/Zany2/browserflow/backend/internal/dao"
 	"github.com/Zany2/browserflow/backend/internal/model/do"
+	"github.com/Zany2/browserflow/backend/internal/web"
 	"github.com/Zany2/browserflow/backend/middleware"
 	"github.com/Zany2/browserflow/backend/utility/taskcron"
 	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
@@ -125,6 +126,7 @@ var (
 					})
 				}
 			})
+			web.BindFrontend(s)
 
 			if runtimeMode == consts.RuntimeModeServer {
 				// Start scheduler and recovery after stale online state has been cleared. 清理后启动调度与恢复

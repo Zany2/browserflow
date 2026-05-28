@@ -55,29 +55,66 @@ BrowserFlow 的核心是把浏览器里的业务流程变成可以被管理、�
 
 ## 快速开始
 
-> ⚠️ 该部分暂未完善。BrowserFlow 后续会分别提供 Windows 本地模式和 Server 集中调度模式的安装方式，当前先预留快速开始结构，具体包名、镜像名和生产配置会在发布后补充。
-
 ### Windows 模式
 
-Windows 模式面向本机浏览器自动化，适合个人使用、工作流调试和本地大模型调用。计划通过 npm/npx 提供一键启动方式：
+Windows 模式面向本机浏览器自动化，适合个人使用、工作流调试和本地大模型调用。当前先按源码编译方式使用：先编译前端 `dist`，再将 `dist` 作为静态资源嵌入后端 Windows 可执行文件，最后直接启动可执行文件访问本地控制台。
 
-```bash
-npx browserflow
-```
-
-可选参数和使用示例后续补充：
-
-```bash
-npx browserflow --port 8001
-npx browserflow --data-dir ./browserflow-data
-```
-
-启动后预计会自动打开本地控制台，并连接本机受控浏览器。首次使用前需要准备：
+首次使用前需要准备：
 
 - Windows 10/11。
+- Go 1.25+。
+- Node.js 和 npm。
 - Chrome 或 Chromium。
 - Automa 浏览器扩展。
-- Node.js 和 npm/npx。
+
+#### 1. 编译前端
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+执行完成后会生成 `frontend/dist`。
+
+#### 2. 将前端 dist 编译进后端可执行文件
+
+后端会从 `backend/internal/web/dist` 嵌入静态资源。前端编译完成后，先把生成的文件移动到该目录，再编译后端可执行文件：
+
+```bash
+cd ..
+mkdir -p backend/internal/web/dist
+mv frontend/dist/* backend/internal/web/dist/
+cd backend
+go build -o BrowserFlow.exe .
+```
+
+如果使用 Windows PowerShell，可使用：
+
+```powershell
+New-Item -ItemType Directory -Force backend\internal\web\dist | Out-Null
+Move-Item frontend\dist\* backend\internal\web\dist\
+Set-Location backend
+go build -o BrowserFlow.exe .
+```
+
+如果在非 Windows 环境交叉编译 Windows 可执行文件，可使用：
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o BrowserFlow.exe .
+```
+
+#### 3. 启动 Windows 模式
+
+```bash
+./BrowserFlow.exe --port 8001
+```
+
+也可以省略 `--port` 使用配置文件中的端口；如果首次启动时传入 `--port`，生成的 Windows 配置文件会写入该端口。启动后访问：
+
+```text
+http://127.0.0.1:8001
+```
 
 基本使用流程：
 
@@ -90,52 +127,100 @@ npx browserflow --data-dir ./browserflow-data
 
 ### Server 模式
 
-Server 模式面向多客户端集中调度，适合把多台 Windows 客户端接入为执行节点，并统一管理工作流、任务配置和执行记录。
+Server 模式建议部署在服务器上，用于统一管理工作流、任务配置和执行记录，并调度多个 Windows 客户端作为浏览器自动化执行节点。
 
-Server 模式依赖：
+Server 模式依赖 PostgreSQL 和 Redis。Windows 客户端通过打开 `/client-agent` 接入服务端，成为可调度的执行节点。
 
-- PostgreSQL。
-- Redis。
-- Chrome 或 Chromium。
-- 打开 `/client-agent` 的 Windows 客户端。
+启动后，基本使用流程是：接入 Windows 客户端、同步或导入工作流、创建任务、手动执行或配置 Cron 定时触发，并在执行记录中查看结果。
 
-基本使用流程：
+#### Docker Compose 部署
 
-1. 启动 BrowserFlow Server 模式。
-2. 在 Windows 客户端打开 `http://<server-host>/client-agent` 并保持连接。
-3. 在“客户端”页面确认执行节点在线。
-4. 在“工作流管理”页面从客户端同步工作流，或导入工作流文件。
-5. 在“任务配置”页面创建任务，选择工作流、参数和调度策略。
-6. 手动执行任务，或配置 Cron 定时触发。
-7. 在“执行记录”页面查看状态、结果、失败原因和结果文件。
+Server 模式建议部署在 Linux 服务器上，并使用 `docker compose` 运行 BrowserFlow、PostgreSQL、Redis 和 Nginx。当前部署方式是先在服务器上编译前端和后端，再由 `docker-compose.yaml` 挂载编译后的后端可执行文件和 Server 配置启动服务。
 
-#### 源码运行
+服务器需要准备：
 
-源码运行方式适合开发、测试和自定义部署。示例流程如下，具体配置项后续补充：
+- Linux 服务器。
+- Git。
+- Go 1.25+。
+- Node.js 和 npm。
+- Docker 和 Docker Compose。
+
+拉取源码：
 
 ```bash
 git clone https://github.com/Zany2/browserflow.git
 cd browserflow
 ```
 
-配置运行模式和数据库连接：
+编译前端，并把前端产物移动到后端嵌入目录：
 
-```yaml
-app:
-  mode: "server"
+```bash
+cd frontend
+npm install
+npm run build
 
-database:
-  default:
-    link: "pgsql:USER:PASSWORD@tcp(HOST:5432)/browserflow"
-
-redis:
-  default:
-    address: "HOST:6379"
-    db: 0
-    pass: ""
+cd ..
+mkdir -p backend/internal/web/dist
+mv frontend/dist/* backend/internal/web/dist/
 ```
 
-启动后端：
+编译 Linux 后端可执行文件：
+
+```bash
+cd backend
+go build -o browserflow .
+cd ..
+```
+
+启动 Server 模式：
+
+```bash
+docker compose up -d
+```
+
+默认访问地址：
+
+```text
+http://服务器IP:8001
+```
+
+当前 `docker-compose.yaml` 会启动：
+
+- `postgres`：PostgreSQL，首次启动时会加载 `backend/sql/public.sql` 初始化表结构。
+- `redis`：Redis，默认开启 AOF 持久化，并使用 `browserflow` 作为示例密码。
+- `browserflow`：BrowserFlow Server，挂载 `backend/browserflow` 可执行文件和 `deploy/server/config.yaml`。
+- `nginx`：统一对外暴露 HTTP 入口，代理前端页面、API 和 WebSocket。
+
+部署相关文件：
+
+- `docker-compose.yaml`：Server 模式容器编排。
+- `deploy/server/config.yaml`：Server 模式后端配置，包含 PostgreSQL、Redis、日志和 WebSocket 配置。
+- `deploy/nginx/browserflow.conf`：Nginx 反向代理配置。
+
+如果修改了前端或后端代码，需要重新执行前端构建、移动 `dist`、重新编译 `backend/browserflow`，然后重启服务：
+
+```bash
+docker compose restart browserflow nginx
+```
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+生产部署前，建议修改 `docker-compose.yaml` 和 `deploy/server/config.yaml` 中的 PostgreSQL 密码、Redis 密码、`frontend.url`、Nginx `server_name` 等配置。
+
+#### 源码运行
+
+源码运行方式更适合开发、测试和自定义部署。可以参考 `deploy/server/config.yaml` 配置 Server 模式、PostgreSQL 和 Redis：
+
+```bash
+git clone https://github.com/Zany2/browserflow.git
+cd browserflow
+```
+
+配置 Server 模式、PostgreSQL 和 Redis 后，启动后端：
 
 ```bash
 cd backend
@@ -150,21 +235,6 @@ npm install
 npm run dev
 ```
 
-#### Docker 运行
-
-Docker 部署方式适合快速启动 Server 模式服务。镜像名、环境变量和 `docker compose` 示例后续补充：
-
-```bash
-docker run --name browserflow-server \
-  -p 8001:8001 \
-  -e BROWSERFLOW_MODE=server \
-  -e BROWSERFLOW_DATABASE_URL=pgsql://USER:PASSWORD@HOST:5432/browserflow \
-  -e BROWSERFLOW_REDIS_ADDR=HOST:6379 \
-  browserflow/server:latest
-```
-
-也会提供 `docker compose` 示例，用于同时启动 BrowserFlow、PostgreSQL 和 Redis。
-
 ## 项目结构
 
 ```text
@@ -172,6 +242,7 @@ browserflow/
 |-- backend/                         GoFrame 后端服务
 |   |-- api/                         GoFrame API 请求/响应定义
 |   |-- internal/                    控制器、服务注册、数据模型和业务实现
+|   |   `-- web/                     嵌入式前端静态资源入口
 |   |-- manifest/config/             后端配置文件
 |   |-- middleware/                  HTTP 中间件
 |   |-- sql/                         数据库初始化和结构脚本
@@ -194,9 +265,13 @@ browserflow/
 |   `-- winres/                      Windows 可执行文件资源配置
 |-- docs/                            项目文档和图片资源
 |-- docs/images/                     README 和文档图片
+|-- deploy/                          Server 模式部署配置
+|   |-- nginx/                       Nginx 反向代理配置
+|   `-- server/                      Server 模式后端配置
 |-- third_party/automa/              Automa 本地源码快照和 BrowserFlow 本地改造
 |-- workflows/                       示例 Automa 工作流文件
 |-- .agents/                         项目本地 coding-agent 技能和配置
+|-- docker-compose.yaml              Server 模式 Docker Compose 部署文件
 |-- go.work                          Go workspace
 |-- LICENSE                          开源许可证
 |-- README.md                        English README
