@@ -1,5 +1,5 @@
 <template>
-  <section class="home-page">
+  <section class="home-page" :class="{ 'home-page--server': backendAvailable && isServerMode }">
     <template v-if="isWindowsMode">
       <section class="windows-hero">
         <div class="windows-hero__copy">
@@ -96,33 +96,106 @@
 
     <template v-else>
       <section class="hero-panel">
-      <div class="hero-copy">
-        <p class="eyebrow">Browser automation workspace</p>
-        <h1>{{ heroTitle }}</h1>
-        <p class="summary">
-          {{ heroSummary }}
-        </p>
-      </div>
+        <div class="hero-copy">
+          <p class="eyebrow">Server automation console</p>
+          <h1>{{ heroTitle }}</h1>
+          <p class="summary">
+            {{ heroSummary }}
+          </p>
+        </div>
 
-      <div class="hero-status">
-        <span class="status-label">当前模式</span>
-        <strong>{{ runtimeModeText }}</strong>
-        <template v-if="backendAvailable && isServerMode">
-          <span class="status-note">将客户端地址发给执行电脑打开</span>
-          <div class="client-link-row">
-            <a class="client-link" :href="clientAgentOpenUrl" target="_blank" rel="noreferrer">
-              {{ clientAgentUrl }}
-            </a>
-            <el-button link type="primary" @click="copyClientAgentUrl">复制</el-button>
-          </div>
-        </template>
-        <span v-else class="status-note" :class="{ 'status-note--error': !backendAvailable }">
-          {{ runtimeStatusNote }}
-        </span>
-      </div>
+        <div class="hero-status">
+          <span class="status-label">当前模式</span>
+          <strong>{{ runtimeModeText }}</strong>
+          <template v-if="backendAvailable && isServerMode">
+            <span class="status-note">将客户端地址发给执行电脑打开</span>
+            <div class="client-link-row">
+              <a class="client-link" :href="clientAgentOpenUrl" target="_blank" rel="noreferrer">
+                {{ clientAgentUrl }}
+              </a>
+              <el-button link type="primary" @click="copyClientAgentUrl">复制</el-button>
+            </div>
+          </template>
+          <span v-else class="status-note" :class="{ 'status-note--error': !backendAvailable }">
+            {{ runtimeStatusNote }}
+          </span>
+        </div>
       </section>
 
-      <section class="quick-grid" aria-label="核心入口">
+      <template v-if="backendAvailable && isServerMode">
+        <section class="status-grid" aria-label="服务端调度状态" v-loading="serverDashboardLoading">
+          <article
+            v-for="item in serverStatusCards"
+            :key="item.label"
+            class="status-tile"
+            :class="item.stateClass"
+          >
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.note }}</small>
+          </article>
+        </section>
+
+        <section class="server-main">
+          <div class="server-panel">
+            <div class="panel-heading">
+              <h2>调度准备</h2>
+              <el-button link type="primary" :loading="serverDashboardLoading" @click="loadServerDashboard">
+                刷新
+              </el-button>
+            </div>
+            <div class="step-flow">
+              <RouterLink
+                v-for="step in serverNextSteps"
+                :key="step.title"
+                class="step-flow__item"
+                :class="step.stateClass"
+                :to="step.to"
+              >
+                <span class="step-flow__mark">{{ step.index }}</span>
+                <span class="step-flow__body">
+                  <strong>{{ step.title }}</strong>
+                  <small>{{ step.desc }}</small>
+                </span>
+                <span class="step-flow__action">{{ step.action }}</span>
+              </RouterLink>
+            </div>
+          </div>
+
+          <div class="server-panel server-panel--records">
+            <div class="panel-heading">
+              <h2>最近执行记录</h2>
+              <RouterLink to="/task-records">查看全部</RouterLink>
+            </div>
+            <div v-if="serverDashboardError" class="server-empty is-error">
+              {{ serverDashboardError }}
+            </div>
+            <div v-else-if="recentRecords.length === 0" class="server-empty">
+              暂无执行记录，配置任务后可以从这里观察最近结果。
+            </div>
+            <div v-else class="record-list">
+              <RouterLink
+                v-for="record in recentRecords"
+                :key="record.id || `${record.task_name}-${record.created_at}`"
+                class="record-row"
+                to="/task-records"
+              >
+                <span class="record-row__main">
+                  <strong>{{ record.task_name || record.workflow_name || '未命名任务' }}</strong>
+                  <small>{{ record.workflow_name || record.client_ip || '暂无工作流信息' }}</small>
+                </span>
+                <span class="record-row__status" :class="getRecordStatusClass(record)">
+                  {{ getRecordStatusText(record) }}
+                </span>
+                <span class="record-row__time">{{ formatRecordTime(record) }}</span>
+              </RouterLink>
+            </div>
+          </div>
+        </section>
+
+      </template>
+
+      <section v-else class="quick-grid" aria-label="核心入口">
         <template v-if="backendAvailable">
           <RouterLink
             v-for="item in quickActions"
@@ -150,7 +223,7 @@
         </template>
       </section>
 
-      <section class="intro-grid">
+      <section v-if="!isServerMode" class="intro-grid">
         <article v-for="card in introCards" :key="card.title" class="intro-card">
           <span class="intro-tag" :class="card.tagClass">{{ card.tag }}</span>
           <h2>{{ card.title }}</h2>
@@ -158,7 +231,7 @@
         </article>
       </section>
 
-      <section class="flow-panel" aria-label="使用流程">
+      <section v-if="!isServerMode" class="flow-panel" aria-label="使用流程">
         <span v-for="(step, index) in flowSteps" :key="step" class="flow-step">
           {{ step }}
           <strong v-if="index < flowSteps.length - 1">→</strong>
@@ -178,8 +251,13 @@ import {
   subscribeAgentStatus,
   subscribeBrowserStatus,
 } from '@/services/browser'
+import { listAutomaWorkflows } from '@/services/automa'
+import { listClients } from '@/services/client'
+import { listTaskRecords, listTasks } from '@/services/task'
 import { subscribeDesktopConnectionState } from '@/services/desktopWs'
 import { copyText } from '@/utils/browser'
+import { formatDate } from '@/utils/format'
+import { normalizeList } from '@/utils/list'
 import { localCache } from '@/utils/storage'
 
 const WORKFLOW_READY_STORAGE_KEY = 'browserflow-windows-workflow-ready'
@@ -198,6 +276,14 @@ const runtimeTimer = ref(null)
 const stopBrowserStatusSubscribe = ref(null)
 const stopAgentStatusSubscribe = ref(null)
 const stopDesktopConnectionSubscribe = ref(null)
+const serverDashboardLoading = ref(false)
+const serverDashboardError = ref('')
+const serverClients = ref([])
+const serverWorkflows = ref([])
+const serverTasks = ref([])
+const serverTaskTotal = ref(0)
+const serverRecords = ref([])
+const serverRecordTotal = ref(0)
 const desktopConnection = ref({
   status: 'idle',
   reconnectCount: 0,
@@ -229,34 +315,6 @@ const windowsQuickActions = [
     title: '对话',
     desc: '用流式对话快速验证模型配置和回答效果',
     to: '/chat',
-  },
-]
-
-// serverQuickActions lists scheduler workspace entries Server 调度模式入口
-const serverQuickActions = [
-  {
-    icon: '01',
-    title: '工作流管理',
-    desc: '导入、同步和维护服务端可调度的工作流',
-    to: '/automa',
-  },
-  {
-    icon: '02',
-    title: '任务配置',
-    desc: '把工作流编排成可手动或定时下发的任务',
-    to: '/tasks',
-  },
-  {
-    icon: '03',
-    title: '执行记录',
-    desc: '查看任务下发、运行状态和客户端回传结果',
-    to: '/task-records',
-  },
-  {
-    icon: '04',
-    title: '客户端',
-    desc: '管理在线执行电脑、插件状态和连接状态',
-    to: '/clients',
   },
 ]
 
@@ -320,7 +378,7 @@ const isServerMode = computed(() => runtimeMode.value === 'server')
 const isWindowsMode = computed(() => backendAvailable.value && runtimeMode.value === 'windows')
 
 // quickActions switches entries by runtime mode 首页入口按运行模式切换
-const quickActions = computed(() => (isServerMode.value ? serverQuickActions : windowsQuickActions))
+const quickActions = computed(() => windowsQuickActions)
 
 // introCards switches scenario cards by runtime mode 首页说明卡片按运行模式切换
 const introCards = computed(() => (isServerMode.value ? serverIntroCards : windowsIntroCards))
@@ -380,6 +438,82 @@ const workflowReady = computed(() => {
 
   const readyMap = localCache.get(WORKFLOW_READY_STORAGE_KEY, {})
   return Boolean(readyMap?.[browserId]?.read_at)
+})
+
+const onlineServerClients = computed(() => serverClients.value.filter((client) => isClientOnline(client)))
+const automaReadyServerClients = computed(() => {
+  return onlineServerClients.value.filter((client) => isClientAutomaReady(client))
+})
+const enabledServerTasks = computed(() => serverTasks.value.filter((task) => isTaskEnabled(task)))
+const recentRecords = computed(() => serverRecords.value.slice(0, 5))
+
+const serverStatusCards = computed(() => [
+  {
+    label: '在线客户端',
+    value: String(onlineServerClients.value.length),
+    note: `${serverClients.value.length} 个已登记节点`,
+    stateClass: onlineServerClients.value.length > 0 ? 'is-success' : 'is-warning',
+  },
+  {
+    label: 'Automa 可用',
+    value: String(automaReadyServerClients.value.length),
+    note: onlineServerClients.value.length > 0 ? '在线节点插件状态' : '等待客户端连接',
+    stateClass: automaReadyServerClients.value.length > 0 ? 'is-success' : 'is-warning',
+  },
+  {
+    label: '服务端工作流',
+    value: String(serverWorkflows.value.length),
+    note: '可用于任务配置和调度',
+    stateClass: serverWorkflows.value.length > 0 ? 'is-success' : 'is-warning',
+  },
+  {
+    label: '启用任务',
+    value: String(enabledServerTasks.value.length),
+    note: `${serverTaskTotal.value || serverTasks.value.length} 个任务配置`,
+    stateClass: enabledServerTasks.value.length > 0 ? 'is-success' : 'is-muted',
+  },
+])
+
+const serverNextSteps = computed(() => {
+  const clientReady = onlineServerClients.value.length > 0
+  const workflowReady = serverWorkflows.value.length > 0
+  const taskReady = enabledServerTasks.value.length > 0
+  const recordReady = serverRecordTotal.value > 0 || recentRecords.value.length > 0
+
+  return [
+    {
+      index: '01',
+      title: '接入客户端',
+      desc: clientReady ? `${onlineServerClients.value.length} 个节点在线` : '打开客户端执行页或启动 Worker 接入节点',
+      action: clientReady ? '已在线' : '去接入',
+      to: '/clients',
+      stateClass: clientReady ? 'is-done' : 'is-current',
+    },
+    {
+      index: '02',
+      title: '同步工作流',
+      desc: workflowReady ? `${serverWorkflows.value.length} 个工作流可调度` : '从客户端同步或导入服务端工作流',
+      action: workflowReady ? '已准备' : '去同步',
+      to: '/automa',
+      stateClass: workflowReady ? 'is-done' : clientReady ? 'is-current' : '',
+    },
+    {
+      index: '03',
+      title: '配置任务',
+      desc: taskReady ? `${enabledServerTasks.value.length} 个任务已启用` : '把工作流配置成手动或定时任务',
+      action: taskReady ? '已启用' : '去配置',
+      to: '/tasks',
+      stateClass: taskReady ? 'is-done' : workflowReady ? 'is-current' : '',
+    },
+    {
+      index: '04',
+      title: '查看记录',
+      desc: recordReady ? `${serverRecordTotal.value || recentRecords.value.length} 条执行记录` : '执行任务后查看状态和回传结果',
+      action: recordReady ? '查看' : '待执行',
+      to: '/task-records',
+      stateClass: recordReady ? 'is-done' : taskReady ? 'is-current' : '',
+    },
+  ]
 })
 
 const desktopConnectionStatus = computed(() => {
@@ -506,6 +640,8 @@ onMounted(async () => {
     if (runtimeMode.value === 'windows') {
       await loadWindowsRuntime()
       startWindowsRuntimeSubscribe()
+    } else if (runtimeMode.value === 'server') {
+      await loadServerDashboard()
     }
   } catch {
     backendAvailable.value = false
@@ -539,6 +675,29 @@ function showBackendUnavailable() {
 async function copyClientAgentUrl() {
   await copyText(clientAgentUrl.value)
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端地址已复制' })
+}
+
+async function loadServerDashboard() {
+  serverDashboardLoading.value = true
+  serverDashboardError.value = ''
+  try {
+    const [clientData, workflowData, taskData, recordData] = await Promise.all([
+      listClients(),
+      listAutomaWorkflows({ page_num: 1, page_size: 60 }),
+      listTasks({ page_num: 1, page_size: 60 }),
+      listTaskRecords({ page_num: 1, page_size: 10 }),
+    ])
+    serverClients.value = normalizeList(clientData, 'clients')
+    serverWorkflows.value = normalizeList(workflowData, 'workflows').filter((item) => !item.is_deleted)
+    serverTasks.value = normalizeList(taskData, 'tasks')
+    serverTaskTotal.value = Number(taskData?.total ?? serverTasks.value.length)
+    serverRecords.value = normalizeList(recordData, 'records')
+    serverRecordTotal.value = Number(recordData?.total ?? serverRecords.value.length)
+  } catch (error) {
+    serverDashboardError.value = error?.message || '服务端概览加载失败'
+  } finally {
+    serverDashboardLoading.value = false
+  }
 }
 
 async function loadWindowsRuntime() {
@@ -575,6 +734,45 @@ function stopWindowsRuntimeSubscribe() {
   stopDesktopConnectionSubscribe.value?.()
   stopDesktopConnectionSubscribe.value = null
 }
+
+function isClientOnline(client) {
+  return Boolean(client?.online || client?.status === 'online')
+}
+
+function isClientAutomaReady(client) {
+  const status = client?.plugin_status || client?.automa_status || ''
+  return Boolean(client?.automa_installed === true || status === 'installed')
+}
+
+function isTaskEnabled(task) {
+  return task?.enabled !== false && task?.is_enabled !== false && task?.status !== 'disabled'
+}
+
+function getRecordStatusText(record) {
+  const status = String(record?.status || '').trim()
+  const statusMap = {
+    queued: '排队中',
+    running: '运行中',
+    success: '成功',
+    error: '失败',
+    failed: '失败',
+    stopped: '已停止',
+    timeout: '超时',
+  }
+  return statusMap[status] || status || '未知'
+}
+
+function getRecordStatusClass(record) {
+  const status = String(record?.status || '').trim()
+  if (status === 'success') return 'is-success'
+  if (status === 'queued' || status === 'running') return 'is-warning'
+  if (status === 'error' || status === 'failed' || status === 'timeout' || status === 'stopped') return 'is-danger'
+  return 'is-muted'
+}
+
+function formatRecordTime(record) {
+  return formatDate(record?.started_at || record?.created_at || record?.updated_at, { fallback: '-' })
+}
 </script>
 
 <style scoped>
@@ -585,6 +783,13 @@ function stopWindowsRuntimeSubscribe() {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.home-page--server {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .hero-panel {
@@ -701,12 +906,38 @@ function stopWindowsRuntimeSubscribe() {
   min-height: 0;
 }
 
-.windows-panel {
+.server-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.windows-panel,
+.server-panel {
   min-width: 0;
   padding: 18px;
   background: #ffffff;
   border: 1px solid #e4e7ed;
   border-radius: 8px;
+}
+
+.server-panel--records {
+  padding-bottom: 12px;
+}
+
+.server-panel--records .panel-heading {
+  margin-bottom: 10px;
+}
+
+.home-page--server .step-flow__item {
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.home-page--server .step-flow__mark {
+  width: 34px;
+  height: 34px;
 }
 
 .windows-panel--steps {
@@ -925,6 +1156,41 @@ h1 {
   white-space: nowrap;
 }
 
+.server-client-box {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.server-client-box__label {
+  color: #909399;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.server-client-box__url {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #2563eb;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-client-box__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.server-client-box p {
+  margin: 0;
+  color: #606266;
+  line-height: 1.7;
+}
+
 .quick-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1053,13 +1319,107 @@ h1 {
   color: #c0c4cc;
 }
 
+.server-empty {
+  padding: 20px;
+  color: #909399;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px dashed #dcdfe6;
+  border-radius: 8px;
+}
+
+.server-empty.is-error {
+  color: #c2410c;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.record-list {
+  display: grid;
+  gap: 8px;
+}
+
+.record-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(112px, auto);
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  color: #303133;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+}
+
+.record-row:hover {
+  border-color: #bfdbfe;
+}
+
+.record-row__main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.record-row__main strong,
+.record-row__main small,
+.record-row__time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-row__main strong {
+  color: #111827;
+}
+
+.record-row__main small,
+.record-row__time {
+  color: #606266;
+  font-size: 13px;
+}
+
+.record-row__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 999px;
+}
+
+.record-row__status.is-success {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.record-row__status.is-warning {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.record-row__status.is-danger {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.record-row__status.is-muted {
+  color: #64748b;
+  background: #e2e8f0;
+}
+
 @media (max-width: 900px) {
   .hero-panel {
     grid-template-columns: 1fr;
   }
 
   .windows-hero,
-  .windows-main {
+  .windows-main,
+  .server-main {
     grid-template-columns: 1fr;
   }
 
@@ -1106,6 +1466,14 @@ h1 {
 
   .intro-grid {
     grid-template-columns: 1fr;
+  }
+
+  .record-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .record-row__time {
+    display: none;
   }
 }
 </style>

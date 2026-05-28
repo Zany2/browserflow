@@ -1,0 +1,103 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: browserflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: browserflow
+      POSTGRES_USER: browserflow
+      POSTGRES_PASSWORD: browserflow
+      TZ: Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/sql/public.sql:/docker-entrypoint-initdb.d/001-browserflow.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U browserflow -d browserflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - browserflow
+
+  redis:
+    image: redis:7-alpine
+    container_name: browserflow-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - browserflow
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "browserflow", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - browserflow
+
+  browserflow:
+    image: alpine:3.20
+    container_name: browserflow-server
+    restart: unless-stopped
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8001"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./backend/browserflow:/app/browserflow:ro
+      - ./deploy/server/config.yaml:/app/config.yaml:ro
+      - browserflow_data:/app/data
+      - browserflow_logs:/app/logs
+    command: ["/app/browserflow"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8001/api/v1/app/runtime >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - browserflow
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: browserflow-nginx
+    restart: unless-stopped
+    depends_on:
+      browserflow:
+        condition: service_healthy
+    ports:
+      - "8001:80"
+    volumes:
+      - ./deploy/nginx/browserflow.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/v1/app/runtime >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - browserflow
+
+volumes:
+  postgres_data:
+  redis_data:
+  browserflow_data:
+  browserflow_logs:
+
+networks:
+  browserflow:
+    name: browserflow_network

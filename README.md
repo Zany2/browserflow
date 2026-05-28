@@ -55,29 +55,66 @@ BrowserFlow turns browser-based business processes into automation capabilities 
 
 ## Quick Start
 
-> ⚠️ This section is not complete yet. BrowserFlow will provide installation methods for Windows local mode and Server centralized dispatch mode later. The current structure is a placeholder, and package names, image names, and production configuration will be added after release.
-
 ### Windows Mode
 
-Windows mode targets local browser automation and is suitable for personal use, workflow debugging, and local LLM calls. A one-command npm/npx startup flow is planned:
+Windows mode targets local browser automation and is suitable for personal use, workflow debugging, and local LLM calls. For now, use a source build flow: build the frontend `dist`, embed `dist` as static assets into the backend Windows executable, and then run the executable to open the local console.
 
-```bash
-npx browserflow
-```
-
-Optional parameters and usage examples will be added later:
-
-```bash
-npx browserflow --port 8001
-npx browserflow --data-dir ./browserflow-data
-```
-
-After startup, BrowserFlow is expected to open the local console automatically and connect to a local controlled browser. Before first use, prepare:
+Before first use, prepare:
 
 - Windows 10/11.
+- Go 1.25+.
+- Node.js and npm.
 - Chrome or Chromium.
 - Automa browser extension.
-- Node.js and npm/npx.
+
+#### 1. Build The Frontend
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+This generates `frontend/dist`.
+
+#### 2. Embed dist Into The Backend Executable
+
+The backend embeds static assets from `backend/internal/web/dist`. After building the frontend, move the generated files into that directory, then build the backend executable:
+
+```bash
+cd ..
+mkdir -p backend/internal/web/dist
+mv frontend/dist/* backend/internal/web/dist/
+cd backend
+go build -o BrowserFlow.exe .
+```
+
+On Windows PowerShell, use:
+
+```powershell
+New-Item -ItemType Directory -Force backend\internal\web\dist | Out-Null
+Move-Item frontend\dist\* backend\internal\web\dist\
+Set-Location backend
+go build -o BrowserFlow.exe .
+```
+
+For cross-compiling a Windows executable from a non-Windows environment:
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o BrowserFlow.exe .
+```
+
+#### 3. Start Windows Mode
+
+```bash
+./BrowserFlow.exe --port 8001
+```
+
+You can omit `--port` to use the configured port. If `--port` is provided on first startup, the generated Windows config file will use that port. Then open:
+
+```text
+http://127.0.0.1:8001
+```
 
 Basic usage flow:
 
@@ -90,52 +127,100 @@ Basic usage flow:
 
 ### Server Mode
 
-Server mode targets centralized multi-client dispatch. It is suitable for connecting multiple Windows clients as execution nodes and managing workflows, task definitions, and execution records in one place.
+Server mode is recommended to be deployed on a server. It manages workflows, task definitions, and execution records in one place, and dispatches browser automation tasks to multiple Windows clients as execution nodes.
 
-Server mode depends on:
+Server mode depends on PostgreSQL and Redis. Windows clients connect to the server by opening `/client-agent`, then become dispatchable execution nodes.
 
-- PostgreSQL.
-- Redis.
-- Chrome or Chromium.
-- Windows clients opened on `/client-agent`.
+After startup, the basic flow is: connect Windows clients, sync or import workflows, create tasks, run them manually or with Cron scheduling, and view results in execution records.
 
-Basic usage flow:
+#### Docker Compose Deployment
 
-1. Start BrowserFlow in Server mode.
-2. Open `http://<server-host>/client-agent` on a Windows client and keep it connected.
-3. Confirm that the execution node is online on the Clients page.
-4. Sync workflows from clients or import workflow files on the Workflow Management page.
-5. Create a task on the Task Configuration page, selecting workflow, parameters, and dispatch strategy.
-6. Run the task manually, or configure Cron for scheduled execution.
-7. View status, results, failure reasons, and result files on the Execution Records page.
+Server mode is recommended to run on a Linux server with `docker compose` starting BrowserFlow, PostgreSQL, Redis, and Nginx together. The current deployment flow builds the frontend and backend on the server first, then `docker-compose.yaml` mounts the compiled backend binary and Server configuration.
 
-#### Source Run
+Prepare the server with:
 
-Running from source is suitable for development, testing, and custom deployments. Example flow, with detailed configuration to be added later:
+- Linux server.
+- Git.
+- Go 1.25+.
+- Node.js and npm.
+- Docker and Docker Compose.
+
+Clone the source:
 
 ```bash
 git clone https://github.com/Zany2/browserflow.git
 cd browserflow
 ```
 
-Configure runtime mode and database connections:
+Build the frontend and move the output into the backend embed directory:
 
-```yaml
-app:
-  mode: "server"
+```bash
+cd frontend
+npm install
+npm run build
 
-database:
-  default:
-    link: "pgsql:USER:PASSWORD@tcp(HOST:5432)/browserflow"
-
-redis:
-  default:
-    address: "HOST:6379"
-    db: 0
-    pass: ""
+cd ..
+mkdir -p backend/internal/web/dist
+mv frontend/dist/* backend/internal/web/dist/
 ```
 
-Start the backend:
+Build the Linux backend executable:
+
+```bash
+cd backend
+go build -o browserflow .
+cd ..
+```
+
+Start Server mode:
+
+```bash
+docker compose up -d
+```
+
+Default access URL:
+
+```text
+http://SERVER_IP:8001
+```
+
+The current `docker-compose.yaml` starts:
+
+- `postgres`: PostgreSQL, loading `backend/sql/public.sql` on first startup to initialize tables.
+- `redis`: Redis with AOF persistence enabled and `browserflow` as the example password.
+- `browserflow`: BrowserFlow Server, mounting the `backend/browserflow` executable and `deploy/server/config.yaml`.
+- `nginx`: the public HTTP entry point, proxying frontend pages, APIs, and WebSocket traffic.
+
+Deployment files:
+
+- `docker-compose.yaml`: Server mode container orchestration.
+- `deploy/server/config.yaml`: Server backend configuration for PostgreSQL, Redis, logs, and WebSocket.
+- `deploy/nginx/browserflow.conf`: Nginx reverse proxy configuration.
+
+After changing frontend or backend code, rebuild the frontend, move `dist`, rebuild `backend/browserflow`, then restart services:
+
+```bash
+docker compose restart browserflow nginx
+```
+
+Stop services:
+
+```bash
+docker compose down
+```
+
+Before production deployment, update the PostgreSQL password, Redis password, `frontend.url`, Nginx `server_name`, and related settings in `docker-compose.yaml` and `deploy/server/config.yaml`.
+
+#### Source Run
+
+Running from source is better suited for development, testing, and custom deployments. Use `deploy/server/config.yaml` as a reference for Server mode, PostgreSQL, and Redis configuration:
+
+```bash
+git clone https://github.com/Zany2/browserflow.git
+cd browserflow
+```
+
+Configure Server mode, PostgreSQL, and Redis, then start the backend:
 
 ```bash
 cd backend
@@ -150,21 +235,6 @@ npm install
 npm run dev
 ```
 
-#### Docker Run
-
-Docker deployment is suitable for quickly starting Server mode. Image names, environment variables, and `docker compose` examples will be added later:
-
-```bash
-docker run --name browserflow-server \
-  -p 8001:8001 \
-  -e BROWSERFLOW_MODE=server \
-  -e BROWSERFLOW_DATABASE_URL=pgsql://USER:PASSWORD@HOST:5432/browserflow \
-  -e BROWSERFLOW_REDIS_ADDR=HOST:6379 \
-  browserflow/server:latest
-```
-
-A `docker compose` example will also be provided for starting BrowserFlow, PostgreSQL, and Redis together.
-
 ## Project Structure
 
 ```text
@@ -172,6 +242,7 @@ browserflow/
 |-- backend/                         GoFrame backend service
 |   |-- api/                         GoFrame API request/response definitions
 |   |-- internal/                    Controllers, service registration, models, and business logic
+|   |   `-- web/                     Embedded frontend static asset entry
 |   |-- manifest/config/             Backend configuration files
 |   |-- middleware/                  HTTP middleware
 |   |-- sql/                         Database initialization and schema scripts
@@ -194,9 +265,13 @@ browserflow/
 |   `-- winres/                      Windows executable resource configuration
 |-- docs/                            Project documentation and image assets
 |-- docs/images/                     README and documentation images
+|-- deploy/                          Server mode deployment configuration
+|   |-- nginx/                       Nginx reverse proxy configuration
+|   `-- server/                      Server backend configuration
 |-- third_party/automa/              Local Automa source snapshot and BrowserFlow changes
 |-- workflows/                       Example Automa workflow files
 |-- .agents/                         Project-local coding-agent skills and configuration
+|-- docker-compose.yaml              Server mode Docker Compose deployment file
 |-- go.work                          Go workspace
 |-- LICENSE                          Open-source license
 |-- README.md                        English README

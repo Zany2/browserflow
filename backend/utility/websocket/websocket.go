@@ -860,7 +860,7 @@ func (ws *WsHandlerFunc) OnOpen(client *Client) {
 	ws.ClientCtxCancel[client.ConnectionID()] = cancel
 	ws.mu.Unlock()
 
-	g.Log().Line().Infof(client.Ctx, "WebSocket connected: connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
+	//g.Log().Line().Warningf(client.Ctx, "WebSocket connected: connection_id=%s client_ip=%s", client.ConnectionID(), client.ClientIP())
 }
 
 // OnClose handle websocket close.

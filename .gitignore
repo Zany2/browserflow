@@ -4,6 +4,8 @@ learn/node_modules/
 
 # Frontend build output
 dist/
+!backend/internal/web/dist/
+!backend/internal/web/dist/index.html
 dist-ssr/
 learn/dist/
 learn/dist-ssr/
@@ -70,6 +72,7 @@ build/
 .gocache/
 backend/.gocache/
 *.exe
+backend/browserflow
 *.dll
 *.so
 *.dylib

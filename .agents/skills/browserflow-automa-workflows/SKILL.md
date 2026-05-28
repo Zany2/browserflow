@@ -27,13 +27,18 @@ Use this Skill with a compact workflow-call loop:
 4. Call the run API with the exported `browser_id` and the exact `variables` object.
 5. For sync runs, read returned variables, table data, status, and errors before answering.
 
+Fast default for data questions: use sync mode with `wait_result:true`, `timeout:300`, and `return_data.variables:["browserflow_output"]`. Add `return_data.include_table:true` only when the user asks for table rows or tabular output.
+
 ## Skill Map
 
 - `Lightweight Preflight Strategy`: when to verify backend and agent status.
 - `Required Step-By-Step Procedure`: required order before running a workflow.
+- `Fast Call Decision Table`: how to choose async, sync, variables, and table output.
+- `Run Request Parameter Reference`: exact request fields and meanings.
 - `Parameter Rules`: how to pass trigger parameters through `variables`.
 - `Workflow Listing Response Rules`: how to explain available workflows to users.
 - `Execution Mode Rules`: async submit vs sync result mode.
+- `All API Parameter Reference`: complete request fields, variables, and allowed values.
 - `API Endpoints`: reusable HTTP examples.
 - `Available Workflows`: workflow IDs, parameters, and per-workflow examples.
 
@@ -81,6 +86,126 @@ Always work in this order. Do not run or open a workflow until the needed checks
 5. Execute only after steps 1-4 pass. If any check fails, stop and report the exact reason instead of calling the run API.
 6. For sync runs, inspect the execution result before answering. For async runs, return the `execution_id` and explain that status can be queried later.
 
+## Fast Call Decision Table
+
+Use this table to avoid overthinking the request mode.
+
+| User intent | Request mode | Required payload choices | What to tell the user |
+|---|---|---|---|
+| Start/run/trigger only | Async submit | `wait_result:false` | Return `execution.execution_id`; no final output is available yet. |
+| Search/get/query/extract/return data | Sync result | `wait_result:true`, `timeout:300`, `return_data.variables:["browserflow_output"]` | Wait for final status and report returned output or readable error. |
+| Need table rows | Sync result with table | Add `return_data.include_table:true` and `table_limit` | Read returned table data or report where the table result is stored. |
+| User asks status of previous run | Status query | Call `/workflows/executions/{execution_id}` | Do not rerun the workflow unless the user asks. |
+| Missing required parameter | Ask before calling | Do not send placeholder values for required fields | Ask for only the missing values. |
+
+## Run Request Parameter Reference
+
+The run API is `POST /workflows/{workflow_id}/run`. Build the JSON body with these fields:
+
+| Field | Type | Required | Meaning | Example |
+|---|---|---|---|---|
+| `browser_id` | string | yes | Browser instance that exported this Skill. Keep the exact exported value unless the user confirms another browser owns the same workflow. | `browser_...` |
+| `variables` | object | yes | Trigger parameter object. Keys must exactly match each workflow's `Parameters` section. | `{"key_word":"ai智能体"}` |
+| `wait_result` | boolean | yes | `false` submits only; `true` waits for final completion or timeout. | `true` |
+| `timeout` | number | no | Maximum wait seconds for sync mode. Use `300` by default unless the user asks otherwise. | `300` |
+| `return_data` | object | no | Controls which workflow outputs are returned in sync mode. | `{"variables":["browserflow_output"]}` |
+| `return_data.variables` | string array | no | Automa variables to return. Use `browserflow_output` for normal data-returning workflows. | `["browserflow_output"]` |
+| `return_data.include_table` | boolean | no | Return table output when the user asks for table rows or tabular data. | `true` |
+| `return_data.table_limit` | number | no | Maximum table rows to include directly. | `20` |
+| `return_data.include_history` | boolean | no | Include execution history details. Usually false for speed. | `false` |
+
+Do not invent variables. If a workflow has no parameter named `keyword`, do not send `keyword`; use the exact listed key such as `key_word`.
+
+## All API Parameter Reference
+
+Use this as the complete parameter reference for the Windows/browser-agent Automa workflow Skill. Keep field names exactly as shown.
+
+### Shared Variables And Response Rules
+
+| Variable / concept | Available values | Meaning |
+|---|---|---|
+| Workflow trigger parameters | Keys listed under each workflow's `Parameters` section | Pass them through `variables` in Windows/agent mode or `params` in Server mode. Do not invent keys or send placeholders for required values. |
+| Parameter types | `string`, `number`, `json`, `checkbox`/boolean | Send JSON values matching the declared type. For `json`, send an object or array; for checkbox/boolean, send `true` or `false`. |
+| `browserflow_output` | Automa variable name | Recommended standard output variable. Workflows must set this variable if the model should read a returned value. |
+| `wait_result` | `false`, `true` | `false` dispatches only. `true` waits for final success/error/stopped/timeout and can return variables/table data. |
+| `timeout` | Positive integer seconds | Maximum sync wait time. Exported examples recommend `300` seconds. |
+| `return_data.variables` | `browserflow_output` or custom Automa variable names | Controls which Automa variables should be returned after sync execution. |
+| `return_data.include_table` | `true`, `false` | Return table output when the user asks for rows, table data, list data, or tabular results. |
+| `return_data.table_limit` | Positive integer rows | Caps directly returned table rows. Use a small value for summaries and a larger value when the user asks for all visible rows. |
+| `return_data.include_history` | `true`, `false` | Include detailed execution history only for debugging or auditing. Keep false for normal data requests. |
+| Execution statuses | `queued`, `running`, `success`, `error`, `stopped`, `timeout` | Treat `queued`/`running` as incomplete. Treat `success` as completed. Report readable errors for `error`, `stopped`, or `timeout`. |
+| Browser target | Exported `browser_id` | Use the browser id embedded in this Skill. Change it only after user confirms the same workflow exists in another browser instance. |
+| Windows result location | `result`, `execution.result`, execution detail | Read immediate `result.data.variables`, then `execution.result.data.variables`, then `/workflows/executions/{execution_id}`. |
+
+### Runtime preflight
+
+- Route: GET `/app/runtime`
+- Notes: No parameters. Confirms the backend is reachable and reports runtime mode.
+- Parameters: none.
+
+### Agent status
+
+- Route: GET `/agents/status`
+- Notes: No parameters. Use this to find an online agent whose `browser_id` matches this exported Skill and to confirm Automa is installed.
+- Parameters: none.
+
+### List agent workflows
+
+- Route: GET `/workflows/agent/workflows`
+- Notes: Lists workflows from one connected browser-agent.
+
+| Field | Type | Location | Required | Meaning | Available values / variables | Example |
+|---|---|---|---|---|---|---|
+| `browser_id` | `string` | query | no | Browser instance ID to inspect. Use the exported Browser Instance ID when available. | A BrowserFlow browser id such as `browser_...`. Empty means backend may use the current/default agent context. | `browser_1tgxl...` |
+
+### Export agent workflow Skill
+
+- Route: POST `/workflows/agent/export/skill`
+- Notes: Exports a Windows/browser-agent workflow Skill. This is normally used by BrowserFlow UI, not by the model during workflow execution.
+
+| Field | Type | Location | Required | Meaning | Available values / variables | Example |
+|---|---|---|---|---|---|---|
+| `browser_id` | `string` | body | no | Browser instance ID whose detected workflows should be exported. | A BrowserFlow browser id such as `browser_...`. | `browser_1tgxl...` |
+| `scope` | `string` | body | no | Export range. Default is `filtered`. | `selected`: export only selected workflow IDs; `filtered`: export the current filtered list; `all`: export all detected workflows. | `filtered` |
+| `workflow_ids` | `array<string>` | body | conditional | Workflow IDs used by `selected` and filtered exports. | Automa workflow IDs exactly as listed in the UI/export data. | `["7KKfW4mVvDFBGux2kMgft"]` |
+
+### Run workflow
+
+- Route: POST `/workflows/{workflow_id}/run`
+- Notes: Runs a detected workflow through the browser-agent. Use async for submit-only tasks and sync when the user needs final data or status.
+
+| Field | Type | Location | Required | Meaning | Available values / variables | Example |
+|---|---|---|---|---|---|---|
+| `workflow_id` | `string` | path | yes | Workflow ID from the `Available Workflows` section. | Automa workflow ID. Keep it exact. | `7KKfW4mVvDFBGux2kMgft` |
+| `browser_id` | `string` | body | yes | Browser instance that exported this Skill and owns the workflow. | A BrowserFlow browser id such as `browser_...`. Do not replace it unless the user confirms another browser owns the same workflow. | `browser_1tgxl...` |
+| `variables` | `object` | body | yes | Trigger parameter object passed to Automa. | Keys must exactly match the workflow `Parameters` section. Values follow each parameter type: string, number, JSON object/array, or boolean. | `{"key_word":"ai智能体"}` |
+| `wait_result` | `boolean` | body | yes | Execution mode. | `false`: submit only and return `execution.execution_id`; `true`: wait for final status or timeout. | `true` |
+| `timeout` | `number` | body | no | Maximum wait seconds when `wait_result` is true. Default recommendation is 300. | Positive integer seconds. | `300` |
+| `return_data` | `object` | body | no | Returned data configuration for sync runs. | Use when the user needs workflow output, variables, table rows, or history. | `{"variables":["browserflow_output"],"include_table":true}` |
+| `return_data.variables` | `array<string>` | body | no | Automa variable names to return. | `browserflow_output`: recommended standard variable for workflow output; any custom Automa variable name created by the workflow may also be listed. | `["browserflow_output"]` |
+| `return_data.include_table` | `boolean` | body | no | Whether to return Automa table data. | `true` when the user asks for rows/table/list data stored as table output; otherwise `false` for speed. | `false` |
+| `return_data.table_limit` | `number` | body | no | Maximum table rows to include directly. | Positive integer row count. Use 20 for concise answers, 100 when the user requests all visible rows. | `20` |
+| `return_data.include_history` | `boolean` | body | no | Whether to include workflow execution history details. | `true` only for debugging/auditing; normally `false`. | `false` |
+
+### Query workflow execution
+
+- Route: GET `/workflows/executions/{execution_id}`
+- Notes: Queries a previous Windows/browser-agent workflow execution.
+
+| Field | Type | Location | Required | Meaning | Available values / variables | Example |
+|---|---|---|---|---|---|---|
+| `execution_id` | `string` | path | yes | Execution ID returned by an async or sync run response. | Value from `execution.execution_id`. | `exec_...` |
+
+### Open workflow editor
+
+- Route: POST `/workflows/{workflow_id}/open`
+- Notes: Opens the workflow editor in the browser-agent. Use only when the user wants to inspect/edit the workflow, not for normal execution.
+
+| Field | Type | Location | Required | Meaning | Available values / variables | Example |
+|---|---|---|---|---|---|---|
+| `workflow_id` | `string` | path | yes | Workflow ID from the `Available Workflows` section. | Automa workflow ID. Keep it exact. | `7KKfW4mVvDFBGux2kMgft` |
+| `browser_id` | `string` | body | yes | Browser instance that should open the workflow editor. | A BrowserFlow browser id such as `browser_...`. | `browser_1tgxl...` |
+
 ## Parameter Rules
 
 Before running a workflow, inspect its `Parameters` section. If a required parameter has no value, ask the user for it before calling the API. If an optional parameter has a default value, use the default unless the user provides another value. Pass parameters through the `variables` object, and keep parameter names exactly as listed in this skill. BrowserFlow treats this `variables` object as the completed parameter set and instructs Automa not to open its own parameter input page.
@@ -104,6 +229,15 @@ When the user asks what workflows are available, do not only list names and IDs.
 - Explain table output only when needed: set `return_data.include_table` to `true` and choose a `table_limit`.
 - If the user wants to start a workflow without waiting, use async submit mode. If the user wants final data, search results, extracted content, success/failure, or returned variables, use sync result mode.
 - Reply in the user's language, but keep API field names exactly as written.
+
+Suggested wording when listing workflows:
+
+```text
+This workflow can be called in two ways:
+- Async submit: starts the workflow with wait_result=false and returns execution_id only.
+- Sync result: waits up to 300 seconds with wait_result=true. Use return_data.variables=["browserflow_output"] for returned data, and include_table=true when table rows are needed.
+Required parameters: ... Optional parameters: ...
+```
 
 ## Execution Mode Rules
 

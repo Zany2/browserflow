@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -91,6 +92,73 @@ func TestEnsureGeneratesWindowsConfigInExeDir(t *testing.T) {
 	})
 }
 
+func TestEnsureGeneratesWindowsConfigWithPort(t *testing.T) {
+	withTempWorkspace(t, func(root, exeDir string) {
+		runtimeGOOS = "windows"
+		osArgs = []string{"browserflow", "--port", "8080"}
+		if err := Ensure(); err != nil {
+			t.Fatalf("Ensure() error = %v", err)
+		}
+
+		configPath := filepath.Join(exeDir, configFileName)
+		content, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatalf("ReadFile() error = %v", err)
+		}
+		if !strings.Contains(string(content), `address: ":8080"`) {
+			t.Fatalf("generated config does not contain port 8080:\n%s", string(content))
+		}
+		if address := g.Cfg().MustGet(context.Background(), "server.address", "").String(); address != ":8080" {
+			t.Fatalf("server.address = %q, want :8080", address)
+		}
+		if frontendURL := g.Cfg().MustGet(context.Background(), "frontend.url", "").String(); frontendURL != "http://127.0.0.1:8080" {
+			t.Fatalf("frontend.url = %q, want http://127.0.0.1:8080", frontendURL)
+		}
+		_ = root
+	})
+}
+
+func TestEnsurePortOverridesExistingConfig(t *testing.T) {
+	withTempWorkspace(t, func(root, exeDir string) {
+		runtimeGOOS = "windows"
+		osArgs = []string{"browserflow", "--port=9000"}
+		writeFile(t, filepath.Join(root, configFileName), `server:
+  address: ":8001"
+frontend:
+  url: "http://127.0.0.1:8001"
+app:
+  mode: "windows"
+`)
+
+		if err := Ensure(); err != nil {
+			t.Fatalf("Ensure() error = %v", err)
+		}
+		if address := g.Cfg().MustGet(context.Background(), "server.address", "").String(); address != ":9000" {
+			t.Fatalf("server.address = %q, want :9000", address)
+		}
+		if frontendURL := g.Cfg().MustGet(context.Background(), "frontend.url", "").String(); frontendURL != "http://127.0.0.1:9000" {
+			t.Fatalf("frontend.url = %q, want http://127.0.0.1:9000", frontendURL)
+		}
+		if existsFile(filepath.Join(exeDir, configFileName)) {
+			t.Fatalf("unexpected generated config at exe dir")
+		}
+	})
+}
+
+func TestEnsureRejectsInvalidPort(t *testing.T) {
+	withTempWorkspace(t, func(root, exeDir string) {
+		runtimeGOOS = "windows"
+		osArgs = []string{"browserflow", "--port", "70000"}
+		if err := Ensure(); err == nil {
+			t.Fatalf("Ensure() error = nil, want invalid port error")
+		}
+		if existsFile(filepath.Join(exeDir, configFileName)) {
+			t.Fatalf("unexpected generated config at exe dir")
+		}
+		_ = root
+	})
+}
+
 func TestEnsureSkipsNonWindows(t *testing.T) {
 	withTempWorkspace(t, func(root, exeDir string) {
 		runtimeGOOS = "linux"
@@ -121,6 +189,7 @@ func withTempWorkspace(t *testing.T, fn func(root, exeDir string)) {
 	}
 	oldExecutableDirFunc := executableDirFunc
 	oldRuntimeGOOS := runtimeGOOS
+	oldOsArgs := osArgs
 	resetConfig(t)
 
 	if err = os.Chdir(root); err != nil {
@@ -134,6 +203,7 @@ func withTempWorkspace(t *testing.T, fn func(root, exeDir string)) {
 		_ = os.Chdir(oldDir)
 		executableDirFunc = oldExecutableDirFunc
 		runtimeGOOS = oldRuntimeGOOS
+		osArgs = oldOsArgs
 		resetConfig(t)
 	})
 

@@ -113,11 +113,15 @@ func (b *BoltDB) SaveLLMConfig(config *model.LLMConfig) error {
 	}
 
 	return b.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(llmConfigsBucket)
 		data, err := json.Marshal(config)
 		if err != nil {
 			return err
 		}
-		return tx.Bucket(llmConfigsBucket).Put([]byte(config.ID), data)
+		if err = bucket.Put([]byte(config.ID), data); err != nil {
+			return err
+		}
+		return ensureDefaultLLMConfig(bucket)
 	})
 }
 
@@ -160,7 +164,11 @@ func (b *BoltDB) ListLLMConfigs() ([]*model.LLMConfig, error) {
 // DeleteLLMConfig deletes large model config 删除大模型配置
 func (b *BoltDB) DeleteLLMConfig(id string) error {
 	return b.db.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket(llmConfigsBucket).Delete([]byte(id))
+		bucket := tx.Bucket(llmConfigsBucket)
+		if err := bucket.Delete([]byte(id)); err != nil {
+			return err
+		}
+		return ensureDefaultLLMConfig(bucket)
 	})
 }
 
@@ -209,6 +217,57 @@ func (b *BoltDB) GetDefaultLLMConfig() (*model.LLMConfig, error) {
 		return nil, errors.New("no active llm config")
 	}
 	return firstActive, nil
+}
+
+func ensureDefaultLLMConfig(bucket *bolt.Bucket) error {
+	hasDefault := false
+	var fallbackKey []byte
+	var fallbackConfig *model.LLMConfig
+	if err := bucket.ForEach(func(k, v []byte) error {
+		var config model.LLMConfig
+		if err := json.Unmarshal(v, &config); err != nil {
+			return err
+		}
+		if !config.IsActive {
+			return nil
+		}
+		if config.IsDefault {
+			if !hasDefault {
+				hasDefault = true
+				return nil
+			}
+			config.IsDefault = false
+			config.UpdatedAt = time.Now()
+			data, err := json.Marshal(&config)
+			if err != nil {
+				return err
+			}
+			return bucket.Put(k, data)
+		}
+		if hasDefault {
+			return nil
+		}
+		if fallbackConfig == nil || config.CreatedAt.After(fallbackConfig.CreatedAt) {
+			fallbackKey = append([]byte(nil), k...)
+			fallbackConfig = &config
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if fallbackConfig == nil {
+		return nil
+	}
+	if hasDefault {
+		return nil
+	}
+	fallbackConfig.IsDefault = true
+	fallbackConfig.UpdatedAt = time.Now()
+	data, err := json.Marshal(fallbackConfig)
+	if err != nil {
+		return err
+	}
+	return bucket.Put(fallbackKey, data)
 }
 
 // SaveChatSession saves chat session 保存对话会话

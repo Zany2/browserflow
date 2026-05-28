@@ -25,5 +25,13 @@ func (c *ControllerV1) ChatSessionDetail(ctx context.Context, req *v1.ChatSessio
 	if err != nil {
 		return nil, err
 	}
+	if session.LLMConfigID != "" {
+		config, configErr := db.GetLLMConfig(session.LLMConfigID)
+		if configErr == nil {
+			session.LLMName = config.Name
+			session.LLMProvider = config.Provider
+			session.LLMModel = config.Model
+		}
+	}
 	return &v1.ChatSessionDetailRes{Session: session}, nil
 }

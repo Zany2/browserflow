@@ -687,7 +687,7 @@ async function handleExportExecutorSkill() {
   try {
     // Export Skill downloads static browser-control instructions 导出静态浏览器控制 Skill
     const blob = await exportBrowserExecutorSkill()
-    downloadBlob(blob, 'SKILL.md')
+    downloadBlob(blob, 'browserflow-browser-executor.zip')
     appMessage({
       type: APP_MESSAGE_TYPE.success,
       message: '浏览器控制 Skill 已导出'

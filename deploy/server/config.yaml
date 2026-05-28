@@ -1,0 +1,63 @@
+# BrowserFlow Server deployment configuration. BrowserFlow Server 部署配置。
+
+# -----------------------------------------------------------------------------
+# Common server settings. 通用服务配置。
+# -----------------------------------------------------------------------------
+
+server:
+  address: ":8001"             # HTTP listen address inside the container. 容器内 HTTP 服务监听地址。
+  name: backend                # Server name used by GoFrame. GoFrame 服务名称。
+  clientMaxBodySize: 0         # Maximum request body size; 0 means no explicit limit. 请求体最大大小，0 表示不额外限制。
+  # openapiPath: "/web.json"     # OpenAPI document path. OpenAPI 文档访问路径。
+  # swaggerPath: "/swagger"      # Swagger UI path. Swagger UI 访问路径。
+
+app:
+  mode: "server"               # Runtime mode for centralized dispatch. Server 集中调度模式。
+
+logger:
+  path:                  "./logs/"             # Log file path; mounted to browserflow_logs volume. 日志文件路径，会挂载到 browserflow_logs 数据卷。
+  file:                  "{Y-m-d}.log"         # Log file format. 日志文件格式。
+  prefix:                ""                    # Log line prefix. 日志内容输出前缀。
+  level:                 "ALL"                 # Log output level. 日志输出级别。
+  timeFormat:            "2006-01-02 15:04:05" # Log time format using the Go standard layout. 自定义日志时间格式，使用 Golang 标准时间格式。
+  ctxKeys:               []                    # Context keys automatically printed into logs. 自定义 Context 变量名称，自动打印到日志中。
+  header:                true                  # Whether to print log header information. 是否打印日志头信息。
+  stdout:                true                  # Whether to also output logs to container stdout. 日志是否同时输出到容器标准输出。
+  rotateSize:            "20M"                 # Rotate logs by file size; 0 disables size rotation. 按日志文件大小滚动切分，0 表示关闭。
+  rotateExpire:          "1d"                  # Rotate logs by time interval; 0 disables time rotation. 按日志文件时间间隔滚动切分，0 表示关闭。
+  rotateBackupLimit:     7                     # Cleanup by rotated file count when rotation is enabled. 滚动切分开启时，按切分文件数量清理备份。
+  rotateBackupExpire:    0                     # Cleanup by rotated file age when rotation is enabled. 滚动切分开启时，按切分文件有效期清理备份。
+  rotateBackupCompress:  0                     # Compression level for rotated files, 0-9; 0 disables compression. 滚动切分文件压缩比 0-9，0 表示不压缩。
+  rotateCheckInterval:   "1h"                  # Rotation check interval. 滚动切分检测间隔。
+  stdoutColorDisabled:   false                 # Disable terminal color output. 关闭终端颜色输出。
+  writerColorEnable:     false                 # Enable color output in log files. 日志文件是否带颜色。
+
+frontend:
+  url: "http://localhost:8001"  # Public frontend URL used by generated links and client-agent URLs. 对外访问地址，用于生成链接和 client-agent 地址。
+
+websocket:
+  heartbeatInterval: 15         # Heartbeat send interval in seconds. 心跳发送间隔，单位秒。
+  heartbeatTimeout: 45          # Heartbeat timeout in seconds. 心跳超时时间，单位秒。
+  writeWait: 10                 # WebSocket write timeout in seconds. WebSocket 写入超时时间，单位秒。
+  messageBuffer: 64             # Outbound message buffer size per connection. 单连接发送消息缓冲区大小。
+  bucketCount: 32               # Connection bucket count used by the WebSocket manager. WebSocket 管理器连接分桶数量。
+  maxConn: 10000                # Maximum WebSocket connection count. WebSocket 最大连接数。
+
+# -----------------------------------------------------------------------------
+# Server mode data sources. Server 模式数据源配置。
+# -----------------------------------------------------------------------------
+
+database:
+  logger:
+    path: "./logs/sql"          # SQL log file path. SQL 日志文件路径。
+    level: "all"                # SQL log output level. SQL 日志输出级别。
+    stdout: true                # Whether to also output SQL logs to container stdout. SQL 日志是否同时输出到容器标准输出。
+  default:
+    link: "pgsql:browserflow:browserflow@tcp(postgres:5432)/browserflow" # PostgreSQL connection string for docker-compose deployment. docker-compose 部署下的 PostgreSQL 连接字符串。
+    debug: false                # Whether to enable database debug SQL output. 是否开启数据库调试 SQL 输出。
+
+redis:
+  default:
+    address: "redis:6379"       # Redis service address in docker-compose network. docker-compose 网络中的 Redis 服务地址。
+    db: 0                       # Redis database index. Redis 数据库编号。
+    pass: "browserflow"         # Redis password; must match docker-compose redis --requirepass. Redis 密码，需与 docker-compose 中的 --requirepass 保持一致。
