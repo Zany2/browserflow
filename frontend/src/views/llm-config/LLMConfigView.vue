@@ -391,6 +391,8 @@ function handleProviderChange() {
 }
 
 async function handleSaveConfig() {
+  if (!validateConfigForm()) return
+
   saving.value = true
   try {
     const isCreate = !configForm.id
@@ -409,6 +411,8 @@ async function handleSaveConfig() {
 }
 
 async function handleTestConfig() {
+  if (!validateConfigForm()) return
+
   testing.value = true
   try {
     const data = await testLLMConfig(buildPayload())
@@ -611,15 +615,45 @@ function buildPayload() {
   return buildConfigPayload(configForm)
 }
 
+function validateConfigForm() {
+  const name = String(configForm.name || '').trim()
+  const provider = String(configForm.provider || '').trim()
+  const model = String(configForm.model || '').trim()
+  const baseURL = String(configForm.base_url || '').trim()
+  const apiKey = String(configForm.api_key || '').trim()
+
+  if (!name) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请输入配置名称' })
+    return false
+  }
+  if (!provider) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请选择模型提供商' })
+    return false
+  }
+  if (!model) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请输入模型名称' })
+    return false
+  }
+  if (!baseURL) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请输入 Base URL' })
+    return false
+  }
+  if (provider !== 'ollama' && !apiKey) {
+    appMessage({ type: APP_MESSAGE_TYPE.warning, message: '请输入 API Key' })
+    return false
+  }
+  return true
+}
+
 function buildConfigPayload(config, overrides = {}) {
   const nextConfig = { ...config, ...overrides }
   return {
     id: nextConfig.id,
-    name: nextConfig.name,
-    provider: nextConfig.provider,
-    api_key: nextConfig.api_key,
-    model: nextConfig.model,
-    base_url: nextConfig.base_url,
+    name: String(nextConfig.name || '').trim(),
+    provider: String(nextConfig.provider || '').trim(),
+    api_key: String(nextConfig.api_key || '').trim(),
+    model: String(nextConfig.model || '').trim(),
+    base_url: String(nextConfig.base_url || '').trim(),
     is_default: Boolean(nextConfig.is_default),
     is_active: Boolean(nextConfig.is_active)
   }

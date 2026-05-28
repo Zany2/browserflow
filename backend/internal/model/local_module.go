@@ -41,6 +41,9 @@ type ChatMessage struct {
 type ChatSession struct {
 	ID          string        `json:"id"`
 	LLMConfigID string        `json:"llm_config_id"`
+	LLMName     string        `json:"llm_name,omitempty"`
+	LLMProvider string        `json:"llm_provider,omitempty"`
+	LLMModel    string        `json:"llm_model,omitempty"`
 	Messages    []ChatMessage `json:"messages"`
 	CreatedAt   time.Time     `json:"created_at"`
 	UpdatedAt   time.Time     `json:"updated_at"`

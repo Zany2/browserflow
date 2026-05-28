@@ -19,21 +19,25 @@ func (c *ControllerV1) ChatSessionCreate(ctx context.Context, req *v1.ChatSessio
 	}
 
 	configID := strings.TrimSpace(req.LLMConfigID)
+	var config *model.LLMConfig
 	if configID == "" {
 		// Use default model config when request omits one 未指定配置时使用默认大模型配置
-		config, err := db.GetDefaultLLMConfig()
+		config, err = db.GetDefaultLLMConfig()
 		if err != nil {
 			return nil, err
 		}
 		configID = config.ID
 	} else {
-		if _, err = db.GetLLMConfig(configID); err != nil {
+		if config, err = db.GetLLMConfig(configID); err != nil {
 			return nil, err
 		}
 	}
 	session := &model.ChatSession{
 		ID:          "chat_" + guid.S(),
 		LLMConfigID: configID,
+		LLMName:     config.Name,
+		LLMProvider: config.Provider,
+		LLMModel:    config.Model,
 		Messages:    []model.ChatMessage{},
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),

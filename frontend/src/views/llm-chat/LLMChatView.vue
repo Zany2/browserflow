@@ -55,6 +55,15 @@
             @change="(checked) => handleToggleSession(session.id, checked)"
           />
           <span class="session-title">{{ getSessionTitle(session) }}</span>
+          <el-tooltip
+            :content="getSessionModelLabel(session)"
+            placement="top"
+            :show-after="300"
+          >
+            <span class="session-model">{{
+              getSessionModelLabel(session)
+            }}</span>
+          </el-tooltip>
           <span class="session-meta">
             <span>{{ session.messages?.length || 0 }} 条消息</span>
           </span>
@@ -80,6 +89,18 @@
     </aside>
 
     <main class="chat-panel windows-workspace-panel--stack">
+      <header v-if="currentSession" class="chat-header">
+        <div class="chat-header-title">{{ getSessionTitle(currentSession) }}</div>
+        <el-tooltip
+          :content="getSessionModelLabel(currentSession)"
+          placement="top"
+          :show-after="300"
+        >
+          <div class="chat-header-model">
+            {{ getSessionModelLabel(currentSession) }}
+          </div>
+        </el-tooltip>
+      </header>
       <div
         ref="messageListRef"
         class="message-list"
@@ -823,6 +844,13 @@ function getSessionTitle(session) {
   )
 }
 
+function getSessionModelLabel(session) {
+  const provider = getProviderName(session?.llm_provider)
+  return [provider, session?.llm_name, session?.llm_model]
+    .filter(Boolean)
+    .join(' / ') || '未知模型'
+}
+
 function getConfigLabel(config) {
   return [getProviderName(config.provider), config.name, config.model]
     .filter(Boolean)
@@ -1037,6 +1065,7 @@ function sleep(ms) {
 }
 
 .session-title,
+.session-model,
 .session-meta {
   display: block;
 }
@@ -1044,6 +1073,15 @@ function sleep(ms) {
 .session-title {
   overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-model {
+  overflow: hidden;
+  margin-top: 4px;
+  color: #606266;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1073,6 +1111,30 @@ function sleep(ms) {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+}
+
+.chat-header {
+  flex-shrink: 0;
+  padding: 12px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.chat-header-title {
+  overflow: hidden;
+  color: #303133;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-model {
+  overflow: hidden;
+  margin-top: 4px;
+  color: #606266;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-list {

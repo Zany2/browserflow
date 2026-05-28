@@ -48,6 +48,12 @@ func (c *ControllerV1) ChatMessageSend(ctx context.Context, req *v1.ChatMessageS
 		if configErr != nil {
 			err = configErr
 		} else {
+			if session.LLMConfigID != config.ID {
+				session.LLMConfigID = config.ID
+			}
+			session.LLMName = config.Name
+			session.LLMProvider = config.Provider
+			session.LLMModel = config.Model
 			userMessage := model.ChatMessage{
 				ID:        "msg_" + guid.S(),
 				SessionID: sessionID,

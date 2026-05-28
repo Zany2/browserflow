@@ -70,6 +70,9 @@ func (ws *WsHandlerFunc) handleDesktopChatSend(client *Client, in *model.WSReque
 			if configErr != nil {
 				sessionErr = configErr
 			} else {
+				session.LLMName = config.Name
+				session.LLMProvider = config.Provider
+				session.LLMModel = config.Model
 				userMessage := model.ChatMessage{
 					ID:        "msg_" + guid.S(),
 					SessionID: in.SessionID,
