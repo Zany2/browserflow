@@ -1,4 +1,4 @@
-﻿import NProgress from 'nprogress'
+import NProgress from 'nprogress'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import AutomaView from '@/views/automa/AutomaView.vue'
 import ClientView from '@/views/client/ClientView.vue'
@@ -100,7 +100,6 @@ const router = createRouter({
   routes,
 })
 
-let runtimeConfigPromise = null
 let runtimeConfig = {
   mode: '',
   disabled_routes: [],
@@ -109,26 +108,19 @@ let runtimeConfig = {
 
 // loadRuntimeConfig loads and caches runtime mode 加载并缓存运行模式
 async function loadRuntimeConfig() {
-  if (!runtimeConfigPromise) {
-    runtimeConfigPromise = getRuntimeConfig()
-      .then((config) => {
-        runtimeConfig = {
-          ...(config || runtimeConfig),
-          backend_available: true,
-        }
-        return runtimeConfig
-      })
-      .catch(() => {
-        runtimeConfigPromise = null
-        runtimeConfig = {
-          mode: '',
-          disabled_routes: [],
-          backend_available: false,
-        }
-        return runtimeConfig
-      })
+  try {
+    runtimeConfig = {
+      ...((await getRuntimeConfig()) || runtimeConfig),
+      backend_available: true,
+    }
+  } catch {
+    runtimeConfig = {
+      mode: '',
+      disabled_routes: [],
+      backend_available: false,
+    }
   }
-  return runtimeConfigPromise
+  return runtimeConfig
 }
 
 // Route progress handles route switching progress 路由切换进度条

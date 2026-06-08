@@ -33,49 +33,54 @@
         <AppSelectionSummary :count="selectedClientIds.length" unit="客户端" />
       </div>
 
-      <el-table ref="clientTableRef" v-loading="loading" class="client-table server-list-table adaptive-table"
+      <el-table ref="clientTableRef" v-loading="loading" class="client-table server-list-table"
         :data="pagedClients" border height="100%" :row-key="getClientId" empty-text="暂无客户端"
         @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
-        <el-table-column label="客户端 IP" width="130" show-overflow-tooltip>
+        <el-table-column label="客户端 IP" width="124" show-overflow-tooltip>
           <template #default="{ row }">{{ getClientIp(row) || '' }}</template>
         </el-table-column>
-        <el-table-column label="执行节点 ID" width="120" show-overflow-tooltip>
+        <el-table-column label="执行节点 ID" width="108" show-overflow-tooltip>
           <template #default="{ row }">{{ getNodeId(row) }}</template>
         </el-table-column>
-        <el-table-column label="客户端名称" min-width="120" show-overflow-tooltip>
+        <el-table-column label="客户端名称" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ getClientName(row) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100" align="center">
+        <el-table-column label="状态" width="74" align="center">
           <template #default="{ row }">
             <el-tag :type="getStatusTagType(row)" effect="plain">{{ getStatusText(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Automa 状态" width="120" align="center">
+        <el-table-column label="忙闲状态" width="96" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getBusyStatusTagType(row)" effect="plain">{{ getBusyStatusText(row) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="Automa 状态" width="104" align="center">
           <template #default="{ row }">
             <el-tag :type="getAutomaTagType(row)" effect="plain">{{ getAutomaStatusText(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Automa 版本" width="110" show-overflow-tooltip>
+        <el-table-column label="Automa 版本" width="96" show-overflow-tooltip>
           <template #default="{ row }">{{ getAutomaVersion(row) }}</template>
         </el-table-column>
-        <el-table-column label="浏览器" width="110" show-overflow-tooltip>
+        <el-table-column label="浏览器" width="82" show-overflow-tooltip>
           <template #default="{ row }">{{ getBrowserName(row) }}</template>
         </el-table-column>
-        <el-table-column label="浏览器版本" width="110" show-overflow-tooltip>
+        <el-table-column label="浏览器版本" width="102" show-overflow-tooltip>
           <template #default="{ row }">{{ getBrowserVersion(row) }}</template>
         </el-table-column>
-        <el-table-column label="是否拉黑" width="90" align="center">
+        <el-table-column label="是否拉黑" width="78" align="center">
           <template #default="{ row }">
             <el-tag :type="isBanned(row) ? 'danger' : 'success'" effect="plain">
               {{ isBanned(row) ? '是' : '否' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="最近心跳" width="160" class-name="nowrap-column">
+        <el-table-column label="最近心跳" width="166" class-name="nowrap-column">
           <template #default="{ row }">{{ formatDate(getLastActiveTime(row)) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="168" align="center">
+        <el-table-column label="操作" width="150" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
             <el-button v-if="!isBanned(row)" link type="warning" :disabled="isClientActionLoading(row)"
@@ -98,19 +103,24 @@
         :total="clients.length" />
     </section>
 
-    <AppDialog v-model="detailVisible" title="客户端详情" width="720px" class="client-detail-dialog" confirm-text="保存"
-      cancel-text="关闭" :loading="detailSaving" :confirm-disabled="detailLoading" @confirm="handleSaveDetail">
+    <AppDialog v-model="detailVisible" title="客户端详情" width="min(1040px, calc(100vw - 32px))"
+      class="client-detail-dialog" confirm-text="保存" cancel-text="关闭" :loading="detailSaving"
+      :confirm-disabled="detailLoading" @confirm="handleSaveDetail">
       <div v-loading="detailLoading" class="detail-form server-detail-form">
-        <div v-for="field in detailFields" :key="field.key" class="detail-field server-detail-field">
+        <div v-for="field in detailFields" :key="field.key" class="detail-field server-detail-field"
+          :class="{ 'detail-field--wide': field.type === 'textarea' }">
           <span class="detail-label server-detail-label">{{ field.label }}</span>
           <div class="detail-control server-detail-control">
-            <el-input v-if="field.type === 'textarea'" :model-value="field.value" disabled type="textarea" :rows="3" />
-            <el-input v-else-if="field.editable" v-model="detailForm[field.key]" clearable />
-            <el-input v-else :model-value="field.value" disabled />
-            <el-button v-if="!field.editable" :icon="CopyDocument" :disabled="!field.value"
-              @click="copyDetailValue(field.value)">
-              复制
-            </el-button>
+            <el-input v-if="field.editable" v-model="detailForm[field.key]" clearable />
+            <div v-else class="detail-value" :class="{ 'detail-value--textarea': field.type === 'textarea' }">
+              <span class="detail-text" :class="{ 'detail-text--empty': !field.value }">
+                {{ field.value || '' }}
+              </span>
+              <el-tooltip v-if="field.copyable && field.value" content="复制" placement="top">
+                <el-button class="detail-copy" text circle :icon="CopyDocument" :aria-label="`复制${field.label}`"
+                  @click="copyDetailValue(field.value)" />
+              </el-tooltip>
+            </div>
           </div>
         </div>
       </div>
@@ -177,29 +187,58 @@ const {
 } = useDebouncedAction(searchClientsNow, 200)
 
 const detailFields = computed(() => {
-  return [
-    { key: 'client_ip', label: '客户端 IP', value: formatEmpty(getClientIp(detailForm)) },
-    { key: 'node_id', label: '执行节点 ID', value: formatEmpty(detailForm.node_id) },
+  const fields = [
+    { key: 'client_ip', label: '客户端 IP', value: formatEmpty(getClientIp(detailForm)), copyable: true },
+    { key: 'client_id', label: '客户端 ID', value: formatEmpty(detailForm.client_id), hiddenWhenEmpty: true },
+    { key: 'client_name', label: '原始客户端名称', value: formatEmpty(detailForm.client_name), hiddenWhenEmpty: true },
+    { key: 'node_id', label: '执行节点 ID', value: formatEmpty(detailForm.node_id), copyable: true },
+    { key: 'node_index', label: '执行节点序号', value: formatEmpty(detailForm.node_index) },
+    { key: 'node_name', label: '执行节点名称', value: formatEmpty(detailForm.node_name), hiddenWhenEmpty: true },
+    { key: 'machine_id', label: '机器 ID', value: formatEmpty(detailForm.machine_id), hiddenWhenEmpty: true },
+    { key: 'machine_name', label: '机器名称', value: formatEmpty(detailForm.machine_name), hiddenWhenEmpty: true },
     { key: 'display_name', label: '客户端名称', value: formatEmpty(detailForm.display_name), editable: true },
     { key: 'hostname', label: '主机名', value: formatEmpty(detailForm.hostname) },
     { key: 'status', label: '客户端状态', value: getStatusText(detailForm) },
+    { key: 'busy_status', label: '节点忙闲状态', value: getBusyStatusText(detailForm) },
+    { key: 'current_execution_id', label: '当前执行 ID', value: formatEmpty(detailForm.current_execution_id) },
+    { key: 'current_task_record_id', label: '当前任务记录 ID', value: formatEmpty(detailForm.current_task_record_id) },
     { key: 'plugin_status', label: 'Automa 状态', value: getAutomaStatusText(detailForm) },
     { key: 'automa_version', label: 'Automa 版本', value: formatEmpty(getAutomaVersion(detailForm)) },
+    { key: 'worker_version', label: 'Worker 版本', value: formatEmpty(detailForm.worker_version) },
     { key: 'browser_name', label: '浏览器名称', value: formatEmpty(getBrowserName(detailForm)) },
     { key: 'browser_version', label: '浏览器版本', value: formatEmpty(getBrowserVersion(detailForm)) },
     { key: 'is_banned', label: '是否拉黑', value: isBanned(detailForm) ? '是' : '否' },
     { key: 'last_seen_at', label: '最近心跳/交互', value: formatDate(getLastActiveTime(detailForm)) },
-    { key: 'id', label: '服务端 ID', value: formatEmpty(detailForm.id) },
+    { key: 'id', label: '服务端 ID', value: formatEmpty(detailForm.id), copyable: true },
     { key: 'os_name', label: '操作系统', value: formatEmpty(detailForm.os_name) },
     { key: 'os_version', label: '系统版本', value: formatEmpty(detailForm.os_version) },
-    { key: 'user_agent', label: 'User-Agent', value: formatEmpty(detailForm.user_agent), type: 'textarea' },
+    { key: 'profile_dir', label: 'Profile 目录', value: formatEmpty(detailForm.profile_dir), type: 'textarea' },
+    { key: 'extension_dir', label: '扩展目录', value: formatEmpty(detailForm.extension_dir), type: 'textarea' },
+    {
+      key: 'capabilities_json',
+      label: '节点能力快照',
+      value: formatDetailJson(detailForm.capabilities_json),
+      type: 'textarea',
+    },
+    {
+      key: 'user_agent',
+      label: 'User-Agent',
+      value: formatEmpty(detailForm.user_agent),
+      type: 'textarea',
+      copyable: true,
+    },
     { key: 'ban_reason', label: '拉黑原因', value: formatEmpty(detailForm.ban_reason) },
     { key: 'first_seen_at', label: '首次连接时间', value: formatDate(detailForm.first_seen_at) },
     { key: 'connected_at', label: '连接时间', value: formatDate(detailForm.connected_at) },
     { key: 'disconnected_at', label: '断开时间', value: formatDate(detailForm.disconnected_at) },
+    { key: 'last_command_at', label: '最近命令下发', value: formatDate(detailForm.last_command_at) },
+    { key: 'last_workflow_sync_at', label: '最近工作流同步', value: formatDate(detailForm.last_workflow_sync_at) },
+    { key: 'last_lock_renewed_at', label: '最近执行锁续期', value: formatDate(detailForm.last_lock_renewed_at) },
     { key: 'created_at', label: '创建时间', value: formatDate(detailForm.created_at) },
     { key: 'updated_at', label: '更新时间', value: formatDate(detailForm.updated_at) },
   ]
+
+  return fields.filter((field) => !field.hiddenWhenEmpty || field.value)
 })
 
 onMounted(() => {
@@ -405,9 +444,16 @@ function createDetailForm() {
     machine_id: '',
     machine_name: '',
     node_id: '',
+    node_index: '',
     node_name: '',
+    worker_version: '',
+    profile_dir: '',
+    extension_dir: '',
     status: '',
     online: false,
+    busy_status: '',
+    current_execution_id: '',
+    current_task_record_id: '',
     plugin_status: '',
     automa_status: '',
     automa_installed: undefined,
@@ -418,6 +464,7 @@ function createDetailForm() {
     os_name: '',
     os_version: '',
     hostname: '',
+    capabilities_json: '',
     user_agent: '',
     banned: false,
     is_banned: false,
@@ -426,6 +473,9 @@ function createDetailForm() {
     last_seen_at: '',
     last_seen: '',
     last_heartbeat_time: '',
+    last_command_at: '',
+    last_workflow_sync_at: '',
+    last_lock_renewed_at: '',
     connected_at: '',
     disconnected_at: '',
     created_at: '',
@@ -444,9 +494,16 @@ function setDetailForm(row = {}) {
     machine_id: row.machine_id || row.machineId || '',
     machine_name: row.machine_name || row.machineName || '',
     node_id: row.node_id || row.nodeId || '',
+    node_index: row.node_index ?? row.nodeIndex ?? '',
     node_name: row.node_name || row.nodeName || '',
+    worker_version: row.worker_version || row.workerVersion || '',
+    profile_dir: row.profile_dir || row.profileDir || '',
+    extension_dir: row.extension_dir || row.extensionDir || '',
     status: row.status || '',
     online: Boolean(row.online),
+    busy_status: row.busy_status || row.busyStatus || '',
+    current_execution_id: row.current_execution_id || row.currentExecutionId || '',
+    current_task_record_id: row.current_task_record_id || row.currentTaskRecordId || '',
     plugin_status: row.plugin_status || row.pluginStatus || '',
     automa_status: row.automa_status || row.automaStatus || '',
     automa_installed: row.automa_installed ?? row.automaInstalled,
@@ -457,6 +514,7 @@ function setDetailForm(row = {}) {
     os_name: row.os_name || row.osName || '',
     os_version: row.os_version || row.osVersion || '',
     hostname: row.hostname || '',
+    capabilities_json: row.capabilities_json ?? row.capabilitiesJson ?? '',
     user_agent: row.user_agent || row.userAgent || '',
     banned: Boolean(row.banned),
     is_banned: Boolean(row.is_banned),
@@ -465,6 +523,9 @@ function setDetailForm(row = {}) {
     last_seen_at: row.last_seen_at || row.lastSeenAt || '',
     last_seen: row.last_seen || row.lastSeen || '',
     last_heartbeat_time: row.last_heartbeat_time || row.lastHeartbeatTime || '',
+    last_command_at: row.last_command_at || row.lastCommandAt || '',
+    last_workflow_sync_at: row.last_workflow_sync_at || row.lastWorkflowSyncAt || '',
+    last_lock_renewed_at: row.last_lock_renewed_at || row.lastLockRenewedAt || '',
     connected_at: row.connected_at || row.connectedAt || '',
     disconnected_at: row.disconnected_at || row.disconnectedAt || '',
     created_at: row.created_at || row.createdAt || '',
@@ -506,6 +567,21 @@ function getStatusTagType(row) {
   const status = getStatusText(row)
   if (status === '在线') return 'success'
   if (status === '已拉黑') return 'danger'
+  return 'info'
+}
+
+function getBusyStatusText(row) {
+  const status = row?.busy_status || row?.busyStatus || ''
+  if (status === 'idle') return '空闲'
+  if (status === 'busy') return '执行中'
+  if (status === 'unknown') return '未知'
+  return status || '未知'
+}
+
+function getBusyStatusTagType(row) {
+  const status = getBusyStatusText(row)
+  if (status === '空闲') return 'success'
+  if (status === '执行中') return 'warning'
   return 'info'
 }
 
@@ -562,6 +638,17 @@ function formatEmpty(value, fallback = '') {
   return formatBaseEmpty(value, fallback, { treatDashAsEmpty: true })
 }
 
+function formatDetailJson(value) {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
 function formatDate(value) {
   return formatBaseDate(value, { fallback: '' })
 }
@@ -592,6 +679,10 @@ async function copyDetailValue(value) {
   color: #606266;
 }
 
+.client-table {
+  width: 100%;
+}
+
 :deep(.client-table .cell),
 :deep(.client-table .cell *) {
   overflow: hidden !important;
@@ -610,8 +701,8 @@ async function copyDetailValue(value) {
 
 :deep(.client-table th .cell),
 :deep(.client-table th .cell *) {
-  overflow: visible !important;
-  text-overflow: clip !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   white-space: nowrap !important;
   word-break: keep-all;
 }
@@ -635,6 +726,78 @@ async function copyDetailValue(value) {
 
 .detail-field {
   grid-template-columns: 112px minmax(0, 1fr);
+}
+
+.detail-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 20px;
+}
+
+.detail-control {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.detail-field--wide {
+  grid-column: 1 / -1;
+}
+
+.detail-value {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  min-width: 0;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #303133;
+  line-height: 20px;
+}
+
+.detail-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-text--empty {
+  color: #a8abb2;
+}
+
+.detail-value--textarea {
+  align-items: flex-start;
+  min-height: 78px;
+}
+
+.detail-value--textarea .detail-text {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.detail-copy {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: #909399;
+}
+
+.detail-copy:hover {
+  color: #409eff;
+}
+
+@media (max-width: 900px) {
+  .detail-form {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-field--wide {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 640px) {
@@ -664,7 +827,7 @@ async function copyDetailValue(value) {
   }
 
   .detail-control {
-    grid-template-columns: minmax(0, 1fr) 64px;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

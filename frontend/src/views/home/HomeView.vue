@@ -97,9 +97,14 @@
     <template v-else>
       <section class="hero-panel">
         <div class="hero-copy">
-          <p class="eyebrow">Server automation console</p>
           <h1>{{ heroTitle }}</h1>
-          <p class="summary">
+          <ul v-if="backendAvailable && isServerMode" class="server-hero-list">
+            <li v-for="item in serverHeroDescriptions" :key="item.route">
+              <strong>{{ item.route }}</strong>
+              <span>{{ item.desc }}</span>
+            </li>
+          </ul>
+          <p v-else class="summary">
             {{ heroSummary }}
           </p>
         </div>
@@ -108,7 +113,7 @@
           <span class="status-label">当前模式</span>
           <strong>{{ runtimeModeText }}</strong>
           <template v-if="backendAvailable && isServerMode">
-            <span class="status-note">将客户端地址发给执行电脑打开</span>
+            <span class="status-note">将服务端地址在执行客户端打开</span>
             <div class="client-link-row">
               <a class="client-link" :href="clientAgentOpenUrl" target="_blank" rel="noreferrer">
                 {{ clientAgentUrl }}
@@ -139,55 +144,23 @@
         <section class="server-main">
           <div class="server-panel">
             <div class="panel-heading">
-              <h2>调度准备</h2>
-              <el-button link type="primary" :loading="serverDashboardLoading" @click="loadServerDashboard">
-                刷新
-              </el-button>
-            </div>
-            <div class="step-flow">
-              <RouterLink
-                v-for="step in serverNextSteps"
-                :key="step.title"
-                class="step-flow__item"
-                :class="step.stateClass"
-                :to="step.to"
-              >
-                <span class="step-flow__mark">{{ step.index }}</span>
-                <span class="step-flow__body">
-                  <strong>{{ step.title }}</strong>
-                  <small>{{ step.desc }}</small>
-                </span>
-                <span class="step-flow__action">{{ step.action }}</span>
-              </RouterLink>
-            </div>
-          </div>
-
-          <div class="server-panel server-panel--records">
-            <div class="panel-heading">
-              <h2>最近执行记录</h2>
-              <RouterLink to="/task-records">查看全部</RouterLink>
+              <h2>功能入口</h2>
             </div>
             <div v-if="serverDashboardError" class="server-empty is-error">
               {{ serverDashboardError }}
             </div>
-            <div v-else-if="recentRecords.length === 0" class="server-empty">
-              暂无执行记录，配置任务后可以从这里观察最近结果。
-            </div>
-            <div v-else class="record-list">
+            <div v-else class="server-feature-grid">
               <RouterLink
-                v-for="record in recentRecords"
-                :key="record.id || `${record.task_name}-${record.created_at}`"
-                class="record-row"
-                to="/task-records"
+                v-for="item in serverFeatureCards"
+                :key="item.to"
+                class="server-feature-card"
+                :to="item.to"
               >
-                <span class="record-row__main">
-                  <strong>{{ record.task_name || record.workflow_name || '未命名任务' }}</strong>
-                  <small>{{ record.workflow_name || record.client_ip || '暂无工作流信息' }}</small>
+                <span class="server-feature-card__body">
+                  <strong>{{ item.title }}</strong>
+                  <small>{{ item.desc }}</small>
                 </span>
-                <span class="record-row__status" :class="getRecordStatusClass(record)">
-                  {{ getRecordStatusText(record) }}
-                </span>
-                <span class="record-row__time">{{ formatRecordTime(record) }}</span>
+                <span class="server-feature-card__meta">{{ item.meta }}</span>
               </RouterLink>
             </div>
           </div>
@@ -244,20 +217,15 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
-import { getRuntimeConfig } from '@/services/app'
+import { getRuntimeConfig, getServerDashboard } from '@/services/app'
 import {
   getAgentStatus,
   getBrowserStatus,
   subscribeAgentStatus,
   subscribeBrowserStatus,
 } from '@/services/browser'
-import { listAutomaWorkflows } from '@/services/automa'
-import { listClients } from '@/services/client'
-import { listTaskRecords, listTasks } from '@/services/task'
 import { subscribeDesktopConnectionState } from '@/services/desktopWs'
 import { copyText } from '@/utils/browser'
-import { formatDate } from '@/utils/format'
-import { normalizeList } from '@/utils/list'
 import { localCache } from '@/utils/storage'
 
 const WORKFLOW_READY_STORAGE_KEY = 'browserflow-windows-workflow-ready'
@@ -278,12 +246,7 @@ const stopAgentStatusSubscribe = ref(null)
 const stopDesktopConnectionSubscribe = ref(null)
 const serverDashboardLoading = ref(false)
 const serverDashboardError = ref('')
-const serverClients = ref([])
-const serverWorkflows = ref([])
-const serverTasks = ref([])
-const serverTaskTotal = ref(0)
-const serverRecords = ref([])
-const serverRecordTotal = ref(0)
+const serverDashboard = ref(createServerDashboard())
 const desktopConnection = ref({
   status: 'idle',
   reconnectCount: 0,
@@ -393,7 +356,7 @@ const flowSteps = computed(() =>
 // heroTitle switches headline by runtime mode 首页标题按运行模式切换
 const heroTitle = computed(() => {
   if (!backendAvailable.value) return 'BrowserFlow 后端服务暂不可用。'
-  if (isServerMode.value) return 'BrowserFlow 是一个面向多客户端自动化调度的服务端控制台。'
+  if (isServerMode.value) return 'BrowserFlow 服务器调度模式'
   return 'BrowserFlow 是一个面向浏览器自动化的本地控制台。'
 })
 
@@ -402,11 +365,15 @@ const heroSummary = computed(() => {
   if (!backendAvailable.value) {
     return '当前无法连接后端服务，首页仍可查看项目入口。请先启动后端服务，恢复后刷新页面或重新点击入口。'
   }
-  if (isServerMode.value) {
-    return '服务器模式用于集中管理工作流、任务、客户端和执行记录，适合把多台执行电脑接入同一个调度中心。'
-  }
   return 'Windows 模式把浏览器实例、Automa 工作流、执行端连接、大模型配置和对话验证放在一起，适合把重复网页操作沉淀为可调试、可复用的本地流程。'
 })
+
+const serverHeroDescriptions = [
+  { route: '客户端管理', desc: '接入和维护执行客户端，查看在线状态、Automa 状态、忙闲状态和拉黑控制。' },
+  { route: '工作流管理', desc: '集中维护服务端可调度的 Automa 工作流，支持同步、导入和维护。' },
+  { route: '任务调度', desc: '将工作流配置为手动或定时任务，由服务端统一匹配在线客户端执行。' },
+  { route: '执行记录', desc: '追踪任务执行状态、错误信息和回传结果，用于排查问题与确认结果。' },
+]
 
 // clientAgentUrl builds a shareable client page address 生成可分享的客户端执行页地址
 const clientAgentUrl = computed(() => {
@@ -440,78 +407,72 @@ const workflowReady = computed(() => {
   return Boolean(readyMap?.[browserId]?.read_at)
 })
 
-const onlineServerClients = computed(() => serverClients.value.filter((client) => isClientOnline(client)))
-const automaReadyServerClients = computed(() => {
-  return onlineServerClients.value.filter((client) => isClientAutomaReady(client))
-})
-const enabledServerTasks = computed(() => serverTasks.value.filter((task) => isTaskEnabled(task)))
-const recentRecords = computed(() => serverRecords.value.slice(0, 5))
-
 const serverStatusCards = computed(() => [
   {
-    label: '在线客户端',
-    value: String(onlineServerClients.value.length),
-    note: `${serverClients.value.length} 个已登记节点`,
-    stateClass: onlineServerClients.value.length > 0 ? 'is-success' : 'is-warning',
+    label: '客户端',
+    value: formatDashboardRatio(serverDashboard.value.clients),
+    note: `在线 / 总数，离线 ${getDashboardExtra(serverDashboard.value.clients)} 个`,
+    stateClass: getDashboardValue(serverDashboard.value.clients) > 0 ? 'is-success' : 'is-warning',
+  },
+  {
+    label: '执行节点',
+    value: formatDashboardRatio(serverDashboard.value.nodes),
+    note: `在线 / 总数，离线 ${getDashboardExtra(serverDashboard.value.nodes)} 个`,
+    stateClass: getDashboardValue(serverDashboard.value.nodes) > 0 ? 'is-success' : 'is-warning',
+  },
+  {
+    label: '节点忙闲',
+    value: formatDashboardRatio(serverDashboard.value.node_busy),
+    note: `空闲 / 忙碌，未知 ${getDashboardExtra(serverDashboard.value.node_busy)} 个`,
+    stateClass: getDashboardValue(serverDashboard.value.node_busy) > 0
+      ? 'is-success'
+      : getDashboardTotal(serverDashboard.value.node_busy) > 0 ? 'is-warning' : 'is-muted',
   },
   {
     label: 'Automa 可用',
-    value: String(automaReadyServerClients.value.length),
-    note: onlineServerClients.value.length > 0 ? '在线节点插件状态' : '等待客户端连接',
-    stateClass: automaReadyServerClients.value.length > 0 ? 'is-success' : 'is-warning',
+    value: formatDashboardRatio(serverDashboard.value.automa),
+    note: `可用 / 在线，异常 ${getDashboardExtra(serverDashboard.value.automa)} 个`,
+    stateClass: getDashboardValue(serverDashboard.value.automa) > 0 ? 'is-success' : 'is-warning',
   },
   {
     label: '服务端工作流',
-    value: String(serverWorkflows.value.length),
-    note: '可用于任务配置和调度',
-    stateClass: serverWorkflows.value.length > 0 ? 'is-success' : 'is-warning',
+    value: formatDashboardRatio(serverDashboard.value.workflows),
+    note: `可同步 / 总数，受保护 ${getDashboardExtra(serverDashboard.value.workflows)} 个`,
+    stateClass: getDashboardTotal(serverDashboard.value.workflows) > 0 ? 'is-success' : 'is-warning',
   },
   {
-    label: '启用任务',
-    value: String(enabledServerTasks.value.length),
-    note: `${serverTaskTotal.value || serverTasks.value.length} 个任务配置`,
-    stateClass: enabledServerTasks.value.length > 0 ? 'is-success' : 'is-muted',
+    label: '任务配置',
+    value: formatDashboardRatio(serverDashboard.value.tasks),
+    note: `启用 / 总数，禁用 ${getDashboardExtra(serverDashboard.value.tasks)} 个`,
+    stateClass: getDashboardValue(serverDashboard.value.tasks) > 0 ? 'is-success' : 'is-muted',
   },
 ])
 
-const serverNextSteps = computed(() => {
-  const clientReady = onlineServerClients.value.length > 0
-  const workflowReady = serverWorkflows.value.length > 0
-  const taskReady = enabledServerTasks.value.length > 0
-  const recordReady = serverRecordTotal.value > 0 || recentRecords.value.length > 0
-
+const serverFeatureCards = computed(() => {
   return [
     {
-      index: '01',
-      title: '接入客户端',
-      desc: clientReady ? `${onlineServerClients.value.length} 个节点在线` : '打开客户端执行页或启动 Worker 接入节点',
-      action: clientReady ? '已在线' : '去接入',
+      title: '客户端管理',
+      desc: '查看在线节点、Automa 状态、忙闲状态和拉黑控制，确认执行端是否可用于调度。',
+      meta: '查看客户端',
       to: '/clients',
-      stateClass: clientReady ? 'is-done' : 'is-current',
     },
     {
-      index: '02',
-      title: '同步工作流',
-      desc: workflowReady ? `${serverWorkflows.value.length} 个工作流可调度` : '从客户端同步或导入服务端工作流',
-      action: workflowReady ? '已准备' : '去同步',
+      title: '工作流管理',
+      desc: '维护服务端可调度的 Automa 工作流，支持从客户端同步、导入和后续维护。',
+      meta: '维护工作流',
       to: '/automa',
-      stateClass: workflowReady ? 'is-done' : clientReady ? 'is-current' : '',
     },
     {
-      index: '03',
-      title: '配置任务',
-      desc: taskReady ? `${enabledServerTasks.value.length} 个任务已启用` : '把工作流配置成手动或定时任务',
-      action: taskReady ? '已启用' : '去配置',
+      title: '任务调度',
+      desc: '把工作流配置成手动任务或定时任务，由服务端匹配在线客户端执行。',
+      meta: '配置任务',
       to: '/tasks',
-      stateClass: taskReady ? 'is-done' : workflowReady ? 'is-current' : '',
     },
     {
-      index: '04',
-      title: '查看记录',
-      desc: recordReady ? `${serverRecordTotal.value || recentRecords.value.length} 条执行记录` : '执行任务后查看状态和回传结果',
-      action: recordReady ? '查看' : '待执行',
+      title: '执行记录',
+      desc: '集中查看任务执行状态、错误信息和回传结果，用于排查失败与追踪历史。',
+      meta: '查看历史结果',
       to: '/task-records',
-      stateClass: recordReady ? 'is-done' : taskReady ? 'is-current' : '',
     },
   ]
 })
@@ -657,8 +618,8 @@ onBeforeUnmount(() => {
 // runtimeModeText displays current runtime mode 当前运行模式文案
 const runtimeModeText = computed(() => {
   if (!backendAvailable.value) return '后端不可用'
-  if (runtimeMode.value === 'windows') return 'Windows 本地版'
-  if (runtimeMode.value === 'server') return '服务器调度版'
+  if (runtimeMode.value === 'windows') return '本地调度模式'
+  if (runtimeMode.value === 'server') return '服务器调度模式'
   return '自动识别中'
 })
 
@@ -674,27 +635,17 @@ function showBackendUnavailable() {
 
 async function copyClientAgentUrl() {
   await copyText(clientAgentUrl.value)
-  appMessage({ type: APP_MESSAGE_TYPE.success, message: '客户端地址已复制' })
+  appMessage({ type: APP_MESSAGE_TYPE.success, message: '服务端地址已复制' })
 }
 
 async function loadServerDashboard() {
   serverDashboardLoading.value = true
   serverDashboardError.value = ''
   try {
-    const [clientData, workflowData, taskData, recordData] = await Promise.all([
-      listClients(),
-      listAutomaWorkflows({ page_num: 1, page_size: 60 }),
-      listTasks({ page_num: 1, page_size: 60 }),
-      listTaskRecords({ page_num: 1, page_size: 10 }),
-    ])
-    serverClients.value = normalizeList(clientData, 'clients')
-    serverWorkflows.value = normalizeList(workflowData, 'workflows').filter((item) => !item.is_deleted)
-    serverTasks.value = normalizeList(taskData, 'tasks')
-    serverTaskTotal.value = Number(taskData?.total ?? serverTasks.value.length)
-    serverRecords.value = normalizeList(recordData, 'records')
-    serverRecordTotal.value = Number(recordData?.total ?? serverRecords.value.length)
+    serverDashboard.value = normalizeServerDashboard(await getServerDashboard())
   } catch (error) {
     serverDashboardError.value = error?.message || '服务端概览加载失败'
+    serverDashboard.value = createServerDashboard()
   } finally {
     serverDashboardLoading.value = false
   }
@@ -735,43 +686,56 @@ function stopWindowsRuntimeSubscribe() {
   stopDesktopConnectionSubscribe.value = null
 }
 
-function isClientOnline(client) {
-  return Boolean(client?.online || client?.status === 'online')
-}
-
-function isClientAutomaReady(client) {
-  const status = client?.plugin_status || client?.automa_status || ''
-  return Boolean(client?.automa_installed === true || status === 'installed')
-}
-
-function isTaskEnabled(task) {
-  return task?.enabled !== false && task?.is_enabled !== false && task?.status !== 'disabled'
-}
-
-function getRecordStatusText(record) {
-  const status = String(record?.status || '').trim()
-  const statusMap = {
-    queued: '排队中',
-    running: '运行中',
-    success: '成功',
-    error: '失败',
-    failed: '失败',
-    stopped: '已停止',
-    timeout: '超时',
+function createServerDashboard() {
+  return {
+    clients: createDashboardStat(),
+    nodes: createDashboardStat(),
+    node_busy: createDashboardStat(),
+    automa: createDashboardStat(),
+    workflows: createDashboardStat(),
+    tasks: createDashboardStat(),
   }
-  return statusMap[status] || status || '未知'
 }
 
-function getRecordStatusClass(record) {
-  const status = String(record?.status || '').trim()
-  if (status === 'success') return 'is-success'
-  if (status === 'queued' || status === 'running') return 'is-warning'
-  if (status === 'error' || status === 'failed' || status === 'timeout' || status === 'stopped') return 'is-danger'
-  return 'is-muted'
+function createDashboardStat() {
+  return { value: 0, total: 0, extra: 0 }
 }
 
-function formatRecordTime(record) {
-  return formatDate(record?.started_at || record?.created_at || record?.updated_at, { fallback: '-' })
+function normalizeServerDashboard(data = {}) {
+  const dashboard = createServerDashboard()
+  Object.keys(dashboard).forEach((key) => {
+    dashboard[key] = normalizeDashboardStat(data?.[key])
+  })
+  return dashboard
+}
+
+function normalizeDashboardStat(stat = {}) {
+  return {
+    value: normalizeDashboardNumber(stat?.value),
+    total: normalizeDashboardNumber(stat?.total),
+    extra: normalizeDashboardNumber(stat?.extra),
+  }
+}
+
+function normalizeDashboardNumber(value) {
+  const nextValue = Number(value ?? 0)
+  return Number.isFinite(nextValue) ? nextValue : 0
+}
+
+function getDashboardValue(stat) {
+  return normalizeDashboardNumber(stat?.value)
+}
+
+function getDashboardTotal(stat) {
+  return normalizeDashboardNumber(stat?.total)
+}
+
+function getDashboardExtra(stat) {
+  return normalizeDashboardNumber(stat?.extra)
+}
+
+function formatDashboardRatio(stat) {
+  return `${getDashboardValue(stat)} / ${getDashboardTotal(stat)}`
 }
 </script>
 
@@ -797,9 +761,7 @@ function formatRecordTime(record) {
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 16px;
   padding: 24px;
-  background:
-    radial-gradient(circle at 92% 12%, rgba(64, 158, 255, 0.18), transparent 34%),
-    linear-gradient(135deg, #f8fbff 0%, #ffffff 62%);
+  background: #ffffff;
   border: 1px solid #dbeafe;
   border-radius: 18px;
 }
@@ -899,6 +861,15 @@ function formatRecordTime(record) {
   border-left-color: #94a3b8;
 }
 
+.home-page--server .status-tile {
+  border-left-width: 1px;
+  border-left-color: #e4e7ed;
+}
+
+.home-page--server .status-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .windows-main {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
@@ -907,9 +878,6 @@ function formatRecordTime(record) {
 }
 
 .server-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
-  gap: 14px;
   min-height: 0;
 }
 
@@ -920,24 +888,6 @@ function formatRecordTime(record) {
   background: #ffffff;
   border: 1px solid #e4e7ed;
   border-radius: 8px;
-}
-
-.server-panel--records {
-  padding-bottom: 12px;
-}
-
-.server-panel--records .panel-heading {
-  margin-bottom: 10px;
-}
-
-.home-page--server .step-flow__item {
-  min-height: 58px;
-  padding: 10px 12px;
-}
-
-.home-page--server .step-flow__mark {
-  width: 34px;
-  height: 34px;
 }
 
 .windows-panel--steps {
@@ -1104,6 +1054,28 @@ h1 {
   color: #606266;
   font-size: 16px;
   line-height: 1.7;
+}
+
+.server-hero-list {
+  display: grid;
+  gap: 8px;
+  max-width: 900px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.server-hero-list li {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  color: #606266;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.server-hero-list strong {
+  color: #111827;
 }
 
 .hero-status {
@@ -1319,6 +1291,60 @@ h1 {
   color: #c0c4cc;
 }
 
+.server-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.server-feature-card {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 112px;
+  min-width: 0;
+  padding: 14px;
+  color: #303133;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.server-feature-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+.server-feature-card__body {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.server-feature-card__body strong {
+  color: #111827;
+  font-size: 16px;
+}
+
+.server-feature-card__body small {
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.server-feature-card__meta {
+  justify-self: start;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .server-empty {
   padding: 20px;
   color: #909399;
@@ -1332,84 +1358,6 @@ h1 {
   color: #c2410c;
   background: #fff7ed;
   border-color: #fed7aa;
-}
-
-.record-list {
-  display: grid;
-  gap: 8px;
-}
-
-.record-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(112px, auto);
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 10px 12px;
-  color: #303133;
-  background: #f8fafc;
-  border: 1px solid #eef2f7;
-  border-radius: 8px;
-}
-
-.record-row:hover {
-  border-color: #bfdbfe;
-}
-
-.record-row__main {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.record-row__main strong,
-.record-row__main small,
-.record-row__time {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.record-row__main strong {
-  color: #111827;
-}
-
-.record-row__main small,
-.record-row__time {
-  color: #606266;
-  font-size: 13px;
-}
-
-.record-row__status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 56px;
-  height: 24px;
-  padding: 0 8px;
-  font-size: 12px;
-  font-weight: 800;
-  border-radius: 999px;
-}
-
-.record-row__status.is-success {
-  color: #15803d;
-  background: #dcfce7;
-}
-
-.record-row__status.is-warning {
-  color: #b45309;
-  background: #fef3c7;
-}
-
-.record-row__status.is-danger {
-  color: #b91c1c;
-  background: #fee2e2;
-}
-
-.record-row__status.is-muted {
-  color: #64748b;
-  background: #e2e8f0;
 }
 
 @media (max-width: 900px) {
@@ -1428,6 +1376,10 @@ h1 {
   }
 
   .intro-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .server-feature-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1459,6 +1411,11 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .server-hero-list li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
   .windows-hero__actions {
     align-items: stretch;
     flex-direction: column;
@@ -1468,12 +1425,8 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .record-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .record-row__time {
-    display: none;
+  .server-feature-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

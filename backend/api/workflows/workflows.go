@@ -20,6 +20,7 @@ type IWorkflowsV1 interface {
 	WorkflowImportFiles(ctx context.Context, req *v1.WorkflowImportFilesReq) (res *v1.WorkflowImportFilesRes, err error)
 	WorkflowSyncCandidates(ctx context.Context, req *v1.WorkflowSyncCandidatesReq) (res *v1.WorkflowSyncCandidatesRes, err error)
 	WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq) (res *v1.WorkflowSyncRes, err error)
+	WorkflowClientMaintenance(ctx context.Context, req *v1.WorkflowClientMaintenanceReq) (res *v1.WorkflowClientMaintenanceRes, err error)
 	WorkflowCache(ctx context.Context, req *v1.WorkflowCacheReq) (res *v1.WorkflowCacheRes, err error)
 	WorkflowAgentList(ctx context.Context, req *v1.WorkflowAgentListReq) (res *v1.WorkflowAgentListRes, err error)
 	WorkflowAgentExportSkill(ctx context.Context, req *v1.WorkflowAgentExportSkillReq) (res *v1.WorkflowAgentExportSkillRes, err error)

@@ -12,4 +12,5 @@ import (
 
 type IAppV1 interface {
 	Runtime(ctx context.Context, req *v1.RuntimeReq) (res *v1.RuntimeRes, err error)
+	ServerDashboard(ctx context.Context, req *v1.ServerDashboardReq) (res *v1.ServerDashboardRes, err error)
 }
