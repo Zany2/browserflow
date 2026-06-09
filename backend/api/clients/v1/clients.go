@@ -7,11 +7,17 @@ import (
 
 // ClientListReq client list request 客户端列表请求
 type ClientListReq struct {
-	g.Meta  `path:"/" method:"get" tags:"客户端" summary:"获取客户端列表"`
-	Status  string `json:"status,omitempty" in:"query" dc:"客户端状态"`
-	IP      string `json:"ip,omitempty" in:"query" dc:"客户端 IP"`
-	NodeID  string `json:"node_id,omitempty" in:"query" dc:"执行节点 ID"`
-	Keyword string `json:"keyword,omitempty" in:"query" dc:"关键字"`
+	g.Meta            `path:"/" method:"get" tags:"客户端" summary:"获取客户端列表"`
+	Status            string `json:"status,omitempty" in:"query" dc:"客户端状态"`
+	BusyStatus        string `json:"busy_status,omitempty" in:"query" dc:"节点忙闲状态"`
+	IsBanned          string `json:"is_banned,omitempty" in:"query" dc:"是否拉黑：true、false"`
+	IP                string `json:"ip,omitempty" in:"query" dc:"客户端 IP"`
+	NodeID            string `json:"node_id,omitempty" in:"query" dc:"执行节点 ID"`
+	Keyword           string `json:"keyword,omitempty" in:"query" dc:"关键字"`
+	LastSeenStartTime string `json:"last_seen_start_time,omitempty" in:"query" dc:"最近心跳开始时间"`
+	LastSeenEndTime   string `json:"last_seen_end_time,omitempty" in:"query" dc:"最近心跳结束时间"`
+	PageNum           int    `json:"page_num,omitempty" in:"query" dc:"页码，从 1 开始"`
+	PageSize          int    `json:"page_size,omitempty" in:"query" dc:"每页数量"`
 }
 
 // ClientListResModel client list item 客户端列表项
@@ -40,8 +46,9 @@ type ClientDetailRes struct {
 // ClientUpdateReq update client request 更新客户端请求
 type ClientUpdateReq struct {
 	g.Meta      `path:"/{id}" method:"put" tags:"客户端" summary:"更新客户端"`
-	ID          string `json:"id" in:"path" dc:"客户端 ID"`
-	DisplayName string `json:"display_name" dc:"客户端自定义显示名称"`
+	ID          string  `json:"id" in:"path" dc:"客户端 ID"`
+	DisplayName string  `json:"display_name" v:"max-length:128#客户端名称不能超过128个字符" dc:"客户端自定义显示名称"`
+	BanReason   *string `json:"ban_reason" v:"max-length:256#ban reason must be 256 characters or less" dc:"Ban reason"`
 }
 
 // ClientUpdateRes update client response 更新客户端响应
@@ -127,6 +134,17 @@ type ClientBatchBanRes struct {
 }
 
 // ClientUnbanReq unban client request 解除拉黑请求
+// ClientBatchUnbanReq batch unban client request 批量解除拉黑请求
+type ClientBatchUnbanReq struct {
+	g.Meta `path:"/batch-unban" method:"post" tags:"客户端" summary:"批量解除客户端拉黑"`
+	ClientBatchActionReq
+}
+
+// ClientBatchUnbanRes batch unban client response 批量解除拉黑响应
+type ClientBatchUnbanRes struct {
+	ClientBatchActionRes
+}
+
 type ClientUnbanReq struct {
 	g.Meta `path:"/{id}/unban" method:"post" tags:"客户端" summary:"解除客户端拉黑"`
 	ID     string `json:"id" in:"path" dc:"客户端 ID"`

@@ -140,16 +140,16 @@
             <small>{{ item.note }}</small>
           </article>
         </section>
+        <div v-if="serverDashboardError" class="server-dashboard-error">
+          {{ serverDashboardError }}
+        </div>
 
         <section class="server-main">
           <div class="server-panel">
             <div class="panel-heading">
               <h2>功能入口</h2>
             </div>
-            <div v-if="serverDashboardError" class="server-empty is-error">
-              {{ serverDashboardError }}
-            </div>
-            <div v-else class="server-feature-grid">
+            <div class="server-feature-grid">
               <RouterLink
                 v-for="item in serverFeatureCards"
                 :key="item.to"
@@ -168,35 +168,20 @@
 
       </template>
 
-      <section v-else class="quick-grid" aria-label="核心入口">
-        <template v-if="backendAvailable">
-          <RouterLink
-            v-for="item in quickActions"
-            :key="item.to"
-            class="quick-card"
-            :to="item.to"
-          >
-            <span class="quick-icon">{{ item.icon }}</span>
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.desc }}</span>
-          </RouterLink>
-        </template>
-        <template v-else>
-          <button
-            v-for="item in quickActions"
-            :key="item.to"
-            class="quick-card quick-card--disabled"
-            type="button"
-            @click="showBackendUnavailable"
-          >
-            <span class="quick-icon">{{ item.icon }}</span>
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.desc }}</span>
-          </button>
-        </template>
+      <section v-else-if="backendAvailable" class="quick-grid" aria-label="核心入口">
+        <RouterLink
+          v-for="item in quickActions"
+          :key="item.to"
+          class="quick-card"
+          :to="item.to"
+        >
+          <span class="quick-icon">{{ item.icon }}</span>
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.desc }}</span>
+        </RouterLink>
       </section>
 
-      <section v-if="!isServerMode" class="intro-grid">
+      <section v-if="backendAvailable && !isServerMode" class="intro-grid">
         <article v-for="card in introCards" :key="card.title" class="intro-card">
           <span class="intro-tag" :class="card.tagClass">{{ card.tag }}</span>
           <h2>{{ card.title }}</h2>
@@ -204,7 +189,7 @@
         </article>
       </section>
 
-      <section v-if="!isServerMode" class="flow-panel" aria-label="使用流程">
+      <section v-if="backendAvailable && !isServerMode" class="flow-panel" aria-label="使用流程">
         <span v-for="(step, index) in flowSteps" :key="step" class="flow-step">
           {{ step }}
           <strong v-if="index < flowSteps.length - 1">→</strong>
@@ -629,10 +614,6 @@ const runtimeStatusNote = computed(() => {
   return '公共能力与 Windows 本地能力优先可用'
 })
 
-function showBackendUnavailable() {
-  appMessage({ type: APP_MESSAGE_TYPE.error, message: '后端服务不可用，请先启动后端' })
-}
-
 async function copyClientAgentUrl() {
   await copyText(clientAgentUrl.value)
   appMessage({ type: APP_MESSAGE_TYPE.success, message: '服务端地址已复制' })
@@ -868,6 +849,12 @@ function formatDashboardRatio(stat) {
 
 .home-page--server .status-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.server-dashboard-error {
+  margin-top: -4px;
+  color: #c2410c;
+  font-size: 13px;
 }
 
 .windows-main {
@@ -1106,7 +1093,7 @@ h1 {
 }
 
 .status-note--error {
-  color: #c2410c;
+  color: #dc2626;
   font-weight: 700;
 }
 
@@ -1189,24 +1176,10 @@ h1 {
     box-shadow 0.18s ease;
 }
 
-.quick-card--disabled {
-  width: 100%;
-  font: inherit;
-  text-align: left;
-  cursor: not-allowed;
-  opacity: 0.68;
-}
-
 .quick-card:hover {
   border-color: #93c5fd;
   box-shadow: 0 14px 32px rgba(37, 99, 235, 0.1);
   transform: translateY(-2px);
-}
-
-.quick-card--disabled:hover {
-  border-color: #e4e7ed;
-  box-shadow: none;
-  transform: none;
 }
 
 .quick-icon {

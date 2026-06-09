@@ -21,9 +21,13 @@ func (c *ControllerV1) ClientUpdate(ctx context.Context, req *v1.ClientUpdateReq
 	}
 
 	displayName := strings.TrimSpace(req.DisplayName)
-	if _, err = scopedClientModel(ctx, record).Data(do.Clients{
+	updateData := do.Clients{
 		DisplayName: displayName,
-	}).Update(); err != nil {
+	}
+	if req.BanReason != nil {
+		updateData.BanReason = strings.TrimSpace(*req.BanReason)
+	}
+	if _, err = scopedClientModel(ctx, record).Data(updateData).Update(); err != nil {
 		return nil, err
 	}
 

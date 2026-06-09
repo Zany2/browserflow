@@ -24,7 +24,7 @@
       </nav>
     </header>
 
-    <main class="page-container">
+    <main class="page-container" :class="{ 'page-container--server-list': isServerListRoute }">
       <!-- Page outlet 页面出口，子路由内容渲染在统一布局内 -->
       <RouterView />
     </main>
@@ -33,6 +33,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import layoutLogo from '@/assets/images/layout-logo.png'
 import { getRuntimeConfig } from '@/services/app'
 import { connectDesktopWs } from '@/services/desktopWs'
@@ -42,6 +43,7 @@ const runtimeConfig = ref({
   disabled_routes: [],
   backend_available: true,
 })
+const route = useRoute()
 
 // Navigation groups disabled by runtime mode 导航分组，按运行模式禁用部分路由
 const navSections = [
@@ -67,6 +69,8 @@ const navSections = [
 
 const disabledRouteSet = computed(() => new Set(runtimeConfig.value.disabled_routes || []))
 const backendAvailable = computed(() => runtimeConfig.value.backend_available !== false)
+const serverListRoutes = new Set(['/automa', '/tasks', '/task-records', '/clients'])
+const isServerListRoute = computed(() => runtimeConfig.value.mode === 'server' && serverListRoutes.has(route.path))
 
 onMounted(() => {
   loadRuntimeConfig()
@@ -217,6 +221,11 @@ function isRouteDisabled(routePath) {
   margin: 0 auto;
   padding: 32px 0;
   overflow: auto;
+}
+
+.page-container--server-list {
+  width: min(1600px, calc(100% - 32px));
+  padding: 18px 0 24px;
 }
 
 @media (max-width: 640px) {

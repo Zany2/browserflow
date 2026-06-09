@@ -1,83 +1,83 @@
 ﻿<template>
   <section class="task-record-page server-list-page">
     <header class="page-actions server-list-actions">
-      <el-button type="primary" :icon="RefreshRight" @click="loadRecords">刷新</el-button>
+      <el-button :icon="RefreshRight" @click="loadRecords">刷新</el-button>
+      <el-button type="danger" :disabled="selectedRecordIds.length === 0" @click="handleBatchDeleteRecords">
+        删除选中
+      </el-button>
+      <el-button @click="resetRecordFilters">重置</el-button>
     </header>
 
     <section class="record-panel server-list-panel">
       <div class="record-filters server-list-filters">
         <div class="record-filter-fields">
-          <div class="filter-item filter-item--task">
-            <span class="filter-label">任务名称</span>
-            <el-input v-model="recordFilters.task_name" clearable placeholder="任务名称" />
+          <div class="record-filter-row">
+            <div class="filter-item filter-item--task">
+              <span class="filter-label">任务名称</span>
+              <el-input v-model="recordFilters.task_name" clearable placeholder="任务名称" />
+            </div>
+
+            <div class="filter-item filter-item--workflow">
+              <span class="filter-label">自定义工作流名称</span>
+              <el-input v-model="recordFilters.workflow_name" clearable placeholder="自定义工作流名称" />
+            </div>
+
+            <div class="filter-item filter-item--execute-time">
+              <span class="filter-label">执行时间</span>
+              <AppTimeRangeFilter v-model="recordFilters.execute_time_range" />
+            </div>
           </div>
 
-          <div class="filter-item filter-item--workflow">
-            <span class="filter-label">自定义工作流名称</span>
-            <el-input v-model="recordFilters.workflow_name" clearable placeholder="自定义工作流名称" />
-          </div>
+          <div class="record-filter-row">
+            <div class="filter-item filter-item--client">
+              <span class="filter-label">客户端 IP</span>
+              <el-select
+                v-model="recordFilters.client_ip"
+                clearable
+                filterable
+                placeholder="选择或检索客户端 IP"
+                :loading="clientIpLoading"
+                @visible-change="handleClientIpSelectVisible"
+              >
+                <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
+              </el-select>
+            </div>
 
-          <div class="filter-item filter-item--execute-time">
-            <span class="filter-label">执行时间</span>
-            <AppTimeRangeFilter v-model="recordFilters.execute_time_range" />
-          </div>
+            <div class="filter-item filter-item--node">
+              <span class="filter-label">执行节点</span>
+              <el-select
+                v-model="recordFilters.node_ids"
+                clearable
+                filterable
+                multiple
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="请先选择客户端 IP"
+                :disabled="!recordFilters.client_ip"
+                :loading="clientIpLoading"
+                @visible-change="handleClientIpSelectVisible"
+              >
+                <el-option
+                  v-for="node in filteredNodeOptions"
+                  :key="node.node_id"
+                  :label="node.label"
+                  :value="node.node_id"
+                />
+              </el-select>
+            </div>
 
-          <div class="filter-item filter-item--client">
-            <span class="filter-label">客户端 IP</span>
-            <el-select
-              v-model="recordFilters.client_ip"
-              clearable
-              filterable
-              placeholder="选择或检索客户端 IP"
-              :loading="clientIpLoading"
-              @visible-change="handleClientIpSelectVisible"
-            >
-              <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
-            </el-select>
-          </div>
-
-          <div class="filter-item filter-item--node">
-            <span class="filter-label">执行节点</span>
-            <el-select
-              v-model="recordFilters.node_ids"
-              clearable
-              filterable
-              multiple
-              collapse-tags
-              collapse-tags-tooltip
-              placeholder="请先选择客户端 IP"
-              :disabled="!recordFilters.client_ip"
-              :loading="clientIpLoading"
-              @visible-change="handleClientIpSelectVisible"
-            >
-              <el-option
-                v-for="node in filteredNodeOptions"
-                :key="node.node_id"
-                :label="node.label"
-                :value="node.node_id"
-              />
-            </el-select>
-          </div>
-
-          <div class="filter-item filter-item--status">
-            <span class="filter-label">状态</span>
-            <el-select v-model="recordFilters.status" clearable placeholder="全部">
-              <el-option label="全部" value="" />
-              <el-option label="待执行" value="pending" />
-              <el-option label="已下发" value="queued" />
-              <el-option label="执行中" value="running" />
-              <el-option label="成功" value="success" />
-              <el-option label="失败" value="failed" />
-              <el-option label="已取消" value="cancelled" />
-            </el-select>
-          </div>
-
-          <div class="record-filter-actions">
-            <el-button type="danger" :disabled="selectedRecordIds.length === 0" @click="handleBatchDeleteRecords">
-              删除选中
-            </el-button>
-            <el-button @click="resetRecordFilters">重置</el-button>
-            <AppSelectionSummary :count="selectedRecordIds.length" unit="记录" />
+            <div class="filter-item filter-item--status">
+              <span class="filter-label">状态</span>
+              <el-select v-model="recordFilters.status" clearable placeholder="全部">
+                <el-option label="全部" value="" />
+                <el-option label="待执行" value="pending" />
+                <el-option label="已下发" value="queued" />
+                <el-option label="执行中" value="running" />
+                <el-option label="成功" value="success" />
+                <el-option label="失败" value="failed" />
+                <el-option label="已取消" value="cancelled" />
+              </el-select>
+            </div>
           </div>
         </div>
       </div>
@@ -134,12 +134,15 @@
         </el-table-column>
       </el-table>
 
-      <AppPagination
-        v-model:current-page="recordPage"
-        v-model:page-size="recordPageSize"
-        :page-sizes="pageSizes"
-        :total="recordTotal"
-      />
+      <div class="record-footer server-list-footer">
+        <AppSelectionSummary :count="selectedRecordIds.length" unit="记录" />
+        <AppPagination
+          v-model:current-page="recordPage"
+          v-model:page-size="recordPageSize"
+          :page-sizes="pageSizes"
+          :total="recordTotal"
+        />
+      </div>
     </section>
 
     <AppDialog
@@ -537,71 +540,73 @@ function formatDate(value) {
 <style scoped lang="scss">
 .record-filters {
   display: flex;
-  align-items: stretch;
-  flex-direction: column;
-  gap: 12px 16px;
+  align-items: flex-start;
+  flex-direction: row;
+  gap: 10px 20px;
 }
 
 .record-filter-fields {
-  display: grid;
-  grid-template-columns:
-    minmax(260px, 1.2fr)
-    minmax(300px, 1.3fr)
-    minmax(220px, 0.75fr)
-    minmax(300px, auto);
-  gap: 12px 16px;
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 10px;
+  width: 100%;
   min-width: 0;
 }
 
-.record-filter-actions {
+.record-filter-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
-  gap: 12px;
-  min-width: max-content;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  min-width: 0;
 }
 
 .filter-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .filter-item--client :deep(.el-select),
-.filter-item--node :deep(.el-select),
-.filter-item--execute-time :deep(.el-date-editor) {
+.filter-item--node :deep(.el-select) {
   width: 100%;
 }
 
 .filter-item--task {
-  grid-column: 1;
+  flex: 0 0 260px;
 }
 
 .filter-item--workflow {
-  grid-column: 2;
+  flex: 0 0 330px;
 }
 
 .filter-item--execute-time {
-  grid-column: 3 / 5;
+  flex: 0 1 500px;
 }
 
 .filter-item--client {
-  grid-column: 1;
+  flex: 0 0 260px;
 }
 
 .filter-item--node {
-  grid-column: 2;
+  flex: 0 0 320px;
 }
 
 .filter-item--status {
-  grid-column: 3;
-  max-width: 180px;
+  flex: 0 0 168px;
 }
 
-.record-filter-actions {
-  grid-column: 4;
-  justify-self: end;
+.filter-item--execute-time :deep(.app-time-range-filter) {
+  grid-template-columns: minmax(130px, 1fr) auto minmax(130px, 1fr);
+  width: 100%;
+}
+
+.filter-item--execute-time :deep(.el-date-editor) {
+  width: 100%;
+  min-width: 0;
 }
 
 .filter-item :deep(.el-input),
@@ -683,15 +688,28 @@ function formatDate(value) {
 }
 
 @media (max-width: 1280px) {
-  .record-filter-fields {
-    grid-template-columns:
-      minmax(220px, 1fr)
-      minmax(260px, 1fr);
+  .filter-item--task {
+    flex-basis: 240px;
   }
 
-  .record-filter-actions {
-    grid-column: auto;
-    justify-content: flex-end;
+  .filter-item--workflow {
+    flex-basis: 300px;
+  }
+
+  .filter-item--execute-time {
+    flex-basis: 460px;
+  }
+
+  .filter-item--client {
+    flex-basis: 240px;
+  }
+
+  .filter-item--node {
+    flex-basis: 300px;
+  }
+
+  .filter-item--execute-time :deep(.app-time-range-filter) {
+    grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr);
   }
 }
 
@@ -700,7 +718,7 @@ function formatDate(value) {
   .page-actions,
   .record-filters,
   .record-filter-fields,
-  .record-filter-actions,
+  .record-filter-row,
   .filter-item {
     align-items: stretch;
     flex-direction: column;
@@ -711,18 +729,19 @@ function formatDate(value) {
     width: 100%;
   }
 
-  .record-filter-actions {
-    align-self: stretch;
-    min-width: 0;
-  }
-
   .filter-item--task,
   .filter-item--workflow,
   .filter-item--client,
   .filter-item--node,
   .filter-item--execute-time,
   .filter-item--status {
-    grid-column: auto;
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .filter-item--execute-time :deep(.app-time-range-filter) {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 }
 </style>

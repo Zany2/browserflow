@@ -16,11 +16,15 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 	columns := dao.Clients.Columns()
 	gModel := dao.Clients.Ctx(ctx)
 
-	switch strings.TrimSpace(req.Status) {
-	case "banned":
+	switch strings.TrimSpace(req.BusyStatus) {
+	case "idle", "busy", "unknown":
+		gModel = gModel.Where(columns.BusyStatus, strings.TrimSpace(req.BusyStatus))
+	}
+	switch strings.TrimSpace(req.IsBanned) {
+	case "true":
 		gModel = gModel.Where(columns.IsBanned, true)
-	case "online", "offline":
-		gModel = gModel.Where(columns.Status, strings.TrimSpace(req.Status))
+	case "false":
+		gModel = gModel.Where(columns.IsBanned, false)
 	}
 
 	if clientIP := strings.TrimSpace(req.IP); clientIP != "" {
@@ -28,6 +32,12 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 	}
 	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
 		gModel = gModel.Where(columns.NodeId, nodeID)
+	}
+	if startTime := strings.TrimSpace(req.LastSeenStartTime); startTime != "" {
+		gModel = gModel.WhereGTE(columns.LastSeenAt, startTime)
+	}
+	if endTime := strings.TrimSpace(req.LastSeenEndTime); endTime != "" {
+		gModel = gModel.WhereLTE(columns.LastSeenAt, endTime)
 	}
 
 	if keyword := strings.TrimSpace(req.Keyword); keyword != "" {
@@ -50,19 +60,65 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 		)
 	}
 
-	clients := []entity.Clients{}
-	if err = gModel.OrderDesc(columns.CreatedAt).OrderDesc(columns.Id).Scan(&clients); err != nil {
-		return nil, err
+	pageNum := req.PageNum
+	if pageNum <= 0 {
+		pageNum = 1
 	}
-	if strings.TrimSpace(req.Status) == "online" {
-		onlineClients := make([]entity.Clients, 0, len(clients))
-		for _, client := range clients {
-			if workflowcache.IsClientOnline(ctx, websockets.NodeConnectionID(client.ClientIp, client.NodeId)) {
-				onlineClients = append(onlineClients, client)
-			}
-		}
-		clients = onlineClients
+	pageSize := req.PageSize
+	if pageSize < 0 {
+		pageSize = 0
 	}
 
-	return &v1.ClientListRes{List: clients, Total: len(clients)}, nil
+	filterByRuntimeStatus := strings.TrimSpace(req.Status) == "online" || strings.TrimSpace(req.Status) == "offline"
+	total, err := gModel.Count()
+	if err != nil {
+		return nil, err
+	}
+	if total == 0 {
+		return &v1.ClientListRes{List: []entity.Clients{}, Total: 0}, nil
+	}
+
+	clients := []entity.Clients{}
+	queryModel := gModel.OrderDesc(columns.CreatedAt).OrderDesc(columns.Id)
+	if pageSize > 0 && !filterByRuntimeStatus {
+		queryModel = queryModel.Limit((pageNum-1)*pageSize, pageSize)
+	}
+	if err = queryModel.Scan(&clients); err != nil {
+		return nil, err
+	}
+	markClientRuntimeStatus(ctx, clients)
+	if filterByRuntimeStatus {
+		filteredClients := make([]entity.Clients, 0, len(clients))
+		for _, client := range clients {
+			if client.Status == strings.TrimSpace(req.Status) {
+				filteredClients = append(filteredClients, client)
+			}
+		}
+		clients = filteredClients
+		total = len(clients)
+		if pageSize > 0 {
+			start := (pageNum - 1) * pageSize
+			if start >= len(clients) {
+				clients = []entity.Clients{}
+			} else {
+				end := start + pageSize
+				if end > len(clients) {
+					end = len(clients)
+				}
+				clients = clients[start:end]
+			}
+		}
+	}
+
+	return &v1.ClientListRes{List: clients, Total: total}, nil
+}
+
+func markClientRuntimeStatus(ctx context.Context, clients []entity.Clients) {
+	for i := range clients {
+		if workflowcache.IsClientOnline(ctx, websockets.NodeConnectionID(clients[i].ClientIp, clients[i].NodeId)) {
+			clients[i].Status = "online"
+			continue
+		}
+		clients[i].Status = "offline"
+	}
 }

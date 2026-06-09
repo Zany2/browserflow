@@ -17,11 +17,13 @@ import (
 
 // WorkflowBatchDelete deletes local workflow records 批量删除本地工作流
 func (c *ControllerV1) WorkflowBatchDelete(ctx context.Context, req *v1.WorkflowBatchDeleteReq) (res *v1.WorkflowBatchDeleteRes, err error) {
+	stats := &v1.WorkflowBatchDeleteRes{Total: len(req.IDs)}
 	if consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer {
 		columns := dao.AutomaWorkflows.Columns()
 		for _, workflowID := range req.IDs {
 			workflowID = strings.TrimSpace(workflowID)
 			if workflowID == "" {
+				stats.NotFound++
 				continue
 			}
 			model := dao.AutomaWorkflows.Ctx(ctx)
@@ -30,11 +32,22 @@ func (c *ControllerV1) WorkflowBatchDelete(ctx context.Context, req *v1.Workflow
 			} else {
 				model = model.Where(columns.AutomaId, workflowID)
 			}
-			if _, err = model.Delete(); err != nil {
+			result, deleteErr := model.Delete()
+			if deleteErr != nil {
+				err = deleteErr
 				return nil, err
 			}
+			affected, affectedErr := result.RowsAffected()
+			if affectedErr != nil {
+				return nil, affectedErr
+			}
+			if affected <= 0 {
+				stats.NotFound++
+				continue
+			}
+			stats.Success++
 		}
-		return &v1.WorkflowBatchDeleteRes{}, nil
+		return stats, nil
 	}
 
 	state.DBMu.Lock()
@@ -58,11 +71,13 @@ func (c *ControllerV1) WorkflowBatchDelete(ctx context.Context, req *v1.Workflow
 	for _, workflowID := range req.IDs {
 		workflowID = strings.TrimSpace(workflowID)
 		if workflowID == "" {
+			stats.NotFound++
 			continue
 		}
 		if err = db.DeleteAutomaWorkflowRecord(workflowID); err != nil {
 			return nil, err
 		}
+		stats.Success++
 	}
-	return &v1.WorkflowBatchDeleteRes{}, nil
+	return stats, nil
 }

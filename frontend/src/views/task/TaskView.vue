@@ -3,6 +3,10 @@
     <header class="page-actions server-list-actions">
       <el-button :icon="RefreshRight" @click="loadTasks">刷新</el-button>
       <el-button type="primary" :icon="Plus" @click="handleCreateTask">新增任务</el-button>
+      <el-button @click="resetTaskFilters">重置</el-button>
+      <el-button type="danger" :disabled="selectedTaskIds.length === 0" @click="handleBatchDeleteTasks">
+        删除选中
+      </el-button>
     </header>
 
     <section class="task-panel server-list-panel">
@@ -24,13 +28,6 @@
               <el-option label="停用" value="false" />
             </el-select>
           </div>
-        </div>
-        <div class="task-filter-actions">
-          <el-button @click="resetTaskFilters">重置</el-button>
-          <el-button type="danger" :disabled="selectedTaskIds.length === 0" @click="handleBatchDeleteTasks">
-            删除选中
-          </el-button>
-          <AppSelectionSummary :count="selectedTaskIds.length" unit="任务" />
         </div>
       </div>
 
@@ -99,12 +96,15 @@
         </el-table-column>
       </el-table>
 
-      <AppPagination
-        v-model:current-page="taskPage"
-        v-model:page-size="taskPageSize"
-        :page-sizes="pageSizes"
-        :total="taskTotal"
-      />
+      <div class="task-footer server-list-footer">
+        <AppSelectionSummary :count="selectedTaskIds.length" unit="任务" />
+        <AppPagination
+          v-model:current-page="taskPage"
+          v-model:page-size="taskPageSize"
+          :page-sizes="pageSizes"
+          :total="taskTotal"
+        />
+      </div>
     </section>
 
     <AppDialog
@@ -1510,15 +1510,19 @@ function createEmptyTaskForm() {
 
 <style scoped lang="scss">
 .task-filters {
+  display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 20px;
 }
 
 .task-filter-fields {
-  display: grid;
-  flex: 1;
-  grid-template-columns: minmax(360px, 1.4fr) minmax(380px, 1.4fr) minmax(140px, 0.6fr);
-  gap: 12px 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  gap: 10px 20px;
+  width: 100%;
   min-width: 0;
 }
 
@@ -1526,6 +1530,21 @@ function createEmptyTaskForm() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.filter-item--keyword {
+  width: 360px;
+  min-width: 0;
+}
+
+.filter-item--created-time {
+  width: 420px;
+  min-width: 0;
+}
+
+.filter-item--enabled {
+  width: 188px;
+  min-width: 0;
 }
 
 .filter-item--created-time :deep(.el-date-editor) {
@@ -1541,15 +1560,6 @@ function createEmptyTaskForm() {
 .filter-label {
   flex-shrink: 0;
   color: #606266;
-}
-
-.task-filter-actions {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-left: auto;
 }
 
 .task-config-form :deep(.el-form-item__label) {
@@ -1736,32 +1746,34 @@ function createEmptyTaskForm() {
 }
 
 @media (max-width: 1280px) {
-  .task-filter-fields {
-    flex-basis: 100%;
-    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  .filter-item--keyword {
+    width: 320px;
   }
 
-  .task-filter-actions {
-    justify-content: flex-end;
-    width: 100%;
+  .filter-item--created-time {
+    width: 380px;
+  }
+
+  .filter-item--enabled {
+    width: 168px;
   }
 }
 
 @media (max-width: 640px) {
   .page-actions,
   .task-filters,
-  .task-filter-actions,
   .filter-item {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .task-filter-actions {
-    margin-left: 0;
+  .task-filter-fields {
+    width: 100%;
   }
 
-  .task-filter-fields {
-    grid-template-columns: 1fr;
+  .filter-item--keyword,
+  .filter-item--created-time,
+  .filter-item--enabled {
     width: 100%;
   }
 }

@@ -69,6 +69,15 @@ export function batchBanClients(ids, reason = '') {
   })
 }
 
+export function batchUnbanClients(ids) {
+  return request({
+    url: '/clients/batch-unban',
+    method: 'POST',
+    data: { ids },
+    showSuccessMessage: false,
+  })
+}
+
 export function unbanClient(id) {
   return request({
     url: `/clients/${id}/unban`,

@@ -132,7 +132,11 @@ type WorkflowBatchDeleteReq struct {
 	IDs    []string `json:"ids" v:"required|min-length:1#宸ヤ綔娴乮d鍒楄〃涓嶈兘涓虹┖|鑷冲皯閫夋嫨涓€涓伐浣滄祦" dc:"宸ヤ綔娴?ID 鍒楄〃"`
 }
 
-type WorkflowBatchDeleteRes struct{}
+type WorkflowBatchDeleteRes struct {
+	Total    int `json:"total" dc:"Total submitted workflows"`
+	Success  int `json:"success" dc:"Deleted workflows"`
+	NotFound int `json:"not_found" dc:"Not found workflows"`
+}
 
 type WorkflowImportFilesReq struct {
 	g.Meta `path:"/import" method:"post" tags:"宸ヤ綔娴? summary:"瀵煎叆宸ヤ綔娴佸帇缂╁寘" mime:"multipart/form-data"`
