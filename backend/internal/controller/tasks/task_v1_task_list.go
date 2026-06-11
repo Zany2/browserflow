@@ -56,7 +56,8 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 		}
 		gModel = gModel.WhereIn(columns.AutomaId, workflowIDs)
 	}
-	if clientIP, resolveErr := resolveClientIP(ctx, req.ClientID, ""); resolveErr != nil {
+	requestClientIP := strings.TrimSpace(req.ClientIP)
+	if clientIP, resolveErr := resolveClientIP(ctx, req.ClientID, requestClientIP); resolveErr != nil {
 		return nil, resolveErr
 	} else if clientIP != "" {
 		gModel = gModel.Where(columns.ClientIp, clientIP)
@@ -65,6 +66,18 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 	}
 	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
 		gModel = gModel.Where(columns.NodeId, nodeID)
+	}
+	if dispatchMode := strings.ToLower(strings.TrimSpace(req.DispatchMode)); dispatchMode == "auto" || dispatchMode == "ip" || dispatchMode == "node" || dispatchMode == "group" {
+		gModel = gModel.Where(columns.DispatchMode, dispatchMode)
+	}
+	if queuePolicy := strings.ToLower(strings.TrimSpace(req.QueuePolicy)); queuePolicy == "queue" || queuePolicy == "fail" || queuePolicy == "skip" {
+		gModel = gModel.Where(columns.QueuePolicy, queuePolicy)
+	}
+	switch strings.ToLower(strings.TrimSpace(req.ScheduleType)) {
+	case "manual":
+		gModel = gModel.Where("(" + columns.CronExpression + " IS NULL OR " + columns.CronExpression + " = '')")
+	case "cron":
+		gModel = gModel.Where(columns.CronExpression+" IS NOT NULL").Where(columns.CronExpression+" <> ?", "")
 	}
 	if enabled := strings.TrimSpace(req.Enabled); enabled == "true" || enabled == "false" {
 		gModel = gModel.Where(columns.Enabled, enabled == "true")
@@ -126,9 +139,14 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 		}
 	}
 
+	lookups, err := buildTaskListLookups(ctx, records)
+	if err != nil {
+		return nil, err
+	}
+
 	list := make([]*v1.TaskListResModel, 0, len(records))
 	for _, record := range records {
-		item, mapErr := buildTaskMap(ctx, record)
+		item, mapErr := buildTaskMapWithLookups(record, lookups)
 		if mapErr != nil {
 			return nil, mapErr
 		}
@@ -137,6 +155,114 @@ func (c *ControllerV1) TaskList(ctx context.Context, req *v1.TaskListReq) (res *
 	}
 
 	return &v1.TaskListRes{List: list, Total: total}, nil
+}
+
+type taskListLookups struct {
+	WorkflowNames map[string]string
+	ClientIDs     map[string]string
+	ClientNames   map[string]string
+}
+
+func buildTaskListLookups(ctx context.Context, records gdb.Result) (*taskListLookups, error) {
+	lookups := &taskListLookups{
+		WorkflowNames: map[string]string{},
+		ClientIDs:     map[string]string{},
+		ClientNames:   map[string]string{},
+	}
+	if len(records) == 0 {
+		return lookups, nil
+	}
+
+	taskColumns := dao.Tasks.Columns()
+	workflowIDs := make([]string, 0, len(records))
+	clientIPs := make([]string, 0, len(records))
+	nodeIDs := make([]string, 0, len(records))
+	seenWorkflowIDs := map[string]struct{}{}
+	seenClientIPs := map[string]struct{}{}
+	seenNodeIDs := map[string]struct{}{}
+	for _, record := range records {
+		workflowID := strings.TrimSpace(gconv.String(record[taskColumns.AutomaId]))
+		if workflowID != "" {
+			if _, ok := seenWorkflowIDs[workflowID]; !ok {
+				seenWorkflowIDs[workflowID] = struct{}{}
+				workflowIDs = append(workflowIDs, workflowID)
+			}
+		}
+		clientIP := strings.TrimSpace(gconv.String(record[taskColumns.ClientIp]))
+		if clientIP != "" {
+			if _, ok := seenClientIPs[clientIP]; !ok {
+				seenClientIPs[clientIP] = struct{}{}
+				clientIPs = append(clientIPs, clientIP)
+			}
+		}
+		nodeID := strings.TrimSpace(gconv.String(record[taskColumns.NodeId]))
+		if nodeID != "" {
+			if _, ok := seenNodeIDs[nodeID]; !ok {
+				seenNodeIDs[nodeID] = struct{}{}
+				nodeIDs = append(nodeIDs, nodeID)
+			}
+		}
+	}
+
+	if len(workflowIDs) > 0 {
+		workflowColumns := dao.AutomaWorkflows.Columns()
+		workflowRecords, err := dao.AutomaWorkflows.Ctx(ctx).
+			Fields(workflowColumns.AutomaId, workflowColumns.Name).
+			WhereIn(workflowColumns.AutomaId, workflowIDs).
+			All()
+		if err != nil {
+			return nil, err
+		}
+		for _, record := range workflowRecords {
+			workflowID := strings.TrimSpace(gconv.String(record[workflowColumns.AutomaId]))
+			if workflowID != "" {
+				lookups.WorkflowNames[workflowID] = strings.TrimSpace(gconv.String(record[workflowColumns.Name]))
+			}
+		}
+	}
+
+	if len(clientIPs) > 0 || len(nodeIDs) > 0 {
+		clientColumns := dao.Clients.Columns()
+		clientModel := dao.Clients.Ctx(ctx).Fields(clientColumns.Id, clientColumns.ClientIp, clientColumns.NodeId, clientColumns.DisplayName, clientColumns.Hostname)
+		if len(clientIPs) > 0 && len(nodeIDs) > 0 {
+			clientModel = clientModel.Where("("+clientColumns.ClientIp+" IN(?) OR "+clientColumns.NodeId+" IN(?))", clientIPs, nodeIDs)
+		} else if len(clientIPs) > 0 {
+			clientModel = clientModel.WhereIn(clientColumns.ClientIp, clientIPs)
+		} else {
+			clientModel = clientModel.WhereIn(clientColumns.NodeId, nodeIDs)
+		}
+		clientRecords, err := clientModel.All()
+		if err != nil {
+			return nil, err
+		}
+		for _, record := range clientRecords {
+			clientIP := strings.TrimSpace(gconv.String(record[clientColumns.ClientIp]))
+			nodeID := strings.TrimSpace(gconv.String(record[clientColumns.NodeId]))
+			clientID := strings.TrimSpace(gconv.String(record[clientColumns.Id]))
+			clientName := strings.TrimSpace(gconv.String(record[clientColumns.DisplayName]))
+			if clientName == "" {
+				clientName = strings.TrimSpace(gconv.String(record[clientColumns.Hostname]))
+			}
+			if clientName == "" {
+				clientName = clientIP
+			}
+			for _, key := range []string{
+				taskClientLookupKey(clientIP, nodeID),
+				taskClientLookupKey(clientIP, ""),
+				taskClientLookupKey("", nodeID),
+			} {
+				if key == "" {
+					continue
+				}
+				if clientID != "" {
+					lookups.ClientIDs[key] = clientID
+				}
+				lookups.ClientNames[key] = clientName
+			}
+		}
+	}
+
+	return lookups, nil
 }
 
 func buildTaskMap(ctx context.Context, record gdb.Record) (*model.TaskResModel, error) {
@@ -148,10 +274,6 @@ func buildTaskMap(ctx context.Context, record gdb.Record) (*model.TaskResModel, 
 	workflowID := strings.TrimSpace(gconv.String(record[columns.AutomaId]))
 	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
 	nodeID := strings.TrimSpace(gconv.String(record[columns.NodeId]))
-	params, err := taskdata.DecodeJSONMap(strings.TrimSpace(gconv.String(record[columns.ParamsJson])))
-	if err != nil {
-		return nil, err
-	}
 
 	workflowName := ""
 	if workflowID != "" {
@@ -187,6 +309,50 @@ func buildTaskMap(ctx context.Context, record gdb.Record) (*model.TaskResModel, 
 		}
 	}
 
+	lookups := &taskListLookups{
+		WorkflowNames: map[string]string{workflowID: workflowName},
+		ClientIDs:     map[string]string{taskClientLookupKey(clientIP, nodeID): clientID},
+		ClientNames:   map[string]string{taskClientLookupKey(clientIP, nodeID): clientName},
+	}
+	return buildTaskMapWithLookups(record, lookups)
+}
+
+func buildTaskMapWithLookups(record gdb.Record, lookups *taskListLookups) (*model.TaskResModel, error) {
+	if record.IsEmpty() {
+		return nil, nil
+	}
+
+	columns := dao.Tasks.Columns()
+	workflowID := strings.TrimSpace(gconv.String(record[columns.AutomaId]))
+	clientIP := strings.TrimSpace(gconv.String(record[columns.ClientIp]))
+	nodeID := strings.TrimSpace(gconv.String(record[columns.NodeId]))
+	params, err := taskdata.DecodeJSONMap(strings.TrimSpace(gconv.String(record[columns.ParamsJson])))
+	if err != nil {
+		return nil, err
+	}
+
+	workflowName := ""
+	clientID := ""
+	clientName := ""
+	if lookups != nil {
+		workflowName = lookups.WorkflowNames[workflowID]
+		for _, key := range []string{
+			taskClientLookupKey(clientIP, nodeID),
+			taskClientLookupKey(clientIP, ""),
+			taskClientLookupKey("", nodeID),
+		} {
+			if key == "" {
+				continue
+			}
+			if clientID == "" {
+				clientID = lookups.ClientIDs[key]
+			}
+			if clientName == "" {
+				clientName = lookups.ClientNames[key]
+			}
+		}
+	}
+
 	return &model.TaskResModel{
 		ID:                        gconv.Int64(record[columns.Id]),
 		Name:                      strings.TrimSpace(gconv.String(record[columns.Name])),
@@ -213,6 +379,15 @@ func buildTaskMap(ctx context.Context, record gdb.Record) (*model.TaskResModel, 
 		UpdatedAt:                 taskdata.RecordTime(record[columns.UpdatedAt]),
 		DeletedAt:                 taskdata.RecordTime(record[columns.DeletedAt]),
 	}, nil
+}
+
+func taskClientLookupKey(clientIP string, nodeID string) string {
+	clientIP = strings.TrimSpace(clientIP)
+	nodeID = strings.TrimSpace(nodeID)
+	if clientIP == "" && nodeID == "" {
+		return ""
+	}
+	return clientIP + "|" + nodeID
 }
 
 func buildTaskRecordMap(ctx context.Context, record gdb.Record) (*model.TaskRecordResModel, error) {

@@ -2,7 +2,7 @@
   <AppDialog
     v-model="visible"
     class="workflow-create-dialog"
-    title="新增工作流"
+    title="新增 JSON 工作流"
     width="860px"
     confirm-text="保存"
     :loading="loading"

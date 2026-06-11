@@ -167,7 +167,7 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 			item := entity.AutomaWorkflows{}
 			getErr = dao.AutomaWorkflows.Ctx(ctx).Where(columns.AutomaId, parsed.AutomaID).Scan(&item)
 			if getErr == nil && item.Id > 0 {
-				existing = &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceUserAgent: item.SourceUserAgent, IsProtected: item.IsProtected, ContentHash: item.ContentHash, Revision: item.Revision}
+				existing = &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceNodeID: item.SourceNodeId, SourceUserAgent: item.SourceUserAgent, IsProtected: item.IsProtected, ContentHash: item.ContentHash, Revision: item.Revision}
 				if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {
 					existing.FirstSyncedAt = item.FirstSyncedAt.Time
 				}
@@ -187,6 +187,7 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 			parsed.CreatedAt = existing.CreatedAt
 			parsed.FirstSyncedAt = existing.FirstSyncedAt
 			parsed.LastSyncedAt = existing.LastSyncedAt
+			parsed.IsProtected = existing.IsProtected
 			parsed.Revision = existing.Revision
 			if parsed.Revision <= 0 {
 				parsed.Revision = 1
@@ -217,8 +218,10 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 					metadataData.Source = parsed.Source
 					metadataChanged = true
 				}
-				if existing.IsProtected != parsed.IsProtected {
-					metadataData.IsProtected = parsed.IsProtected
+				if parsed.Source != 2 && hasWorkflowSourceInfo(existing) {
+					metadataData.SourceIp = ""
+					metadataData.SourceNodeId = ""
+					metadataData.SourceUserAgent = ""
 					metadataChanged = true
 				}
 				if strings.TrimSpace(existing.AutomaName) != parsed.AutomaName {
@@ -245,6 +248,11 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 						existing.AutomaName = parsed.AutomaName
 						existing.AutomaDescription = parsed.AutomaDescription
 						existing.Source = parsed.Source
+						if parsed.Source != 2 {
+							existing.SourceIP = ""
+							existing.SourceNodeID = ""
+							existing.SourceUserAgent = ""
+						}
 						existing.IsProtected = parsed.IsProtected
 						if err = db.SaveAutomaWorkflowRecord(existing); err != nil {
 							return nil, err
@@ -259,8 +267,13 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 			if parsed.FirstSyncedAt.IsZero() {
 				parsed.FirstSyncedAt = time.Time{}
 			}
+			if parsed.Source != 2 {
+				parsed.SourceIP = ""
+				parsed.SourceNodeID = ""
+				parsed.SourceUserAgent = ""
+			}
 			if serverMode {
-				saveData := do.AutomaWorkflows{AutomaId: parsed.AutomaID, Name: parsed.Name, Description: parsed.Description, AutomaName: parsed.AutomaName, AutomaDescription: parsed.AutomaDescription, Source: parsed.Source, SourceIp: parsed.SourceIP, SourceUserAgent: parsed.SourceUserAgent, AutomaVersion: parsed.AutomaVersion, ExtVersion: parsed.ExtVersion, CreatedAtAutoma: parsed.CreatedAtAutoma, UpdatedAtAutoma: parsed.UpdatedAtAutoma, IsDisabled: parsed.IsDisabled, IsProtected: parsed.IsProtected, NodeCount: parsed.NodeCount, EdgeCount: parsed.EdgeCount, RawJson: parsed.RawJSON, NormalizedJson: parsed.NormalizedJSON, ContentHash: parsed.ContentHash, Revision: parsed.Revision}
+				saveData := do.AutomaWorkflows{AutomaId: parsed.AutomaID, Name: parsed.Name, Description: parsed.Description, AutomaName: parsed.AutomaName, AutomaDescription: parsed.AutomaDescription, Source: parsed.Source, SourceIp: parsed.SourceIP, SourceNodeId: parsed.SourceNodeID, SourceUserAgent: parsed.SourceUserAgent, AutomaVersion: parsed.AutomaVersion, ExtVersion: parsed.ExtVersion, CreatedAtAutoma: parsed.CreatedAtAutoma, UpdatedAtAutoma: parsed.UpdatedAtAutoma, IsDisabled: parsed.IsDisabled, IsProtected: parsed.IsProtected, NodeCount: parsed.NodeCount, EdgeCount: parsed.EdgeCount, RawJson: parsed.RawJSON, NormalizedJson: parsed.NormalizedJSON, ContentHash: parsed.ContentHash, Revision: parsed.Revision}
 				if !parsed.FirstSyncedAt.IsZero() {
 					saveData.FirstSyncedAt = gtime.NewFromTime(parsed.FirstSyncedAt)
 				}
@@ -291,4 +304,13 @@ func (c *ControllerV1) WorkflowCreate(ctx context.Context, req *v1.WorkflowCreat
 	}
 
 	return &v1.WorkflowCreateRes{WorkflowMutationStats: stats}, nil
+}
+
+func hasWorkflowSourceInfo(record *model.AutomaWorkflowRecord) bool {
+	if record == nil {
+		return false
+	}
+	return strings.TrimSpace(record.SourceIP) != "" ||
+		strings.TrimSpace(record.SourceNodeID) != "" ||
+		strings.TrimSpace(record.SourceUserAgent) != ""
 }

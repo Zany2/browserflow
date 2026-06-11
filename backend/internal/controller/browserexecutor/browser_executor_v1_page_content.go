@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorPageContent gets compact page HTML. BrowserExecutorPageContent 閼惧嘲褰囩槐褍鍣炬い鐢告桨 HTML閵?
+// BrowserExecutorPageContent gets compact page HTML. 获取精简页面 HTML。
 func (c *ControllerV1) BrowserExecutorPageContent(ctx context.Context, req *v1.BrowserExecutorPageContentReq) (res *v1.BrowserExecutorPageContentRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

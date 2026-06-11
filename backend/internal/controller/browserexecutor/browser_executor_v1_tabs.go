@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorTabs manages tabs. BrowserExecutorTabs 缁狅紕鎮婇弽鍥╊劮妞ょ偣鈧?
+// BrowserExecutorTabs manages tabs. 管理标签页。
 func (c *ControllerV1) BrowserExecutorTabs(ctx context.Context, req *v1.BrowserExecutorTabsReq) (res *v1.BrowserExecutorTabsRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

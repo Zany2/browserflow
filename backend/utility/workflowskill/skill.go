@@ -12,10 +12,10 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
-// FileName is the exported Skill filename. ??? Skill ????
+// FileName is the exported Skill filename. 导出的 Skill 文件名。
 const FileName = "SKILL.md"
 
-// FilterWorkflows keeps workflows by export scope. ???????????
+// FilterWorkflows keeps workflows by export scope. 按导出范围过滤工作流。
 func FilterWorkflows(workflows []map[string]any, scope string, workflowIDs []string) []map[string]any {
 	return filterAgentSkillWorkflows(workflows, scope, workflowIDs)
 }
@@ -25,7 +25,7 @@ func FilterServerWorkflows(workflows []map[string]any, scope string, workflowIDs
 	return filterServerSkillWorkflows(workflows, scope, workflowIDs)
 }
 
-// GenerateMarkdown builds SKILL.md content. ?? SKILL.md ???
+// GenerateMarkdown builds SKILL.md content. 生成 SKILL.md 内容。
 func GenerateMarkdown(workflows []map[string]any, baseURL string, browserID string) string {
 	return generateAgentWorkflowSkillMD(workflows, baseURL, browserID)
 }
@@ -35,12 +35,12 @@ func GenerateServerMarkdown(workflows []map[string]any, baseURL string) string {
 	return generateServerWorkflowSkillMD(workflows, baseURL)
 }
 
-// ContentDisposition builds download header. ????????
+// ContentDisposition builds download header. 构建下载响应头。
 func ContentDisposition(fileName string) string {
 	return buildAgentSkillContentDisposition(fileName)
 }
 
-// BaseURL builds api base url. ?? API ?????
+// BaseURL builds api base url. 构建 API 基础地址。
 func BaseURL(host string, tls bool) string {
 	return agentSkillBaseURL(host, tls)
 }
@@ -1358,15 +1358,42 @@ func skillMojibakeScore(value string) int {
 			score += 4
 		case item >= '\uE000' && item <= '\uF8FF':
 			score += 4
-		case strings.ContainsRune("ÃÂ¤¥€™œš", item):
+		case isLatin1MojibakeRune(item):
 			score += 3
 		}
 	}
 
-	for _, marker := range []string{"鏅", "澶", "鍗", "妫", "閿", "绱", "弬", "繚", "畾", "屾", "", "", ""} {
+	for _, marker := range mojibakeMarkers() {
 		if strings.Contains(value, marker) {
 			score += 2
 		}
 	}
 	return score
+}
+
+func isLatin1MojibakeRune(item rune) bool {
+	switch item {
+	case '\u00C3', '\u00C2', '\u00A4', '\u00A5', '\u20AC', '\u2122', '\u0153', '\u0161':
+		return true
+	default:
+		return false
+	}
+}
+
+func mojibakeMarkers() []string {
+	return []string{
+		"\u93C5",
+		"\u6FB6",
+		"\u9357",
+		"\u59AB",
+		"\u95BF",
+		"\u7EB1",
+		"\u5F2C",
+		"\u7E5A",
+		"\u757E",
+		"\u5C7E",
+		"\uE1C0",
+		"\uE5C5",
+		"\uE190",
+	}
 }

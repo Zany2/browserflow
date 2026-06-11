@@ -39,8 +39,12 @@ type TaskListReq struct {
 	WorkflowID   string `json:"workflow_id,omitempty" in:"query" dc:"工作流ID"`
 	WorkflowName string `json:"workflow_name,omitempty" in:"query" dc:"工作流名称"`
 	ClientID     string `json:"client_id,omitempty" in:"query" dc:"客户端ID"`
+	ClientIP     string `json:"client_ip,omitempty" in:"query" dc:"客户端"`
 	MachineID    string `json:"machine_id,omitempty" in:"query" dc:"机器ID"`
 	NodeID       string `json:"node_id,omitempty" in:"query" dc:"执行节点ID"`
+	DispatchMode string `json:"dispatch_mode,omitempty" in:"query" dc:"调度模式"`
+	QueuePolicy  string `json:"queue_policy,omitempty" in:"query" dc:"繁忙策略"`
+	ScheduleType string `json:"schedule_type,omitempty" in:"query" dc:"执行计划类型"`
 	Enabled      string `json:"enabled,omitempty" in:"query" dc:"启用状态"`
 }
 

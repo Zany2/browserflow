@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorGetValue gets element value. BrowserExecutorGetValue 閼惧嘲褰囬崗鍐閸婄鈧?
+// BrowserExecutorGetValue gets element value. 获取元素值。
 func (c *ControllerV1) BrowserExecutorGetValue(ctx context.Context, req *v1.BrowserExecutorGetValueReq) (res *v1.BrowserExecutorGetValueRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

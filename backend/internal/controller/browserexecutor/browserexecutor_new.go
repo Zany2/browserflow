@@ -7,7 +7,7 @@ package browserexecutor
 // ControllerV1 browser executor controller. 浏览器执行器控制器。
 type ControllerV1 struct{}
 
-// NewV1 creates browser executor controller 閸掓稑缂撳ù蹇氼潔閸ｃ劍澧界悰灞芥珤閹貉冨煑閸?
+// NewV1 creates browser executor controller 创建浏览器执行器控制器。
 func NewV1() *ControllerV1 {
 	return &ControllerV1{}
 }

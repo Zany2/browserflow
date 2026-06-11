@@ -11,7 +11,7 @@ type ClientListReq struct {
 	Status            string `json:"status,omitempty" in:"query" dc:"客户端状态"`
 	BusyStatus        string `json:"busy_status,omitempty" in:"query" dc:"节点忙闲状态"`
 	IsBanned          string `json:"is_banned,omitempty" in:"query" dc:"是否拉黑：true、false"`
-	IP                string `json:"ip,omitempty" in:"query" dc:"客户端 IP"`
+	IP                string `json:"ip,omitempty" in:"query" dc:"客户端"`
 	NodeID            string `json:"node_id,omitempty" in:"query" dc:"执行节点 ID"`
 	Keyword           string `json:"keyword,omitempty" in:"query" dc:"关键字"`
 	LastSeenStartTime string `json:"last_seen_start_time,omitempty" in:"query" dc:"最近心跳开始时间"`

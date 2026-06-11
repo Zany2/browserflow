@@ -50,7 +50,7 @@
         <article class="overview-card">
           <span class="overview-label">当前 IP</span>
           <strong>{{ currentIp || '' }}</strong>
-          <small>优先显示后端注册回传的客户端 IP</small>
+          <small>优先显示后端注册回传的客户端</small>
         </article>
 
         <article class="overview-card">
@@ -269,7 +269,7 @@ async function ensureClientAllowedBeforeConnect() {
     _t: Date.now(),
   })
   if (data?.allowed === false || data?.is_banned) {
-    const reason = data?.reason || '当前客户端 IP 已被拉黑，将持续检测，解除拉黑后自动重连'
+    const reason = data?.reason || '当前客户端已被拉黑，将持续检测，解除拉黑后自动重连'
     const shouldNotify = blockedReason.value !== reason
     blockedReason.value = reason
     if (shouldNotify) {

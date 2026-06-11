@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorClosePage closes current page. BrowserExecutorClosePage 鍏抽棴褰撳墠椤甸潰銆?
+// BrowserExecutorClosePage closes current page. 关闭当前页面。
 func (c *ControllerV1) BrowserExecutorClosePage(ctx context.Context, req *v1.BrowserExecutorClosePageReq) (res *v1.BrowserExecutorClosePageRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

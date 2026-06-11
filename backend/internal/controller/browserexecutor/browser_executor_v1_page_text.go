@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorPageText gets compact page text. BrowserExecutorPageText 閼惧嘲褰囩槐褍鍣炬い鐢告桨閺傚洦婀伴妴?
+// BrowserExecutorPageText gets compact page text. 获取精简页面文本。
 func (c *ControllerV1) BrowserExecutorPageText(ctx context.Context, req *v1.BrowserExecutorPageTextReq) (res *v1.BrowserExecutorPageTextRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

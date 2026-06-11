@@ -2,32 +2,32 @@
   <section class="automa-page server-list-page">
     <header class="page-header server-list-actions">
       <div class="header-actions server-list-actions__inner">
-        <el-button @click="createDialogVisible = true">新增</el-button>
-        <el-button @click="importDialogVisible = true">导入</el-button>
+        <el-button @click="createDialogVisible = true">新增 JSON</el-button>
+        <el-button @click="importDialogVisible = true">导入 ZIP</el-button>
         <el-button type="primary" @click="syncDialogVisible = true">客户端同步</el-button>
         <el-button type="success" @click="maintenanceDialogVisible = true">客户端维护</el-button>
         <el-button :icon="Download" :loading="skillExporting" :disabled="workflows.length === 0"
           @click="handleExportSkill">
           导出 Skill
         </el-button>
-        <el-button :icon="RefreshRight" @click="loadWorkflows">刷新</el-button>
-        <el-button @click="resetFilters">重置</el-button>
         <el-button type="danger" :disabled="selectedWorkflowIds.length === 0" @click="handleBatchDelete">
           删除选中
         </el-button>
+        <el-button :icon="RefreshRight" @click="loadWorkflows">刷新</el-button>
+        <el-button @click="resetFilters">重置</el-button>
       </div>
     </header>
 
     <section class="workflow-panel server-list-panel">
       <div class="workflow-filters server-list-filters">
-        <div class="workflow-filter-fields">
-          <div class="filter-item filter-item--keyword">
-            <span class="filter-label">关键词</span>
-            <el-input v-model="filters.keyword" clearable placeholder="工作流名称、描述、Automa ID" />
+        <div class="workflow-filter-fields server-filter-fields">
+          <div class="server-filter-item server-filter-item--text filter-item--keyword">
+            <span class="server-filter-label">关键词</span>
+            <el-input v-model="filters.keyword" clearable placeholder="工作流名称、描述、Automa ID等" />
           </div>
 
-          <div class="filter-item filter-item--source">
-            <span class="filter-label">来源</span>
+          <div class="server-filter-item server-filter-item--short filter-item--source">
+            <span class="server-filter-label">来源</span>
             <el-select v-model="filters.source" clearable placeholder="全部">
               <el-option label="全部" value="" />
               <el-option label="新增/导入" :value="1" />
@@ -35,8 +35,8 @@
             </el-select>
           </div>
 
-          <div class="filter-item filter-item--syncable">
-            <span class="filter-label">是否可同步</span>
+          <div class="server-filter-item server-filter-item--short filter-item--syncable">
+            <span class="server-filter-label">是否可同步</span>
             <el-select v-model="filters.syncable" clearable placeholder="全部">
               <el-option label="全部" value="" />
               <el-option label="是" :value="1" />
@@ -44,25 +44,29 @@
             </el-select>
           </div>
 
-          <div class="filter-item filter-item--ip">
-            <span class="filter-label">客户端 IP</span>
-            <el-select v-model="filters.source_ip" clearable filterable placeholder="选择或检索客户端 IP"
+          <div class="server-filter-item server-filter-item--medium filter-item--ip">
+            <span class="server-filter-label">客户端</span>
+            <el-select v-model="filters.source_ip" clearable filterable placeholder="选择或检索客户端"
               :loading="clientIpLoading" :value-on-clear="''" @clear="handleClientIpClear"
               @visible-change="handleClientIpSelectVisible">
               <el-option v-for="clientIp in clientIpOptions" :key="clientIp" :label="clientIp" :value="clientIp" />
             </el-select>
           </div>
 
-          <div class="filter-item filter-item--node">
-            <span class="filter-label">来源节点</span>
+          <div class="server-filter-item server-filter-item--node filter-item--node">
+            <span class="server-filter-label">来源节点</span>
             <el-select v-model="filters.source_node_ids" clearable filterable multiple collapse-tags
-              collapse-tags-tooltip placeholder="请先选择客户端 IP" :disabled="!filters.source_ip"
-              :loading="clientIpLoading" @visible-change="handleClientIpSelectVisible">
+              collapse-tags-tooltip placeholder="请先选择客户端" :disabled="!filters.source_ip" :loading="clientIpLoading"
+              @visible-change="handleClientIpSelectVisible">
               <el-option v-for="client in filteredClientNodeOptions" :key="client.source_node_id" :label="client.label"
                 :value="client.source_node_id" />
             </el-select>
           </div>
 
+          <div class="server-filter-item server-filter-item--time filter-item--created-time">
+            <span class="server-filter-label">创建时间</span>
+            <AppTimeRangeFilter v-model="filters.created_time_range" />
+          </div>
         </div>
       </div>
 
@@ -71,33 +75,27 @@
         @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
 
-        <el-table-column label="自定义工作流名称" min-width="120" show-overflow-tooltip>
+        <el-table-column label="自定义工作流名称" min-width="112" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.name || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="自定义工作流描述" min-width="140" show-overflow-tooltip>
+        <el-table-column label="自定义工作流描述" min-width="124" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.description || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="来源" width="86">
+        <el-table-column label="来源" width="112">
           <template #default="{ row }">
             {{ formatSource(row.source) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="客户端 IP" width="120" show-overflow-tooltip>
+        <el-table-column label="客户端/来源节点" width="158" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.source_ip || '' }}
-          </template>
-        </el-table-column>
-
-        <el-table-column label="来源节点 ID" width="120" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.source_node_id || '' }}
+            {{ formatSourceNode(row) }}
           </template>
         </el-table-column>
 
@@ -106,7 +104,9 @@
             <span class="table-label-with-help">
               是否可同步
               <el-tooltip :content="SYNCABLE_HELP" placement="top">
-                <el-icon class="syncable-help-icon"><InfoFilled /></el-icon>
+                <el-icon class="syncable-help-icon">
+                  <InfoFilled />
+                </el-icon>
               </el-tooltip>
             </span>
           </template>
@@ -118,7 +118,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="节点数/连线数" width="110" align="center">
+        <el-table-column label="节点数/连线数" width="128" align="center">
           <template #default="{ row }">
             {{ formatWorkflowGraphSize(row) }}
           </template>
@@ -127,6 +127,12 @@
         <el-table-column label="创建时间" width="160" class-name="nowrap-column">
           <template #default="{ row }">
             {{ formatListDate(row.created_at) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="最近同步到服务端" width="172" class-name="nowrap-column">
+          <template #default="{ row }">
+            {{ formatListDate(row.last_synced_at) }}
           </template>
         </el-table-column>
 
@@ -159,61 +165,40 @@
     <AppDialog v-model="detailVisible" title="工作流详情" width="min(1040px, calc(100vw - 32px))"
       class="workflow-detail-dialog" confirm-text="保存" :loading="detailSaving" :confirm-disabled="detailLoading"
       @confirm="handleSaveDetail">
-      <div v-loading="detailLoading" class="detail-groups">
-        <section v-for="group in detailGroups" :key="group.key" class="detail-group">
-          <div class="detail-group-title">{{ group.title }}</div>
-          <div class="detail-form server-detail-form">
-            <div v-for="field in group.fields" :key="field.key" class="detail-field server-detail-field"
-              :class="{ 'detail-field--wide': field.type === 'textarea' }">
-              <span class="detail-label server-detail-label">
-                <span>{{ field.label }}</span>
-                <el-tooltip v-if="field.help" :content="field.help" placement="top">
-                  <el-icon class="syncable-help-icon"><InfoFilled /></el-icon>
-                </el-tooltip>
-              </span>
-              <div class="detail-control server-detail-control">
-                <el-input v-if="field.type === 'textarea' && field.editable" v-model="detailForm[field.key]" clearable
-                  type="textarea" :rows="3" />
-                <el-switch v-else-if="field.type === 'syncable-switch'" :model-value="!detailForm.is_protected"
-                  :before-change="() => handleToggleSyncable(detailForm)" />
-                <el-switch v-else-if="field.type === 'switch'" v-model="detailForm[field.key]" />
-                <el-input v-else-if="field.editable" v-model="detailForm[field.key]" clearable />
-                <div v-else class="detail-value" :class="{ 'detail-value--textarea': field.type === 'textarea' }">
-                  <span class="detail-text" :class="{ 'detail-text--empty': !field.value }">{{ field.value || '' }}</span>
-                  <el-tooltip v-if="field.copyable && field.value" content="复制" placement="top">
-                    <el-button class="detail-copy" text circle :icon="CopyDocument" :aria-label="`复制${field.label}`"
-                      @click="copyDetailValue(field.value)" />
-                  </el-tooltip>
-                  <el-tooltip v-if="field.expandable && field.value" content="查看完整内容" placement="top">
-                    <el-button class="detail-copy" text circle :icon="View" :aria-label="`查看${field.label}`"
-                      @click="openLongTextDialog(field)" />
-                  </el-tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
+      <ServerDetailGroups
+        v-loading="detailLoading"
+        :groups="detailGroups"
+        :model="detailForm"
+        :toggle-syncable="handleToggleSyncable"
+        @copy="copyDetailValue"
+        @expand="openLongTextDialog"
+      />
     </AppDialog>
 
-    <AppDialog v-model="longTextVisible" :title="longTextDialog.title" width="min(760px, calc(100vw - 32px))"
-      confirm-text="复制" cancel-text="关闭" @confirm="copyDetailValue(longTextDialog.value)">
-      <pre class="long-text-content">{{ longTextDialog.value }}</pre>
-    </AppDialog>
+    <AppLongTextDialog
+      v-model="longTextVisible"
+      :title="longTextDialog.title"
+      :value="longTextDialog.value"
+      @copy="copyDetailValue"
+    />
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { CopyDocument, Download, InfoFilled, RefreshRight, View } from '@element-plus/icons-vue'
+import { Download, InfoFilled, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppDialog from '@/components/AppDialog.vue'
+import AppLongTextDialog from '@/components/AppLongTextDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
+import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
+import ServerDetailGroups from '@/components/ServerDetailGroups.vue'
 import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { copyText } from '@/utils/browser'
+import { buildClientNodeOptions, getClientIp } from '@/utils/clientNode'
 import { formatDate, formatEmpty } from '@/utils/format'
 import { DEFAULT_PAGE_SIZES, getSafePage, normalizeList, normalizeText } from '@/utils/list'
 import {
@@ -227,7 +212,7 @@ import {
   updateAutomaWorkflow,
   updateAutomaWorkflowProtected,
 } from '@/services/automa'
-import { listClients } from '@/services/client'
+import { listAllClients } from '@/services/client'
 import { downloadBlob } from '@/utils/browser'
 import AutomaImportDialog from './components/AutomaImportDialog.vue'
 import AutomaJsonDialog from './components/AutomaJsonDialog.vue'
@@ -258,13 +243,14 @@ const syncDialogVisible = ref(false)
 const maintenanceDialogVisible = ref(false)
 const longTextVisible = ref(false)
 const longTextDialog = reactive({ title: '', value: '' })
-const SYNCABLE_HELP = '开启后允许客户端同步覆盖该工作流，关闭后会保护服务端工作流不被客户端覆盖。'
+const SYNCABLE_HELP = '开启后客户端可在工作流列表中看到并同步到本地；关闭后客户端不可见，也无法同步到本地。'
 
 const filters = reactive({
   keyword: '',
   source: '',
   source_ip: '',
   source_node_ids: [],
+  created_time_range: [],
   syncable: '',
 })
 
@@ -303,6 +289,7 @@ const detailGroups = computed(() => {
         { key: 'description', label: '自定义工作流描述', type: 'textarea', editable: true },
         { key: 'automa_name', label: 'Automa 工作流名称', value: formatEmpty(detailForm.automa_name) },
         { key: 'automa_description', label: 'Automa 工作流描述', value: formatEmpty(detailForm.automa_description) },
+        { key: 'is_disabled', label: 'Automa 状态', value: formatAutomaStatus(detailForm) },
         { key: 'is_protected', label: '是否可同步', type: 'syncable-switch', editable: true, help: SYNCABLE_HELP },
       ],
     },
@@ -311,8 +298,8 @@ const detailGroups = computed(() => {
       title: '来源信息',
       fields: [
         { key: 'source', label: '来源', value: formatSource(detailForm.source) },
-        { key: 'source_ip', label: '客户端 IP', value: formatEmpty(detailForm.source_ip), copyable: true },
-        { key: 'source_node_id', label: '来源节点 ID', value: formatEmpty(detailForm.source_node_id), copyable: true },
+        { key: 'source_ip', label: '客户端', value: formatEmpty(detailForm.source_ip), copyable: true },
+        { key: 'source_node_id', label: '来源节点', value: formatEmpty(detailForm.source_node_id), copyable: true },
         {
           key: 'source_user_agent',
           label: 'User-Agent',
@@ -364,7 +351,7 @@ const detailGroups = computed(() => {
         { key: 'created_at_automa', label: 'Automa 创建时间', value: formatDate(detailForm.created_at_automa) },
         { key: 'updated_at_automa', label: 'Automa 更新时间', value: formatDate(detailForm.updated_at_automa) },
         { key: 'first_synced_at', label: '首次同步时间', value: formatDate(detailForm.first_synced_at) },
-        { key: 'last_synced_at', label: '最近同步时间', value: formatDate(detailForm.last_synced_at) },
+        { key: 'last_synced_at', label: '最近同步到服务端', value: formatDate(detailForm.last_synced_at) },
         { key: 'created_at', label: '创建时间', value: formatDate(detailForm.created_at) },
         { key: 'updated_at', label: '更新时间', value: formatDate(detailForm.updated_at) },
       ],
@@ -381,15 +368,13 @@ const detailGroups = computed(() => {
 
 onMounted(() => {
   loadWorkflows()
-  loadClientIpOptions()
 })
 
-watch(() => filters.source, () => {
-  clearFilterSearchTimer()
-  reloadFirstWorkflowPage()
-})
-
-watch(() => filters.syncable, () => {
+watch(() => [
+  filters.source,
+  filters.syncable,
+  filters.created_time_range,
+], () => {
   clearFilterSearchTimer()
   reloadFirstWorkflowPage()
 })
@@ -425,12 +410,15 @@ watch(pageSize, () => {
 async function loadWorkflows() {
   loading.value = true
   try {
+    const [startTime, endTime] = getCreatedTimeRange()
     const data = await listAutomaWorkflows({
       keyword: filters.keyword.trim(),
       source: filters.source,
       syncable: filters.syncable,
       source_ip: normalizeText(filters.source_ip),
       source_node_ids: filters.source_node_ids,
+      start_time: startTime,
+      end_time: endTime,
       page_num: currentPage.value,
       page_size: pageSize.value,
     })
@@ -448,30 +436,17 @@ async function loadWorkflows() {
   }
 }
 
-async function loadClientIpOptions() {
+async function loadClientIpOptions(force = false) {
+  if (!force && clientOptions.value.length > 0) return
+
   clientIpLoading.value = true
   try {
-    const data = await listClients()
-    const seen = new Set()
-    clientOptions.value = normalizeList(data, 'clients')
-      .map((client) => {
-        const clientIp = getClientIp(client)
-        const nodeId = normalizeText(client?.node_id || client?.nodeId)
-        const key = buildNodeIdentity(clientIp, nodeId)
-        return {
-          key,
-          source_ip: clientIp,
-          source_node_id: nodeId,
-          label: nodeId ? `${clientIp} / ${nodeId}` : clientIp,
-        }
-      })
-      .filter((client) => client.key)
-      .filter((client) => {
-        if (seen.has(client.key)) return false
-        seen.add(client.key)
-        return true
-      })
-    clientIpOptions.value = Array.from(new Set(clientOptions.value.map((client) => client.source_ip).filter(Boolean)))
+    const data = await listAllClients()
+    const { ipOptions, nodeOptions } = buildClientNodeOptions(normalizeList(data, 'clients'), {
+      label: ({ clientIp, nodeId }) => (nodeId ? `${clientIp} / ${nodeId}` : clientIp),
+    })
+    clientOptions.value = nodeOptions
+    clientIpOptions.value = ipOptions
   } finally {
     clientIpLoading.value = false
   }
@@ -627,7 +602,15 @@ function resetFilters() {
   filters.source = ''
   filters.source_ip = ''
   filters.source_node_ids = []
+  filters.created_time_range = []
   filters.syncable = ''
+}
+
+function getCreatedTimeRange() {
+  const range = Array.isArray(filters.created_time_range)
+    ? filters.created_time_range
+    : []
+  return [range[0] || '', range[1] || '']
 }
 
 function createDetailForm() {
@@ -676,22 +659,14 @@ function getWorkflowId(row) {
   return row?.id || row?.automa_id || row?.workflow_id || row?.workflowId || ''
 }
 
-function getClientIp(row) {
-  return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
-}
-
-function buildNodeIdentity(clientIp, nodeId) {
-  clientIp = normalizeText(clientIp)
-  nodeId = normalizeText(nodeId)
-  if (!clientIp) return nodeId
-  if (!nodeId || nodeId === clientIp) return clientIp
-  return `${clientIp}|${nodeId}`
-}
-
 function formatWorkflowGraphSize(row) {
   const nodeCount = row?.node_count ?? ''
   const edgeCount = row?.edge_count ?? ''
   return `${nodeCount} / ${edgeCount}`
+}
+
+function formatAutomaStatus(row) {
+  return row?.is_disabled ? '禁用' : '启用'
 }
 
 function normalizeSourceValue(source, fallback = 1) {
@@ -707,6 +682,12 @@ function formatSource(source) {
   return ''
 }
 
+function formatSourceNode(row) {
+  const sourceIp = normalizeText(row?.source_ip)
+  const sourceNodeId = normalizeText(row?.source_node_id)
+  return [sourceIp, sourceNodeId].filter(Boolean).join(' / ')
+}
+
 function formatWorkflowMutationMessage(prefix, result, fallback) {
   const created = Number(result?.created || 0)
   const updated = Number(result?.updated || 0)
@@ -715,7 +696,7 @@ function formatWorkflowMutationMessage(prefix, result, fallback) {
 
   if (created > 0) parts.push(`新增 ${created} 个`)
   if (updated > 0) parts.push(`更新 ${updated} 个`)
-  if (unchanged > 0) parts.push(`重复 ${unchanged} 个`)
+  if (unchanged > 0) parts.push(`无变化 ${unchanged} 个`)
   if (parts.length === 0) return fallback
 
   return `${prefix}：${parts.join('，')}`
@@ -810,64 +791,11 @@ function formatDetailJson(value) {
   display: flex;
   align-items: flex-start;
   flex-direction: row;
-  gap: 10px 20px;
+  gap: 8px 14px;
 }
 
 .workflow-filter-fields {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  flex: 1 1 auto;
-  gap: 10px 20px;
-  width: 100%;
-  min-width: 0;
-}
-
-.filter-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.filter-item--keyword {
-  width: 360px;
-  min-width: 0;
-}
-
-.filter-item--source {
-  min-width: 0;
-}
-
-.filter-item--syncable {
-  min-width: 0;
-}
-
-.filter-item--ip {
-  width: 260px;
-  min-width: 0;
-}
-
-.filter-item--node {
-  width: 320px;
-  min-width: 0;
-}
-
-.filter-label {
-  flex-shrink: 0;
-  color: #606266;
-}
-
-.filter-item :deep(.el-input),
-.filter-item :deep(.el-select) {
-  flex: 1;
-  min-width: 0;
-}
-
-.filter-item--source :deep(.el-select),
-.filter-item--syncable :deep(.el-select) {
-  width: 144px;
-  flex: 0 0 144px;
+  gap: 8px 14px;
 }
 
 .field-value {
@@ -894,135 +822,6 @@ function formatDetailJson(value) {
   cursor: help;
 }
 
-.detail-groups {
-  display: grid;
-  gap: 16px;
-}
-
-.detail-group {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.detail-group-title {
-  display: flex;
-  align-items: center;
-  min-height: 24px;
-  color: #303133;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.detail-group + .detail-group {
-  padding-top: 2px;
-  border-top: 1px solid #ebeef5;
-}
-
-.detail-field {
-  grid-template-columns: 132px minmax(0, 1fr);
-}
-
-.detail-form {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 20px;
-}
-
-.detail-control {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.detail-label {
-  display: inline-flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.detail-label .syncable-help-icon {
-  margin-top: 1px;
-}
-
-.detail-field--wide {
-  grid-column: 1 / -1;
-}
-
-.detail-value {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  height: 32px;
-  min-width: 0;
-  padding: 4px 8px 4px 10px;
-  color: #303133;
-  line-height: 20px;
-  background: #f8fafc;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-}
-
-.detail-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.detail-text--empty {
-  color: #a8abb2;
-}
-
-.detail-value--textarea {
-  align-items: flex-start;
-  height: auto;
-  min-height: 78px;
-}
-
-.detail-value--textarea .detail-text {
-  display: -webkit-box;
-  overflow: hidden;
-  white-space: normal;
-  word-break: break-all;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.detail-copy {
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  margin-left: 6px;
-  padding: 0;
-  color: #909399;
-}
-
-.detail-copy :deep(.el-icon) {
-  font-size: 14px;
-}
-
-.detail-copy:hover {
-  color: #409eff;
-}
-
-.long-text-content {
-  box-sizing: border-box;
-  max-height: min(520px, calc(100vh - 240px));
-  min-height: 180px;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  color: #303133;
-  font-family: Consolas, 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: #f8fafc;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-}
-
 @media (max-width: 1100px) {
   .automa-page {
     height: auto;
@@ -1035,57 +834,15 @@ function formatDetailJson(value) {
     gap: 10px;
   }
 
-  .filter-item--keyword {
-    width: 320px;
-  }
-
-  .filter-item--ip {
-    width: 240px;
-  }
-
-  .filter-item--node {
-    width: 280px;
-  }
 }
 
 @media (max-width: 640px) {
 
   .workflow-filters,
-  .workflow-filter-fields,
-  .filter-item,
   .header-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .workflow-filter-fields {
-    width: 100%;
-  }
-
-  .filter-item--keyword,
-  .filter-item--source,
-  .filter-item--syncable,
-  .filter-item--ip,
-  .filter-item--node {
-    width: 100%;
-  }
-
-  .filter-item--source :deep(.el-select),
-  .filter-item--syncable :deep(.el-select) {
-    width: 100%;
-    flex: 1 1 auto;
-  }
-
-  .detail-field {
-    grid-template-columns: 1fr;
-  }
-
-  .detail-label {
-    text-align: left;
-  }
-
-  .detail-control {
-    grid-template-columns: minmax(0, 1fr) 64px;
-  }
 }
 </style>

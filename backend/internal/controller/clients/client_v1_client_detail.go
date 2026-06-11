@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/clients/v1"
@@ -36,21 +37,19 @@ func queryClientRecord(ctx context.Context, id string) (gdb.Record, error) {
 	}
 
 	columns := dao.Clients.Columns()
+	if primaryID, ok := parseClientPrimaryID(id); ok {
+		record, err := dao.Clients.Ctx(ctx).WherePri(primaryID).One()
+		if err != nil || !record.IsEmpty() {
+			return record, err
+		}
+	}
+
 	record, err := dao.Clients.Ctx(ctx).Where(columns.NodeId, id).One()
 	if err != nil || !record.IsEmpty() {
 		return record, err
 	}
 
-	record, err = dao.Clients.Ctx(ctx).Where(columns.ClientIp, id).One()
-	if err != nil || !record.IsEmpty() {
-		return record, err
-	}
-
-	primaryID := gconv.Int64(id)
-	if primaryID <= 0 {
-		return record, nil
-	}
-	return dao.Clients.Ctx(ctx).WherePri(primaryID).One()
+	return dao.Clients.Ctx(ctx).Where(columns.ClientIp, id).One()
 }
 
 func scopedClientModel(ctx context.Context, record gdb.Record) *gdb.Model {
@@ -59,16 +58,30 @@ func scopedClientModel(ctx context.Context, record gdb.Record) *gdb.Model {
 	if record.IsEmpty() {
 		return model.Where(columns.Id, 0)
 	}
+	if primaryID := gconv.Int64(record[columns.Id]); primaryID > 0 {
+		return model.WherePri(primaryID)
+	}
 	if nodeID := clientNodeIDFromRecord(record); nodeID != "" {
 		if clientIP := clientIPFromRecord(record); clientIP != "" {
 			return model.Where(columns.ClientIp, clientIP).Where(columns.NodeId, nodeID)
 		}
 		return model.Where(columns.NodeId, nodeID)
 	}
-	if primaryID := gconv.Int64(record[columns.Id]); primaryID > 0 {
-		return model.WherePri(primaryID)
-	}
 	return model.Where(columns.ClientIp, clientIPFromRecord(record))
+}
+
+func parseClientPrimaryID(id string) (int64, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return 0, false
+	}
+	for _, item := range id {
+		if item < '0' || item > '9' {
+			return 0, false
+		}
+	}
+	primaryID, err := strconv.ParseInt(id, 10, 64)
+	return primaryID, err == nil && primaryID > 0
 }
 
 func clientIPFromRecord(record gdb.Record) string {

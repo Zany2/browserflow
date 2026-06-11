@@ -293,7 +293,7 @@ func (c *ControllerV1) WorkflowSync(ctx context.Context, req *v1.WorkflowSyncReq
 			if strings.TrimSpace(existing.ContentHash) != parsed.ContentHash {
 				parsed.Revision++
 			}
-			if parsed.ContentHash == existing.ContentHash {
+			if parsed.ContentHash == existing.ContentHash && !serverMode {
 				continue
 			}
 		} else {

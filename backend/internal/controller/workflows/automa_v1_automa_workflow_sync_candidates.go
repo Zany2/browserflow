@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,31 +39,23 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		db      *storage.BoltDB
 		records []*model.AutomaWorkflowRecord
 	)
-	if serverMode {
-		columns := dao.AutomaWorkflows.Columns()
-		items := []entity.AutomaWorkflows{}
-		if err = dao.AutomaWorkflows.Ctx(ctx).OrderDesc(columns.UpdatedAt).Scan(&items); err != nil {
-			return nil, err
-		}
-		records = make([]*model.AutomaWorkflowRecord, 0, len(items))
-		for index := range items {
-			item := items[index]
-			record := &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
-			if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {
-				record.FirstSyncedAt = item.FirstSyncedAt.Time
-			}
-			if item.LastSyncedAt != nil && !item.LastSyncedAt.IsZero() {
-				record.LastSyncedAt = item.LastSyncedAt.Time
-			}
-			if item.CreatedAt != nil && !item.CreatedAt.IsZero() {
-				record.CreatedAt = item.CreatedAt.Time
-			}
-			if item.UpdatedAt != nil && !item.UpdatedAt.IsZero() {
-				record.UpdatedAt = item.UpdatedAt.Time
-			}
-			records = append(records, record)
-		}
-	} else {
+	keyword := strings.ToLower(strings.TrimSpace(req.Keyword))
+	syncStatusFilter := strings.TrimSpace(req.SyncStatus)
+	workflowStatusFilter := strings.TrimSpace(req.WorkflowStatus)
+	sourceIP := strings.TrimSpace(req.SourceIP)
+	sourceNodeID := normalizeSourceNodeID(sourceIP, req.SourceNodeID)
+	sourceNodeIDs := splitWorkflowListFilter(g.RequestFromCtx(ctx).Get("source_node_ids").String())
+	for index := range sourceNodeIDs {
+		sourceNodeIDs[index] = normalizeSourceNodeID(sourceIP, sourceNodeIDs[index])
+	}
+	sourceIdentity := ""
+	if sourceNodeID != "" && len(sourceNodeIDs) == 0 {
+		sourceIdentity = nodeConnectionIdentity(sourceIP, sourceNodeID)
+	}
+	automaID := strings.TrimSpace(req.AutomaID)
+	mode := strings.TrimSpace(req.Mode)
+
+	if !serverMode {
 		state.DBMu.Lock()
 		if state.DB == nil {
 			dbPath := os.Getenv("DB_PATH")
@@ -95,19 +88,8 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		}
 	}
 
-	keyword := strings.ToLower(strings.TrimSpace(req.Keyword))
-	syncStatusFilter := strings.TrimSpace(req.SyncStatus)
-	workflowStatusFilter := strings.TrimSpace(req.WorkflowStatus)
-	sourceIP := strings.TrimSpace(req.SourceIP)
-	sourceNodeID := normalizeSourceNodeID(sourceIP, req.SourceNodeID)
-	sourceIdentity := ""
-	if sourceNodeID != "" {
-		sourceIdentity = nodeConnectionIdentity(sourceIP, sourceNodeID)
-	}
-	automaID := strings.TrimSpace(req.AutomaID)
-	mode := strings.TrimSpace(req.Mode)
 	if !serverMode {
-		if req.Refresh || sourceIP != "" || sourceNodeID != "" || mode == "workflow" {
+		if req.Refresh || sourceIP != "" || sourceNodeID != "" || len(sourceNodeIDs) > 0 || mode == "workflow" {
 			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 		}
 		mode = "client"
@@ -122,7 +104,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 				return nil, nil
 			}
 		} else if mode == "workflow" || sourceIP != "" {
-			clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, sourceNodeID)
+			clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, sourceNodeID, sourceNodeIDs)
 			if listErr != nil {
 				return nil, listErr
 			}
@@ -137,7 +119,10 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		if automaID == "" {
 			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 		}
-		serverRecord := serverRecords[automaID]
+		serverRecord, err := loadServerWorkflowRecordByAutomaID(ctx, automaID)
+		if err != nil {
+			return nil, err
+		}
 		if serverRecord == nil {
 			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 		}
@@ -151,7 +136,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 			serverAutomaDescription = serverRecord.Description
 		}
 
-		clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, sourceNodeID)
+		clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, sourceNodeID, sourceNodeIDs)
 		if listErr != nil {
 			return nil, listErr
 		}
@@ -248,24 +233,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 			candidates = append(candidates, candidate)
 		}
 
-		total := len(candidates)
-		pageNum := req.PageNum
-		if pageNum <= 0 {
-			pageNum = 1
-		}
-		pageSize := req.PageSize
-		if pageSize <= 0 {
-			pageSize = 30
-		}
-		start := (pageNum - 1) * pageSize
-		if start >= total {
-			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: total}, nil
-		}
-		end := start + pageSize
-		if end > total {
-			end = total
-		}
-		return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}, nil
+		return paginateWorkflowSyncCandidates(candidates, req.PageNum, req.PageSize), nil
 	}
 
 	var cacheItems []workflowcache.WorkflowItem
@@ -273,7 +241,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		if sourceIdentity != "" {
 			cacheItems, err = workflowcache.ListClientWorkflows(ctx, sourceIdentity)
 		} else if sourceIP != "" {
-			clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, "")
+			clientIPs, listErr := listOnlineCandidateIdentities(ctx, sourceIP, "", sourceNodeIDs)
 			if listErr != nil {
 				return nil, listErr
 			}
@@ -291,6 +259,13 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		return nil, err
 	}
 	if cacheItems != nil {
+		if serverMode {
+			serverRecords, err = loadServerWorkflowRecordsByAutomaIDs(ctx, workflowItemAutomaIDs(cacheItems))
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		candidates := make([]v1.WorkflowSyncCandidatesResModel, 0, len(cacheItems))
 		for _, item := range cacheItems {
 			itemIdentity := workflowItemIdentity(item)
@@ -355,24 +330,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 			fillCandidateNode(&candidate, item, itemIdentity)
 			candidates = append(candidates, candidate)
 		}
-		total := len(candidates)
-		pageNum := req.PageNum
-		if pageNum <= 0 {
-			pageNum = 1
-		}
-		pageSize := req.PageSize
-		if pageSize <= 0 {
-			pageSize = 30
-		}
-		start := (pageNum - 1) * pageSize
-		if start >= total {
-			return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: total}, nil
-		}
-		end := start + pageSize
-		if end > total {
-			end = total
-		}
-		return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}, nil
+		return paginateWorkflowSyncCandidates(candidates, req.PageNum, req.PageSize), nil
 	}
 
 	items := make([]map[string]any, 0)
@@ -381,7 +339,7 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 			_ = json.Unmarshal(snapshot.Workflows, &items)
 		}
 	}
-	if serverMode && sourceIP == "" && sourceNodeID == "" && automaID == "" {
+	if serverMode && sourceIP == "" && sourceNodeID == "" && len(sourceNodeIDs) == 0 && automaID == "" {
 		return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: 0}, nil
 	}
 	if len(items) == 0 {
@@ -502,24 +460,118 @@ func (c *ControllerV1) WorkflowSyncCandidates(ctx context.Context, req *v1.Workf
 		candidate := v1.WorkflowSyncCandidatesResModel{Id: itemAutomaID, AutomaId: itemAutomaID, WorkflowId: itemAutomaID, Name: name, Description: description, AutomaName: name, AutomaDescription: description, Source: "客户端同步", SourceIp: sourceIP, AutomaVersion: strings.TrimSpace(gconv.String(item["version"])), ExtVersion: strings.TrimSpace(gconv.String(item["extVersion"])), CreatedAtAutoma: gconv.Int64(item["createdAt"]), UpdatedAtAutoma: gconv.Int64(item["updatedAt"]), IsDisabled: gconv.Bool(item["isDisabled"]), NodeCount: nodeCount, EdgeCount: edgeCount, ContentHash: contentHash, Synced: synced, HasUpdate: hasUpdate, SyncStatus: status}
 		candidates = append(candidates, candidate)
 	}
+	return paginateWorkflowSyncCandidates(candidates, req.PageNum, req.PageSize), nil
+}
+
+func paginateWorkflowSyncCandidates(candidates []v1.WorkflowSyncCandidatesResModel, pageNum int, pageSize int) *v1.WorkflowSyncCandidatesRes {
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return workflowSyncCandidateSortKey(candidates[i]) < workflowSyncCandidateSortKey(candidates[j])
+	})
+
 	total := len(candidates)
-	pageNum := req.PageNum
 	if pageNum <= 0 {
 		pageNum = 1
 	}
-	pageSize := req.PageSize
 	if pageSize <= 0 {
 		pageSize = 30
 	}
 	start := (pageNum - 1) * pageSize
 	if start >= total {
-		return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: total}, nil
+		return &v1.WorkflowSyncCandidatesRes{List: []v1.WorkflowSyncCandidatesResModel{}, Total: total}
 	}
 	end := start + pageSize
 	if end > total {
 		end = total
 	}
-	return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}, nil
+	return &v1.WorkflowSyncCandidatesRes{List: candidates[start:end], Total: total}
+}
+
+func workflowSyncCandidateSortKey(candidate v1.WorkflowSyncCandidatesResModel) string {
+	return strings.ToLower(strings.Join([]string{
+		candidate.SourceIp,
+		candidate.NodeId,
+		firstNonEmpty(candidate.ServerName, candidate.Name, candidate.AutomaName, candidate.AutomaId, candidate.WorkflowId, candidate.Id),
+		candidate.AutomaId,
+	}, "\x00"))
+}
+
+func loadServerWorkflowRecordByAutomaID(ctx context.Context, automaID string) (*model.AutomaWorkflowRecord, error) {
+	automaID = strings.TrimSpace(automaID)
+	if automaID == "" {
+		return nil, nil
+	}
+	columns := dao.AutomaWorkflows.Columns()
+	item := entity.AutomaWorkflows{}
+	if err := dao.AutomaWorkflows.Ctx(ctx).Where(columns.AutomaId, automaID).Scan(&item); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(item.AutomaId) == "" {
+		return nil, nil
+	}
+	return automaWorkflowEntityToRecord(item), nil
+}
+
+func loadServerWorkflowRecordsByAutomaIDs(ctx context.Context, automaIDs []string) (map[string]*model.AutomaWorkflowRecord, error) {
+	automaIDs = normalizeWorkflowAutomaIDs(automaIDs)
+	records := make(map[string]*model.AutomaWorkflowRecord, len(automaIDs))
+	if len(automaIDs) == 0 {
+		return records, nil
+	}
+
+	columns := dao.AutomaWorkflows.Columns()
+	items := []entity.AutomaWorkflows{}
+	if err := dao.AutomaWorkflows.Ctx(ctx).WhereIn(columns.AutomaId, automaIDs).Scan(&items); err != nil {
+		return nil, err
+	}
+	for index := range items {
+		record := automaWorkflowEntityToRecord(items[index])
+		if record.AutomaID != "" {
+			records[record.AutomaID] = record
+		}
+	}
+	return records, nil
+}
+
+func automaWorkflowEntityToRecord(item entity.AutomaWorkflows) *model.AutomaWorkflowRecord {
+	record := &model.AutomaWorkflowRecord{ID: item.Id, AutomaID: item.AutomaId, Name: item.Name, Description: item.Description, AutomaName: item.AutomaName, AutomaDescription: item.AutomaDescription, Source: item.Source, SourceIP: item.SourceIp, SourceNodeID: item.SourceNodeId, SourceUserAgent: item.SourceUserAgent, AutomaVersion: item.AutomaVersion, ExtVersion: item.ExtVersion, CreatedAtAutoma: item.CreatedAtAutoma, UpdatedAtAutoma: item.UpdatedAtAutoma, IsDisabled: item.IsDisabled, IsProtected: item.IsProtected, NodeCount: item.NodeCount, EdgeCount: item.EdgeCount, RawJSON: item.RawJson, NormalizedJSON: item.NormalizedJson, ContentHash: item.ContentHash, Revision: item.Revision}
+	if item.FirstSyncedAt != nil && !item.FirstSyncedAt.IsZero() {
+		record.FirstSyncedAt = item.FirstSyncedAt.Time
+	}
+	if item.LastSyncedAt != nil && !item.LastSyncedAt.IsZero() {
+		record.LastSyncedAt = item.LastSyncedAt.Time
+	}
+	if item.CreatedAt != nil && !item.CreatedAt.IsZero() {
+		record.CreatedAt = item.CreatedAt.Time
+	}
+	if item.UpdatedAt != nil && !item.UpdatedAt.IsZero() {
+		record.UpdatedAt = item.UpdatedAt.Time
+	}
+	return record
+}
+
+func workflowItemAutomaIDs(items []workflowcache.WorkflowItem) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.AutomaId)
+	}
+	return ids
+}
+
+func normalizeWorkflowAutomaIDs(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	ids := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		ids = append(ids, value)
+	}
+	return ids
 }
 
 func getOnlineNodeSnapshot(ctx context.Context, identity string) workflowcache.OnlineNode {
@@ -530,9 +582,26 @@ func getOnlineNodeSnapshot(ctx context.Context, identity string) workflowcache.O
 	return node
 }
 
-func listOnlineCandidateIdentities(ctx context.Context, sourceIP string, sourceNodeID string) ([]string, error) {
+func listOnlineCandidateIdentities(ctx context.Context, sourceIP string, sourceNodeID string, sourceNodeIDs []string) ([]string, error) {
 	sourceIP = strings.TrimSpace(sourceIP)
 	sourceNodeID = strings.TrimSpace(sourceNodeID)
+	if len(sourceNodeIDs) > 0 {
+		identities := make([]string, 0, len(sourceNodeIDs))
+		seen := make(map[string]struct{}, len(sourceNodeIDs))
+		for _, nodeID := range sourceNodeIDs {
+			identity := nodeConnectionIdentity(sourceIP, nodeID)
+			if identity == "" || !workflowcache.IsClientOnline(ctx, identity) {
+				continue
+			}
+			if _, ok := seen[identity]; ok {
+				continue
+			}
+			seen[identity] = struct{}{}
+			identities = append(identities, identity)
+		}
+		sort.Strings(identities)
+		return identities, nil
+	}
 	if sourceNodeID != "" {
 		identity := nodeConnectionIdentity(sourceIP, sourceNodeID)
 		if identity != "" && workflowcache.IsClientOnline(ctx, identity) {

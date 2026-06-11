@@ -129,6 +129,7 @@ export function listAutomaSyncCandidates(sourceIp, params = {}) {
       mode: 'client',
       source_ip: sourceIp,
       source_node_id: normalizeSourceNodeId(sourceIp, params.source_node_id),
+      source_node_ids: normalizeSourceNodeIds(sourceIp, params.source_node_ids),
     },
     showSuccessMessage: false,
   })
@@ -144,6 +145,7 @@ export function listAutomaSyncCandidatesByWorkflow(automaId, params = {}) {
       automa_id: automaId,
       source_ip: sourceIp,
       source_node_id: normalizeSourceNodeId(sourceIp, params.source_node_id),
+      source_node_ids: normalizeSourceNodeIds(sourceIp, params.source_node_ids),
     },
     showSuccessMessage: false,
   })
@@ -291,6 +293,14 @@ function normalizeSourceNodeId(sourceIp = '', sourceNodeId = '') {
     sourceNodeId = sourceNodeId.slice(prefix.length)
   }
   return sourceNodeId
+}
+
+function normalizeSourceNodeIds(sourceIp = '', sourceNodeIds = []) {
+  if (!Array.isArray(sourceNodeIds)) return ''
+  return sourceNodeIds
+    .map((nodeId) => normalizeSourceNodeId(sourceIp, nodeId))
+    .filter(Boolean)
+    .join(',')
 }
 
 function normalizeMultiValue(value) {

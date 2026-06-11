@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorHelp returns available executor commands. BrowserExecutorHelp 鏉╂柨娲栭崣顖滄暏閸涙垝鎶ら妴?
+// BrowserExecutorHelp returns available executor commands. 返回可用执行器命令。
 func (c *ControllerV1) BrowserExecutorHelp(ctx context.Context, req *v1.BrowserExecutorHelpReq) (res *v1.BrowserExecutorHelpRes, err error) {
 	return &v1.BrowserExecutorHelpRes{
 		BasePath: browserexecutor.BasePath,

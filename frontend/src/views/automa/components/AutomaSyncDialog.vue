@@ -1,13 +1,6 @@
 ﻿<template>
-  <AppDialog
-    v-model="visible"
-    title="客户端同步"
-    width="min(1760px, calc(100vw - 16px))"
-    confirm-text="同步选中"
-    :confirm-disabled="selectedIds.length === 0"
-    :loading="syncing"
-    @confirm="handleSync"
-  >
+  <AppDialog v-model="visible" title="客户端同步" width="min(1760px, calc(100vw - 16px))" confirm-text="同步选中"
+    :confirm-disabled="selectedIds.length === 0" :loading="syncing" @confirm="handleSync">
     <div class="sync-dialog">
       <el-tabs v-model="activeMode" @tab-change="handleModeChange">
         <el-tab-pane label="按客户端" name="client" />
@@ -16,61 +9,26 @@
 
       <div class="sync-toolbar">
         <template v-if="activeMode === 'client'">
-          <el-select
-            v-model="selectedClientIp"
-            class="client-ip-select"
-            clearable
-            filterable
-            :loading="clientLoading"
-            placeholder="选择客户端 IP"
-            @visible-change="handleClientSelectVisible"
-            @change="handleClientIpChange"
-            @clear="handleClientIpClear"
-          >
-            <el-option
-              v-for="clientIp in onlineClientIps"
-              :key="clientIp"
-              :label="clientIp"
-              :value="clientIp"
-            />
+          <el-select v-model="selectedClientIp" class="client-ip-select" clearable filterable :loading="clientLoading"
+            placeholder="选择客户端" @visible-change="handleClientSelectVisible" @change="handleClientIpChange"
+            @clear="handleClientIpClear">
+            <el-option v-for="clientIp in onlineClientIps" :key="clientIp" :label="clientIp" :value="clientIp" />
           </el-select>
-          <el-select
-            v-model="selectedNodeId"
-            class="node-select"
-            clearable
-            filterable
-            :disabled="!selectedClientIp"
-            placeholder="全部执行节点"
-            @change="handleNodeChange"
-            @clear="handleNodeClear"
-          >
+          <el-select v-model="selectedNodeId" class="node-select" clearable filterable :disabled="!selectedClientIp"
+            placeholder="全部执行节点" @change="handleNodeChange" @clear="handleNodeClear">
             <el-option label="全部执行节点" value="" />
-            <el-option
-              v-for="node in selectedClientNodes"
-              :key="node.node_id"
-              :label="node.node_id"
-              :value="node.node_id"
-            />
+            <el-option v-for="node in selectedClientNodes" :key="node.node_id" :label="node.node_id"
+              :value="node.node_id" />
           </el-select>
         </template>
         <template v-else>
-          <el-select
-            v-model="selectedAutomaId"
-            class="query-input"
-            clearable
-            filterable
-            :loading="workflowOptionLoading"
-            placeholder="选择工作流"
-            @visible-change="handleWorkflowSelectVisible"
-            @change="handleWorkflowChange"
-            @clear="handleWorkflowClear"
-          >
-            <el-option
-              v-for="workflow in workflowSelectOptions"
-              :key="getWorkflowId(workflow)"
+          <el-select v-model="selectedAutomaId" class="query-input" clearable filterable
+            remote reserve-keyword :remote-method="handleWorkflowRemoteSearch" :loading="workflowOptionLoading"
+            placeholder="选择工作流" @visible-change="handleWorkflowSelectVisible" @change="handleWorkflowChange"
+            @clear="handleWorkflowClear">
+            <el-option v-for="workflow in workflowSelectOptions" :key="getWorkflowId(workflow)"
               :label="workflow.name || workflow.automa_name || getWorkflowId(workflow)"
-              :value="workflow.automa_id || getWorkflowId(workflow)"
-            >
+              :value="workflow.automa_id || getWorkflowId(workflow)">
               <div class="workflow-option">
                 <span>
                   <em>自定义工作流名称</em>
@@ -83,53 +41,22 @@
               </div>
             </el-option>
           </el-select>
-          <el-select
-            v-model="selectedClientIp"
-            class="client-ip-select"
-            clearable
-            filterable
-            :loading="clientLoading"
-            placeholder="全部客户端 IP"
-            @visible-change="handleClientSelectVisible"
-            @change="handleClientIpChange"
-            @clear="handleClientIpClear"
-          >
-            <el-option label="全部客户端 IP" value="" />
-            <el-option
-              v-for="clientIp in onlineClientIps"
-              :key="clientIp"
-              :label="clientIp"
-              :value="clientIp"
-            />
+          <el-select v-model="selectedClientIp" class="client-ip-select" clearable filterable :loading="clientLoading"
+            placeholder="全部客户端" @visible-change="handleClientSelectVisible" @change="handleClientIpChange"
+            @clear="handleClientIpClear">
+            <el-option label="全部客户端" value="" />
+            <el-option v-for="clientIp in onlineClientIps" :key="clientIp" :label="clientIp" :value="clientIp" />
           </el-select>
-          <el-select
-            v-model="selectedNodeId"
-            class="node-select"
-            clearable
-            filterable
-            :disabled="!selectedClientIp"
-            placeholder="全部执行节点"
-            @change="handleNodeChange"
-            @clear="handleNodeClear"
-          >
+          <el-select v-model="selectedNodeId" class="node-select" clearable filterable :disabled="!selectedClientIp"
+            placeholder="全部执行节点" @change="handleNodeChange" @clear="handleNodeClear">
             <el-option label="全部执行节点" value="" />
-            <el-option
-              v-for="node in selectedClientNodes"
-              :key="node.node_id"
-              :label="node.node_id"
-              :value="node.node_id"
-            />
+            <el-option v-for="node in selectedClientNodes" :key="node.node_id" :label="node.node_id"
+              :value="node.node_id" />
           </el-select>
         </template>
 
-        <el-select
-          v-model="syncStatusFilter"
-          class="status-select"
-          clearable
-          placeholder="全部同步状态"
-          @change="handleCandidateFilterChange"
-          @clear="handleCandidateFilterClear"
-        >
+        <el-select v-model="syncStatusFilter" class="status-select" clearable placeholder="全部同步状态"
+          @change="handleCandidateFilterChange" @clear="handleCandidateFilterClear">
           <el-option label="全部同步状态" value="" />
           <el-option label="可同步" value="syncable" />
           <el-option label="已同步" value="synced" />
@@ -138,54 +65,44 @@
           <el-option label="客户端较新" value="client_newer" />
           <el-option label="数据库较新" value="server_newer" />
         </el-select>
-        <el-input
-          v-model="keyword"
-          class="keyword-input"
-          clearable
-          :placeholder="keywordPlaceholder"
-        />
+        <el-input v-model="keyword" class="keyword-input" clearable :placeholder="keywordPlaceholder" />
         <el-button @click="handleResetCurrentMode">重置</el-button>
       </div>
 
-      <el-table
-        ref="tableRef"
-        v-loading="candidateLoading"
-        class="candidate-table adaptive-table"
-        :data="candidates"
-        border
-        height="420"
-        row-key="row_key"
-        header-align="left"
-        empty-text="请选择查询条件后自动加载"
-        @selection-change="handleSelectionChange"
-      >
+      <div class="sync-scope">
+        {{ scopeText ? `当前展示：${scopeText}` : '' }}
+      </div>
+
+      <el-table ref="tableRef" v-loading="candidateLoading" class="candidate-table adaptive-table" :data="candidates"
+        border height="100%" row-key="row_key" header-align="left" empty-text="请选择查询条件后自动加载"
+        @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection :selectable="isSelectable" />
 
-        <el-table-column v-if="activeMode === 'workflow'" label="客户端 IP" width="136" class-name="nowrap-column">
+        <el-table-column v-if="activeMode === 'workflow'" label="客户端/执行节点" width="164" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.source_ip || '' }}
+            {{ formatClientNode(row) }}
           </template>
         </el-table-column>
 
-        <el-table-column v-if="activeMode === 'workflow'" label="执行节点 ID" width="128" class-name="nowrap-column">
+        <el-table-column v-else label="执行节点" width="116" class-name="nowrap-column">
           <template #default="{ row }">
             {{ row.node_id || '' }}
           </template>
         </el-table-column>
 
-        <el-table-column label="自定义工作流名称" min-width="108" show-overflow-tooltip>
+        <el-table-column label="自定义工作流名称" min-width="104" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.server_name || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="自定义工作流描述" min-width="118" show-overflow-tooltip>
+        <el-table-column label="自定义工作流描述" min-width="108" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="field-value">{{ row.server_description || '' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流名称" min-width="168">
+        <el-table-column label="工作流名称" min-width="150">
           <template #default="{ row }">
             <span class="compare-line" :title="formatCompareText(row.automa_name || row.name, row.server_automa_name)">
               <span class="compare-item">
@@ -200,12 +117,10 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流描述" min-width="176">
+        <el-table-column label="工作流描述" min-width="150">
           <template #default="{ row }">
-            <span
-              class="compare-line"
-              :title="formatCompareText(row.automa_description || row.description, row.server_automa_description)"
-            >
+            <span class="compare-line"
+              :title="formatCompareText(row.automa_description || row.description, row.server_automa_description)">
               <span class="compare-item">
                 <em>客户端</em>
                 <span>{{ row.automa_description || row.description || '' }}</span>
@@ -218,7 +133,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="同步状态" width="116" header-align="center">
+        <el-table-column label="同步状态" width="104" header-align="center">
           <template #default="{ row }">
             <div class="center-cell">
               <el-tag :type="getSyncTagType(row)" effect="plain">
@@ -228,7 +143,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="工作流状态" width="132" header-align="center">
+        <el-table-column label="工作流状态" width="116" header-align="center">
           <template #default="{ row }">
             <div class="center-cell">
               <el-tag class="workflow-status-tag" :type="getWorkflowTagType(row)" effect="plain">
@@ -238,15 +153,16 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="客户端更新时间" width="196" class-name="nowrap-column">
+        <el-table-column label="客户端更新时间" width="168" class-name="nowrap-column">
           <template #default="{ row }">
-            <span class="time-value" :title="formatOptionalDate(row.updated_at_automa || row.updatedAt || row.updated_at)">
+            <span class="time-value"
+              :title="formatOptionalDate(row.updated_at_automa || row.updatedAt || row.updated_at)">
               {{ formatOptionalDate(row.updated_at_automa || row.updatedAt || row.updated_at) }}
             </span>
           </template>
         </el-table-column>
 
-        <el-table-column label="同步时间" width="196" class-name="nowrap-column">
+        <el-table-column label="同步时间" width="168" class-name="nowrap-column">
           <template #default="{ row }">
             <span class="time-value" :title="formatOptionalDate(row.last_synced_at)">
               {{ formatOptionalDate(row.last_synced_at) }}
@@ -254,7 +170,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="数据库更新时间" width="196" class-name="nowrap-column">
+        <el-table-column label="数据库更新时间" width="168" class-name="nowrap-column">
           <template #default="{ row }">
             <span class="time-value" :title="formatOptionalDate(row.server_updated_at)">
               {{ formatOptionalDate(row.server_updated_at) }}
@@ -269,14 +185,9 @@
           <span>可同步 {{ selectableCount }} 个</span>
         </div>
 
-        <AppPagination
-          v-if="candidateTotal > 0"
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="pageSizes"
-          :total="candidateTotal"
-          layout="total, sizes, prev, pager, next"
-        />
+        <AppPagination class="sync-pagination" :class="{ 'sync-pagination--hidden': candidateTotal <= 0 }"
+          v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="pageSizes"
+          :total="candidateTotal" layout="total, sizes, prev, pager, next" />
       </div>
     </div>
   </AppDialog>
@@ -290,13 +201,14 @@ import AppPagination from '@/components/AppPagination.vue'
 import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
 import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
-import { listClients } from '@/services/client'
+import { listAllClients } from '@/services/client'
 import {
   listAutomaWorkflows,
   listAutomaSyncCandidates,
   listAutomaSyncCandidatesByWorkflow,
   syncAutomaWorkflowsByIp,
 } from '@/services/automa'
+import { getClientIp } from '@/utils/clientNode'
 import { formatDate } from '@/utils/format'
 import { DEFAULT_PAGE_SIZES, normalizeList, normalizeText } from '@/utils/list'
 
@@ -327,6 +239,7 @@ const clientLoading = ref(false)
 const workflowOptionLoading = ref(false)
 const onlineClients = ref([])
 const onlineWorkflowOptions = ref([])
+const workflowOptionKeyword = ref('')
 const syncing = ref(false)
 const refreshCandidates = ref(false)
 const currentPage = ref(1)
@@ -340,6 +253,7 @@ const modeStateCache = {
   workflow: createModeState(),
 }
 let candidateRequestSeq = 0
+let workflowOptionRequestSeq = 0
 const {
   selectedRows,
   selectedKeys: selectedIds,
@@ -355,6 +269,10 @@ const {
   run: runKeywordSearch,
   cancel: clearKeywordSearchTimer,
 } = useDebouncedAction(loadFirstCandidatePage, 200)
+const {
+  run: runWorkflowOptionSearch,
+  cancel: clearWorkflowOptionSearchTimer,
+} = useDebouncedAction(loadOnlineWorkflowOptions, 200)
 
 const selectableCount = computed(() => candidates.value.filter(isSelectable).length)
 const workflowSelectOptions = computed(() => onlineWorkflowOptions.value)
@@ -377,17 +295,32 @@ const canLoad = computed(() => {
   return activeMode.value === 'client' ? Boolean(normalizeText(selectedClientIp.value)) : Boolean(selectedAutomaId.value)
 })
 const keywordPlaceholder = computed(() => {
-  return activeMode.value === 'client' ? '检索客户端工作流名称 / ID / 描述' : '检索客户端 IP / 执行节点 ID'
+  return activeMode.value === 'client' ? '客户端名称、描述、Automa ID等' : '客户端、执行节点等'
+})
+const scopeText = computed(() => {
+  if (activeMode.value === 'client') {
+    const clientIp = normalizeText(selectedClientIp.value)
+    if (!clientIp) return ''
+    const nodeId = normalizeText(selectedNodeId.value)
+    return nodeId ? `${clientIp} / ${nodeId}` : `${clientIp} 的全部执行节点`
+  }
+
+  if (!selectedAutomaId.value) return ''
+  const clientIp = normalizeText(selectedClientIp.value)
+  const nodeId = normalizeText(selectedNodeId.value)
+  if (!clientIp) return '全部客户端'
+  return nodeId ? `${clientIp} / ${nodeId}` : `${clientIp} 的全部执行节点`
 })
 
 watch(visible, (nextVisible) => {
   if (nextVisible) {
     lastActiveMode.value = activeMode.value
-    loadOnlineClientIps()
+    loadOnlineClientIps(true)
     return
   }
 
   clearKeywordSearchTimer()
+  clearWorkflowOptionSearchTimer()
   resetModeStateCache()
   activeMode.value = 'client'
   lastActiveMode.value = 'client'
@@ -398,6 +331,7 @@ watch(visible, (nextVisible) => {
   syncStatusFilter.value = ''
   refreshCandidates.value = false
   onlineWorkflowOptions.value = []
+  workflowOptionKeyword.value = ''
   resetCandidatePage()
   resetCandidates()
 })
@@ -422,7 +356,7 @@ watch(pageSize, () => {
 
 async function loadCandidates() {
   if (!canLoad.value) {
-    showWarningMessage(activeMode.value === 'client' ? '请先选择在线客户端 IP' : '请先选择工作流')
+    showWarningMessage(activeMode.value === 'client' ? '请先选择在线客户端' : '请先选择工作流')
     return
   }
 
@@ -444,9 +378,9 @@ async function loadCandidates() {
       activeMode.value === 'client'
         ? await listAutomaSyncCandidates(selectedClient.source_ip, params)
         : await listAutomaSyncCandidatesByWorkflow(selectedAutomaId.value, {
-            ...params,
-            source_ip: selectedClient.source_ip,
-          })
+          ...params,
+          source_ip: selectedClient.source_ip,
+        })
     if (requestSeq !== candidateRequestSeq) return
 
     const candidateList = normalizeList(data, 'workflows')
@@ -463,10 +397,12 @@ async function loadCandidates() {
   }
 }
 
-async function loadOnlineClientIps() {
+async function loadOnlineClientIps(force = false) {
+  if (!force && onlineClients.value.length > 0) return
+
   clientLoading.value = true
   try {
-    const data = await listClients({
+    const data = await listAllClients({
       status: 'online',
     })
     const seen = new Set()
@@ -506,30 +442,30 @@ function handleClientSelectVisible(opened) {
   if (opened) loadOnlineClientIps()
 }
 
-async function loadOnlineWorkflowOptions() {
+async function loadOnlineWorkflowOptions(force = false) {
+  const keyword = workflowOptionKeyword.value.trim()
+  if (!force && onlineWorkflowOptions.value.length > 0 && !keyword) return
+
+  const requestSeq = ++workflowOptionRequestSeq
   workflowOptionLoading.value = true
   try {
-    let pageNum = 1
-    let total = 0
-    const allDbWorkflows = []
+    const data = await listAutomaWorkflows({
+      keyword,
+      page_num: 1,
+      page_size: 30,
+    })
+    if (requestSeq !== workflowOptionRequestSeq) return
 
-    do {
-      const data = await listAutomaWorkflows({
-        page_num: pageNum,
-        page_size: 60,
-      })
-      const pageList = normalizeList(data, 'workflows')
-      total = Number(data?.total || pageList.length)
-      allDbWorkflows.push(...pageList)
-      if (pageList.length === 0) break
-      pageNum += 1
-    } while (allDbWorkflows.length < total)
-
+    const pageList = normalizeList(data, 'workflows')
     const workflowMap = new Map()
 
-    allDbWorkflows.forEach((workflow) => {
+    onlineWorkflowOptions.value.forEach((workflow) => {
       const workflowId = workflow.automa_id || getWorkflowId(workflow)
-      if (!workflowId || workflowMap.has(workflowId)) return
+      if (workflowId) workflowMap.set(workflowId, workflow)
+    })
+    pageList.forEach((workflow) => {
+      const workflowId = workflow.automa_id || getWorkflowId(workflow)
+      if (!workflowId) return
 
       workflowMap.set(workflowId, {
         ...workflow,
@@ -540,17 +476,50 @@ async function loadOnlineWorkflowOptions() {
     })
 
     onlineWorkflowOptions.value = Array.from(workflowMap.values())
-    if (selectedAutomaId.value && !workflowMap.has(selectedAutomaId.value)) {
-      selectedAutomaId.value = ''
-      resetCandidates()
+    const options = Array.from(workflowMap.values())
+    const selectedWorkflow = selectedAutomaId.value
+      ? options.find((workflow) => (workflow.automa_id || getWorkflowId(workflow)) === selectedAutomaId.value)
+      : null
+    onlineWorkflowOptions.value = selectedWorkflow
+      ? [selectedWorkflow, ...options.filter((workflow) => (workflow.automa_id || getWorkflowId(workflow)) !== selectedAutomaId.value)]
+      : options
+    if (selectedAutomaId.value && !selectedWorkflow && !keyword) {
+      await loadSelectedWorkflowOption(selectedAutomaId.value)
     }
   } finally {
-    workflowOptionLoading.value = false
+    if (requestSeq === workflowOptionRequestSeq) {
+      workflowOptionLoading.value = false
+    }
   }
 }
 
 function handleWorkflowSelectVisible(opened) {
   if (opened) loadOnlineWorkflowOptions()
+}
+
+function handleWorkflowRemoteSearch(value) {
+  workflowOptionKeyword.value = normalizeText(value)
+  clearWorkflowOptionSearchTimer()
+  runWorkflowOptionSearch(true)
+}
+
+async function loadSelectedWorkflowOption(automaId) {
+  automaId = normalizeText(automaId)
+  if (!automaId) return
+
+  const data = await listAutomaWorkflows({
+    keyword: automaId,
+    page_num: 1,
+    page_size: 10,
+  })
+  const selectedWorkflow = normalizeList(data, 'workflows')
+    .find((workflow) => (workflow.automa_id || getWorkflowId(workflow)) === automaId)
+  if (!selectedWorkflow) return
+
+  onlineWorkflowOptions.value = [
+    selectedWorkflow,
+    ...onlineWorkflowOptions.value.filter((workflow) => (workflow.automa_id || getWorkflowId(workflow)) !== automaId),
+  ]
 }
 
 function handleClientIpChange(value) {
@@ -606,7 +575,9 @@ function handleWorkflowChange(value) {
 
 function handleWorkflowClear() {
   clearKeywordSearchTimer()
+  clearWorkflowOptionSearchTimer()
   selectedAutomaId.value = ''
+  workflowOptionKeyword.value = ''
   refreshCandidates.value = false
   resetCandidatePage()
   resetCandidates()
@@ -614,8 +585,12 @@ function handleWorkflowClear() {
 
 function handleResetCurrentMode() {
   clearKeywordSearchTimer()
+  clearWorkflowOptionSearchTimer()
   modeStateCache[activeMode.value] = createModeState()
   restoreModeState(activeMode.value)
+  if (activeMode.value === 'workflow') {
+    workflowOptionKeyword.value = ''
+  }
   refreshCandidates.value = false
   resetCandidatePage()
   resetCandidates()
@@ -628,6 +603,7 @@ function handleModeChange() {
 
   saveModeState(previousMode)
   clearKeywordSearchTimer()
+  clearWorkflowOptionSearchTimer()
   resetCandidates()
   restoreModeState(nextMode)
   lastActiveMode.value = nextMode
@@ -818,10 +794,6 @@ function getSelectionKey(row) {
   return row?.row_key || `${buildNodeIdentity(row?.source_ip || selectedClient.source_ip, row?.node_id || selectedClient.node_id)}_${getWorkflowId(row)}`
 }
 
-function getClientIp(row) {
-  return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
-}
-
 function getSelectedClient() {
   const clientIp = normalizeText(selectedClientIp.value)
   const nodeId = normalizeNodeId(clientIp, selectedNodeId.value)
@@ -858,8 +830,14 @@ function formatOptionalDate(value) {
   return formatDate(value)
 }
 
+function formatClientNode(row) {
+  const clientIp = normalizeText(row?.source_ip)
+  const nodeId = normalizeText(row?.node_id)
+  return [clientIp, nodeId].filter(Boolean).join(' / ')
+}
+
 function formatCompareText(clientValue, serverValue) {
-  return `瀹㈡埛绔細${clientValue || ''} 鏁版嵁搴擄細${serverValue || ''}`.trim()
+  return `客户端：${clientValue || ''} 数据库：${serverValue || ''}`.trim()
 }
 </script>
 
@@ -868,12 +846,22 @@ function formatCompareText(clientValue, serverValue) {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  height: 608px;
+  min-height: 0;
 }
 
 .sync-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
+}
+
+.sync-scope {
+  min-height: 20px;
+  color: #606266;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .query-input {
@@ -897,6 +885,8 @@ function formatCompareText(clientValue, serverValue) {
 }
 
 .candidate-table {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
 }
 
@@ -1020,11 +1010,17 @@ function formatCompareText(clientValue, serverValue) {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-height: 32px;
 }
 
 .sync-footer :deep(.app-pagination) {
   justify-content: flex-end;
   margin-top: 0;
+}
+
+.sync-pagination--hidden {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .sync-summary {

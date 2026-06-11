@@ -62,26 +62,51 @@ const endValue = computed({
 
 <style scoped>
 .app-time-range-filter {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 0;
+  width: max-content;
+  min-width: 0;
 }
 
 .time-picker {
-  width: 100%;
+  box-sizing: border-box;
+  flex: 0 0 var(--time-range-picker-width, 230px) !important;
+  width: var(--time-range-picker-width, 230px) !important;
+  min-width: 0;
+}
+
+.time-picker :deep(.el-input__wrapper) {
+  min-width: 0;
+}
+
+.time-picker :deep(.el-input__inner) {
+  min-width: 0;
 }
 
 .time-separator {
-  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   color: #909399;
   font-size: 13px;
+  line-height: 32px;
+  text-align: center;
 }
 
 @media (max-width: 640px) {
   .app-time-range-filter {
-    grid-template-columns: 1fr;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .time-picker {
+    flex: 1 1 auto !important;
+    width: 100%;
   }
 
   .time-separator {

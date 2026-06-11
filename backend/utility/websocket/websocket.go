@@ -118,7 +118,7 @@ func SendNodeMessage(nodeID string, clientIP string, in *model.WSResponse) int {
 	return sendStructuredMessage(strings.TrimSpace(clientIP), in)
 }
 
-// NodeConnectionID builds the runtime identity for one IP-scoped node 浣跨敤 IP + node 鏍囪瘑鎵ц鑺傜偣
+// NodeConnectionID builds the runtime identity for one IP-scoped node 使用 IP + node 标识执行节点。
 func NodeConnectionID(clientIP string, nodeID string) string {
 	clientIP = strings.TrimSpace(clientIP)
 	nodeID = NormalizeNodeID(clientIP, nodeID)
@@ -131,7 +131,7 @@ func NodeConnectionID(clientIP string, nodeID string) string {
 	return clientIP + "|" + nodeID
 }
 
-// NormalizeNodeID strips duplicated IP prefixes from node id. 鍘绘帀 node_id 涓噸澶嶆嫾鎺ョ殑 IP 鍓嶇紑
+// NormalizeNodeID strips duplicated IP prefixes from node id. 去掉 node_id 中重复拼接的 IP 前缀。
 func NormalizeNodeID(clientIP string, nodeID string) string {
 	clientIP = strings.TrimSpace(clientIP)
 	nodeID = strings.TrimSpace(nodeID)

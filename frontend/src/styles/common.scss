@@ -54,6 +54,59 @@
   margin-bottom: 12px;
 }
 
+.server-filter-fields {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  gap: 10px 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.server-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.server-filter-label {
+  flex-shrink: 0;
+  color: #606266;
+}
+
+.server-filter-item > .el-input,
+.server-filter-item > .el-select {
+  flex: 0 0 180px;
+  width: 180px;
+  min-width: 0;
+}
+
+.server-filter-item--text > .el-input,
+.server-filter-item--text > .el-select {
+  flex-basis: 300px;
+  width: 300px;
+}
+
+.server-filter-item--medium > .el-input,
+.server-filter-item--medium > .el-select {
+  flex-basis: 240px;
+  width: 240px;
+}
+
+.server-filter-item--node > .el-input,
+.server-filter-item--node > .el-select {
+  flex-basis: 260px;
+  width: 260px;
+}
+
+.server-filter-item--short > .el-input,
+.server-filter-item--short > .el-select {
+  flex-basis: 150px;
+  width: 150px;
+}
+
 .server-list-table {
   flex: 1;
   min-height: 0;
@@ -87,6 +140,26 @@
   .server-list-footer .app-pagination {
     grid-column: auto;
     justify-self: start;
+  }
+
+  .server-filter-fields,
+  .server-filter-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .server-filter-fields {
+    width: 100%;
+  }
+
+  .server-filter-item > .el-input,
+  .server-filter-item > .el-select {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .server-filter-item--time > .app-time-range-filter {
+    width: 100%;
   }
 }
 

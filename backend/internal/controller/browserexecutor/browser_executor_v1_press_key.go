@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorPressKey presses keyboard shortcut. BrowserExecutorPressKey 閸欐垿鈧焦瀵滈柨顔衡偓?
+// BrowserExecutorPressKey presses keyboard shortcut. 按下键盘快捷键。
 func (c *ControllerV1) BrowserExecutorPressKey(ctx context.Context, req *v1.BrowserExecutorPressKeyReq) (res *v1.BrowserExecutorPressKeyRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

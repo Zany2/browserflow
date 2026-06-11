@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorScreenshot captures screenshot. BrowserExecutorScreenshot 閹搭亜娴橀妴?
+// BrowserExecutorScreenshot captures screenshot. 截图。
 func (c *ControllerV1) BrowserExecutorScreenshot(ctx context.Context, req *v1.BrowserExecutorScreenshotReq) (res *v1.BrowserExecutorScreenshotRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

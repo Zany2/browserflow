@@ -1,8 +1,6 @@
-﻿<template>
+<template>
   <section class="client-page server-list-page">
     <header class="page-actions server-list-actions">
-      <el-button :icon="RefreshRight" @click="loadClients">刷新</el-button>
-      <el-button @click="resetFilters">重置</el-button>
       <el-button type="warning" :disabled="selectedClientIds.length === 0 || batchOfflineLoading"
         :loading="batchOfflineLoading" @click="handleBatchOffline">
         下线重连
@@ -15,18 +13,20 @@
         :loading="batchUnbanLoading" @click="handleBatchUnban">
         解除拉黑
       </el-button>
+      <el-button :icon="RefreshRight" @click="loadClients">刷新</el-button>
+      <el-button @click="resetFilters">重置</el-button>
     </header>
 
     <section class="client-panel server-list-panel">
       <div class="client-filters server-list-filters">
-        <div class="client-filter-fields">
-          <div class="filter-item filter-item--keyword">
-            <span class="filter-label">关键字</span>
-            <el-input v-model="keywordFilter" clearable placeholder="客户端 IP、执行节点、客户端名称" />
+        <div class="client-filter-fields server-filter-fields">
+          <div class="server-filter-item server-filter-item--text filter-item--keyword">
+            <span class="server-filter-label">关键字</span>
+            <el-input v-model="keywordFilter" clearable placeholder="客户端、执行节点、客户端名称、主机名等" />
           </div>
 
-          <div class="filter-item filter-item--status">
-            <span class="filter-label">状态</span>
+          <div class="server-filter-item server-filter-item--short filter-item--status">
+            <span class="server-filter-label">状态</span>
             <el-select v-model="statusFilter" clearable placeholder="全部">
               <el-option label="全部" value="" />
               <el-option label="在线" value="online" />
@@ -34,8 +34,8 @@
             </el-select>
           </div>
 
-          <div class="filter-item filter-item--busy">
-            <span class="filter-label">忙闲状态</span>
+          <div class="server-filter-item server-filter-item--short filter-item--busy">
+            <span class="server-filter-label">忙闲状态</span>
             <el-select v-model="busyStatusFilter" clearable placeholder="全部">
               <el-option label="全部" value="" />
               <el-option label="空闲" value="idle" />
@@ -44,8 +44,8 @@
             </el-select>
           </div>
 
-          <div class="filter-item filter-item--banned">
-            <span class="filter-label">是否拉黑</span>
+          <div class="server-filter-item server-filter-item--short filter-item--banned">
+            <span class="server-filter-label">是否拉黑</span>
             <el-select v-model="bannedFilter" clearable placeholder="全部">
               <el-option label="全部" value="" />
               <el-option label="是" value="true" />
@@ -53,19 +53,18 @@
             </el-select>
           </div>
 
-          <div class="filter-item filter-item--heartbeat">
-            <span class="filter-label">最近心跳</span>
+          <div class="server-filter-item server-filter-item--time filter-item--heartbeat">
+            <span class="server-filter-label">最近心跳</span>
             <AppTimeRangeFilter v-model="lastSeenTimeRange" start-placeholder="开始时间" end-placeholder="结束时间" />
           </div>
 
         </div>
       </div>
 
-      <el-table ref="clientTableRef" v-loading="loading" class="client-table server-list-table"
-        :data="pagedClients" border height="100%" :row-key="getClientId" empty-text="暂无客户端"
-        @selection-change="handleSelectionChange">
+      <el-table ref="clientTableRef" v-loading="loading" class="client-table server-list-table" :data="pagedClients"
+        border height="100%" :row-key="getClientId" empty-text="暂无客户端" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
-        <el-table-column label="客户端 IP" width="124">
+        <el-table-column label="客户端" width="124">
           <template #default="{ row }">{{ getClientIp(row) || '' }}</template>
         </el-table-column>
         <el-table-column label="执行节点 ID" min-width="126">
@@ -79,30 +78,37 @@
             <span class="table-label-with-help">
               状态
               <el-tooltip :content="CLIENT_STATUS_HELP" placement="top">
-                <el-icon class="status-help-icon"><InfoFilled /></el-icon>
+                <el-icon class="status-help-icon">
+                  <InfoFilled />
+                </el-icon>
               </el-tooltip>
             </span>
           </template>
           <template #default="{ row }">
-            <el-tag v-if="getStatusText(row)" :type="getStatusTagType(row)" effect="plain">{{ getStatusText(row) }}</el-tag>
+            <el-tag v-if="getStatusText(row)" :type="getStatusTagType(row)" effect="plain">{{ getStatusText(row)
+            }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column width="96" align="center">
+        <el-table-column width="108" align="center">
           <template #header>
             <span class="table-label-with-help">
               忙闲状态
               <el-tooltip :content="BUSY_STATUS_HELP" placement="top">
-                <el-icon class="status-help-icon"><InfoFilled /></el-icon>
+                <el-icon class="status-help-icon">
+                  <InfoFilled />
+                </el-icon>
               </el-tooltip>
             </span>
           </template>
           <template #default="{ row }">
-            <el-tag v-if="getBusyStatusText(row)" :type="getBusyStatusTagType(row)" effect="plain">{{ getBusyStatusText(row) }}</el-tag>
+            <el-tag v-if="getBusyStatusText(row)" :type="getBusyStatusTagType(row)" effect="plain">{{
+              getBusyStatusText(row) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="Automa 状态" width="116" align="center">
           <template #default="{ row }">
-            <el-tag v-if="getAutomaStatusText(row)" :type="getAutomaTagType(row)" effect="plain">{{ getAutomaStatusText(row) }}</el-tag>
+            <el-tag v-if="getAutomaStatusText(row)" :type="getAutomaTagType(row)" effect="plain">{{
+              getAutomaStatusText(row) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="Automa 版本" width="128">
@@ -153,39 +159,14 @@
     <AppDialog v-model="detailVisible" title="客户端详情" width="min(1040px, calc(100vw - 32px))"
       class="client-detail-dialog" confirm-text="保存" cancel-text="关闭" :loading="detailSaving"
       :confirm-disabled="detailLoading" @confirm="handleSaveDetail">
-      <div v-loading="detailLoading" class="detail-groups">
-        <section v-for="group in detailGroups" :key="group.key" class="detail-group">
-          <div class="detail-group-title">{{ group.title }}</div>
-          <div class="detail-form server-detail-form">
-            <div v-for="field in group.fields" :key="field.key" class="detail-field server-detail-field"
-              :class="{ 'detail-field--wide': field.type === 'textarea' }">
-              <span class="detail-label server-detail-label">
-                <span>{{ field.label }}</span>
-                <el-tooltip v-if="field.help" :content="field.help" placement="top">
-                  <el-icon class="status-help-icon"><InfoFilled /></el-icon>
-                </el-tooltip>
-              </span>
-              <div class="detail-control server-detail-control">
-                <el-input v-if="field.editable" v-model="detailForm[field.key]" clearable
-                  :maxlength="field.maxlength" />
-                <div v-else class="detail-value" :class="{ 'detail-value--textarea': field.type === 'textarea' }">
-                  <span class="detail-text" :class="{ 'detail-text--empty': !field.value }">
-                    {{ field.value || '' }}
-                  </span>
-                  <el-tooltip v-if="field.copyable && field.value" content="复制" placement="top">
-                    <el-button class="detail-copy" text circle :icon="CopyDocument" :aria-label="`复制${field.label}`"
-                      @click="copyDetailValue(field.value)" />
-                  </el-tooltip>
-                  <el-tooltip v-if="field.expandable && field.value" content="查看完整内容" placement="top">
-                    <el-button class="detail-copy" text circle :icon="View" :aria-label="`查看${field.label}`"
-                      @click="openLongTextDialog(field)" />
-                  </el-tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
+      <ServerDetailGroups
+        v-loading="detailLoading"
+        :groups="detailGroups"
+        :model="detailForm"
+        label-width="116px"
+        @copy="copyDetailValue"
+        @expand="openLongTextDialog"
+      />
     </AppDialog>
 
     <AppDialog v-model="banReasonVisible" :title="banReasonTitle" width="520px" confirm-text="拉黑" cancel-text="取消"
@@ -198,21 +179,25 @@
       </el-form>
     </AppDialog>
 
-    <AppDialog v-model="longTextVisible" :title="longTextDialog.title" width="min(760px, calc(100vw - 32px))"
-      confirm-text="复制" cancel-text="关闭" @confirm="copyDetailValue(longTextDialog.value)">
-      <pre class="long-text-content">{{ longTextDialog.value }}</pre>
-    </AppDialog>
+    <AppLongTextDialog
+      v-model="longTextVisible"
+      :title="longTextDialog.title"
+      :value="longTextDialog.value"
+      @copy="copyDetailValue"
+    />
   </section>
 </template>
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { CopyDocument, InfoFilled, RefreshRight, View } from '@element-plus/icons-vue'
+import { InfoFilled, RefreshRight } from '@element-plus/icons-vue'
 import { APP_CONFIRM_TYPE, appConfirm } from '@/components/AppConfirm'
 import AppDialog from '@/components/AppDialog.vue'
+import AppLongTextDialog from '@/components/AppLongTextDialog.vue'
 import { APP_MESSAGE_TYPE, appMessage } from '@/components/AppMessage'
 import AppPagination from '@/components/AppPagination.vue'
 import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
 import AppTimeRangeFilter from '@/components/AppTimeRangeFilter.vue'
+import ServerDetailGroups from '@/components/ServerDetailGroups.vue'
 import { useDebouncedAction } from '@/composables/useDebouncedAction'
 import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
 import { copyText } from '@/utils/browser'
@@ -309,7 +294,7 @@ const detailGroups = computed(() => {
           editable: true,
           maxlength: CLIENT_DISPLAY_NAME_MAX_LENGTH,
         },
-        { key: 'client_ip', label: '客户端 IP', value: formatEmpty(getClientIp(detailForm)), copyable: true },
+        { key: 'client_ip', label: '客户端', value: formatEmpty(getClientIp(detailForm)), copyable: true },
         { key: 'node_id', label: '执行节点 ID', value: formatEmpty(detailForm.node_id), copyable: true },
         { key: 'node_index', label: '执行节点序号', value: formatEmpty(detailForm.node_index) },
         { key: 'hostname', label: '主机名', value: formatEmpty(detailForm.hostname) },
@@ -852,7 +837,7 @@ function getClientId(row) {
 }
 
 function getClientIp(row) {
-  // Client IP reads current IP first 客户端 IP 优先读取当前连接 IP
+  // Client IP reads current IP first 客户端优先读取当前连接 IP
   return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
 }
 
@@ -988,65 +973,33 @@ function openLongTextDialog(field) {
 }
 
 .client-filter-fields {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.client-filter-fields .server-filter-item--text > :deep(.el-input),
+.client-filter-fields .server-filter-item--text > :deep(.el-select) {
+  flex: 1 1 260px;
+  width: clamp(260px, 18vw, 360px);
+}
+
+.client-filter-fields .server-filter-item--short > :deep(.el-input),
+.client-filter-fields .server-filter-item--short > :deep(.el-select) {
+  flex-basis: 120px;
+  width: 120px;
+}
+
+.client-filter-fields .server-filter-item--time {
+  --time-range-picker-width: 205px;
   flex: 1 1 auto;
-  gap: 10px 20px;
+}
+
+.client-filter-fields .server-filter-item--time :deep(.app-time-range-filter) {
   width: 100%;
-  min-width: 0;
 }
 
-.filter-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.filter-item--status {
-  min-width: 0;
-}
-
-.filter-item--busy {
-  min-width: 0;
-}
-
-.filter-item--banned {
-  min-width: 0;
-}
-
-.filter-item--heartbeat {
-  min-width: 0;
-}
-
-.filter-item--keyword {
-  width: 360px;
-  min-width: 0;
-}
-
-.filter-label {
-  flex-shrink: 0;
-  color: #606266;
-}
-
-.filter-item :deep(.el-input),
-.filter-item :deep(.el-select) {
-  flex: 1;
-  min-width: 0;
-}
-
-.filter-item--status :deep(.el-select),
-.filter-item--busy :deep(.el-select),
-.filter-item--banned :deep(.el-select) {
-  width: 144px;
-  flex: 0 0 144px;
-}
-
-.filter-item--heartbeat :deep(.app-time-range-filter) {
-  grid-template-columns: 200px auto 200px;
-  justify-content: start;
-  width: auto;
+.client-filter-fields .server-filter-item--time :deep(.time-picker) {
+  flex: 1 1 var(--time-range-picker-width, 205px) !important;
+  width: auto !important;
 }
 
 .client-table {
@@ -1098,172 +1051,6 @@ function openLongTextDialog(field) {
   }
 }
 
-.detail-groups {
-  display: grid;
-  gap: 16px;
-}
-
-.detail-group {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.detail-group-title {
-  display: flex;
-  align-items: center;
-  min-height: 24px;
-  color: #303133;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.detail-group + .detail-group {
-  padding-top: 2px;
-  border-top: 1px solid #ebeef5;
-}
-
-.detail-field {
-  grid-template-columns: 116px minmax(0, 1fr);
-}
-
-.detail-form {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 20px;
-}
-
-.detail-control {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.detail-label {
-  display: inline-flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.detail-label .status-help-icon {
-  margin-top: 1px;
-}
-
-.detail-control :deep(.el-input__wrapper) {
-  min-height: 32px;
-}
-
-.detail-field--wide {
-  grid-column: 1 / -1;
-}
-
-.detail-value {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  height: 32px;
-  min-width: 0;
-  padding: 4px 8px 4px 10px;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  background: #f8fafc;
-  color: #303133;
-  line-height: 20px;
-}
-
-.detail-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.detail-text--empty {
-  color: #a8abb2;
-}
-
-.detail-value--textarea {
-  align-items: flex-start;
-  height: auto;
-  min-height: 78px;
-}
-
-.detail-value--textarea .detail-text {
-  display: -webkit-box;
-  overflow: hidden;
-  white-space: normal;
-  word-break: break-all;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.detail-copy {
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  margin-left: 6px;
-  padding: 0;
-  color: #909399;
-}
-
-.detail-copy :deep(.el-icon) {
-  font-size: 14px;
-}
-
-.detail-copy:hover {
-  color: #409eff;
-}
-
-.long-text-content {
-  box-sizing: border-box;
-  max-height: min(520px, calc(100vh - 240px));
-  min-height: 180px;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  color: #303133;
-  font-family: Consolas, 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: #f8fafc;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-}
-
-@media (max-width: 1280px) {
-  .filter-item--keyword {
-    width: 320px;
-  }
-
-  .filter-item--heartbeat :deep(.app-time-range-filter) {
-    grid-template-columns: 180px auto 180px;
-  }
-}
-
-@media (max-width: 1100px) {
-  .filter-item--keyword {
-    width: 280px;
-  }
-
-  .filter-item--status :deep(.el-select),
-  .filter-item--busy :deep(.el-select),
-  .filter-item--banned :deep(.el-select) {
-    width: 118px;
-    flex-basis: 118px;
-  }
-}
-
-@media (max-width: 900px) {
-  .detail-form {
-    grid-template-columns: 1fr;
-  }
-
-  .detail-field--wide {
-    grid-column: auto;
-  }
-}
-
 @media (max-width: 640px) {
   .client-page {
     height: auto;
@@ -1271,47 +1058,10 @@ function openLongTextDialog(field) {
   }
 
   .page-actions,
-  .client-filters,
-  .client-filter-fields,
-  .filter-item {
+  .client-filters {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .client-filter-fields {
-    width: 100%;
-  }
-
-  .filter-item--keyword,
-  .filter-item--status,
-  .filter-item--busy,
-  .filter-item--banned {
-    width: auto;
-    max-width: none;
-  }
-
-  .filter-item--status :deep(.el-select),
-  .filter-item--busy :deep(.el-select),
-  .filter-item--banned :deep(.el-select) {
-    width: 100%;
-    flex: 1 1 auto;
-  }
-
-  .filter-item--heartbeat :deep(.app-time-range-filter) {
-    grid-template-columns: 1fr;
-    width: 100%;
-  }
-
-  .detail-field {
-    grid-template-columns: 1fr;
-  }
-
-  .detail-label {
-    text-align: left;
-  }
-
-  .detail-control {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 </style>

@@ -12,7 +12,6 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // WorkflowBatchDelete deletes local workflow records 批量删除本地工作流
@@ -26,20 +25,28 @@ func (c *ControllerV1) WorkflowBatchDelete(ctx context.Context, req *v1.Workflow
 				stats.NotFound++
 				continue
 			}
-			model := dao.AutomaWorkflows.Ctx(ctx)
-			if primaryID := gconv.Int64(workflowID); primaryID > 0 {
-				model = model.WherePri(primaryID)
-			} else {
-				model = model.Where(columns.AutomaId, workflowID)
+			affected := int64(0)
+			if primaryID, ok := parseWorkflowPrimaryID(workflowID); ok {
+				result, deleteErr := dao.AutomaWorkflows.Ctx(ctx).WherePri(primaryID).Delete()
+				if deleteErr != nil {
+					err = deleteErr
+					return nil, err
+				}
+				affected, err = result.RowsAffected()
+				if err != nil {
+					return nil, err
+				}
 			}
-			result, deleteErr := model.Delete()
-			if deleteErr != nil {
-				err = deleteErr
-				return nil, err
-			}
-			affected, affectedErr := result.RowsAffected()
-			if affectedErr != nil {
-				return nil, affectedErr
+			if affected <= 0 {
+				result, deleteErr := dao.AutomaWorkflows.Ctx(ctx).Where(columns.AutomaId, workflowID).Delete()
+				if deleteErr != nil {
+					err = deleteErr
+					return nil, err
+				}
+				affected, err = result.RowsAffected()
+				if err != nil {
+					return nil, err
+				}
 			}
 			if affected <= 0 {
 				stats.NotFound++

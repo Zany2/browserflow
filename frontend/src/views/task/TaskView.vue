@@ -1,32 +1,98 @@
 <template>
   <section class="task-page server-list-page">
     <header class="page-actions server-list-actions">
-      <el-button :icon="RefreshRight" @click="loadTasks">刷新</el-button>
       <el-button type="primary" :icon="Plus" @click="handleCreateTask">新增任务</el-button>
-      <el-button @click="resetTaskFilters">重置</el-button>
       <el-button type="danger" :disabled="selectedTaskIds.length === 0" @click="handleBatchDeleteTasks">
         删除选中
       </el-button>
+      <el-button :icon="RefreshRight" @click="loadTasks">刷新</el-button>
+      <el-button @click="resetTaskFilters">重置</el-button>
     </header>
 
     <section class="task-panel server-list-panel">
       <div class="task-filters server-list-filters">
-        <div class="task-filter-fields">
-          <div class="filter-item filter-item--keyword">
-            <span class="filter-label">关键词</span>
-            <el-input v-model="taskFilters.keyword" clearable placeholder="任务名称、任务说明或自定义工作流名称" />
+        <div class="task-filter-fields server-filter-fields">
+          <div class="server-filter-item server-filter-item--text filter-item--keyword">
+            <span class="server-filter-label">关键词</span>
+            <el-input v-model="taskFilters.keyword" clearable placeholder="任务名称、任务说明、自定义工作流名称等" />
           </div>
-          <div class="filter-item filter-item--created-time">
-            <span class="filter-label">创建时间</span>
-            <AppTimeRangeFilter v-model="taskFilters.created_time_range" />
+          <div class="server-filter-item server-filter-item--medium filter-item--workflow">
+            <span class="server-filter-label">工作流</span>
+            <el-select
+              v-model="taskFilters.workflow_id"
+              clearable
+              filterable
+              placeholder="全部"
+              :loading="workflowLoading"
+              @visible-change="handleWorkflowFilterVisible"
+            >
+              <el-option
+                v-for="workflow in workflowOptions"
+                :key="getWorkflowId(workflow)"
+                :label="workflow.name || getWorkflowId(workflow)"
+                :value="getWorkflowId(workflow)"
+              />
+            </el-select>
           </div>
-          <div class="filter-item filter-item--enabled">
-            <span class="filter-label">状态</span>
+          <div class="server-filter-item server-filter-item--medium filter-item--client">
+            <span class="server-filter-label">客户端</span>
+            <el-select
+              v-model="taskFilters.client_ip"
+              clearable
+              filterable
+              placeholder="全部"
+              :loading="clientLoading"
+            >
+              <el-option v-for="option in clientIpOptions" :key="option.ip" :label="option.ip" :value="option.ip" />
+            </el-select>
+          </div>
+          <div class="server-filter-item server-filter-item--node filter-item--node">
+            <span class="server-filter-label">执行节点</span>
+            <el-select
+              v-model="taskFilters.node_id"
+              clearable
+              filterable
+              placeholder="请先选择客户端"
+              :disabled="!taskFilters.client_ip"
+              :loading="clientLoading"
+            >
+              <el-option
+                v-for="client in filterNodeOptions"
+                :key="getClientNodeId(client)"
+                :label="getClientNodeId(client)"
+                :value="getClientNodeId(client)"
+              />
+            </el-select>
+          </div>
+          <div class="server-filter-item server-filter-item--short filter-item--enabled">
+            <span class="server-filter-label">状态</span>
             <el-select v-model="taskFilters.enabled" clearable placeholder="全部">
               <el-option label="全部" value="" />
               <el-option label="启用" value="true" />
               <el-option label="停用" value="false" />
             </el-select>
+          </div>
+          <div class="server-filter-item server-filter-item--short filter-item--schedule">
+            <span class="server-filter-label">执行计划</span>
+            <el-select v-model="taskFilters.schedule_type" clearable placeholder="全部">
+              <el-option label="全部" value="" />
+              <el-option label="手动执行" value="manual" />
+              <el-option label="定时任务" value="cron" />
+            </el-select>
+          </div>
+          <div class="server-filter-item server-filter-item--short filter-item--dispatch">
+            <span class="server-filter-label">调度模式</span>
+            <el-select v-model="taskFilters.dispatch_mode" clearable placeholder="全部">
+              <el-option label="全部" value="" />
+              <el-option label="自由调度" value="auto" />
+              <el-option label="指定客户端" value="ip" />
+              <el-option label="指定节点" value="node" />
+              <el-option label="指定分组" value="group" />
+            </el-select>
+          </div>
+          <div class="server-filter-item server-filter-item--time filter-item--created-time">
+            <span class="server-filter-label">创建时间</span>
+            <AppTimeRangeFilter v-model="taskFilters.created_time_range" />
           </div>
         </div>
       </div>
@@ -43,26 +109,30 @@
         @selection-change="handleTaskSelectionChange"
       >
         <el-table-column type="selection" width="40" reserve-selection />
-        <el-table-column prop="name" label="任务名称" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="description" label="任务说明" min-width="110" show-overflow-tooltip />
-        <el-table-column label="自定义工作流名称" min-width="120" show-overflow-tooltip>
+        <el-table-column prop="name" label="任务名称" min-width="130" show-overflow-tooltip />
+        <el-table-column label="工作流" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.workflow_name || row.workflow_id || '' }}
           </template>
         </el-table-column>
-        <el-table-column label="执行客户端 IP" min-width="105" show-overflow-tooltip>
+        <el-table-column label="调度目标" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ getTaskClientIp(row) }}
+            {{ getTaskTargetText(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="执行节点 ID" min-width="105" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getTaskNodeId(row) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="执行计划" min-width="100" show-overflow-tooltip>
+        <el-table-column label="执行计划" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ getScheduleText(row) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="调度模式" width="92" align="center">
+          <template #default="{ row }">
+            {{ getDispatchModeText(row) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="繁忙策略" width="92" align="center">
+          <template #default="{ row }">
+            {{ getQueuePolicyText(row.queue_policy || row.queuePolicy) }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="76" align="center" class-name="quick-edit-column">
@@ -77,14 +147,14 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" width="168" class-name="nowrap-column">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at || row.createdAt) }}
-          </template>
-        </el-table-column>
         <el-table-column label="最近执行时间" width="168" class-name="nowrap-column">
           <template #default="{ row }">
             {{ formatDate(row.last_executed_at || row.lastExecutedAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="168" class-name="nowrap-column">
+          <template #default="{ row }">
+            {{ formatDate(row.created_at || row.createdAt) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" align="center">
@@ -158,7 +228,7 @@
                 class="client-select"
                 clearable
                 filterable
-                placeholder="客户端 IP（可选，不选则自动匹配全部）"
+                placeholder="客户端（可选，不选则自动匹配全部）"
                 :loading="clientLoading"
                 @change="handleClientIpChange"
                 @clear="handleClientIpClear"
@@ -434,6 +504,7 @@ import {
 } from '@/services/automa'
 import { listClients } from '@/services/client'
 import { createTask, deleteTask, executeTask, listTasks, updateTask } from '@/services/task'
+import { getClientIp, getClientNodeId, getClientNodeName } from '@/utils/clientNode'
 import { formatDate as formatBaseDate } from '@/utils/format'
 import { DEFAULT_PAGE_SIZES, normalizeList } from '@/utils/list'
 
@@ -501,8 +572,13 @@ const {
 const taskForm = reactive(createEmptyTaskForm())
 const taskFilters = reactive({
   keyword: '',
+  workflow_id: '',
+  client_ip: '',
+  node_id: '',
   created_time_range: [],
   enabled: '',
+  schedule_type: '',
+  dispatch_mode: '',
 })
 
 const taskDialogTitle = computed(() => (taskForm.id ? '编辑任务' : '新增任务'))
@@ -532,6 +608,11 @@ const clientIpOptions = computed(() => {
 })
 const filteredNodeOptions = computed(() => {
   const clientIP = taskForm.client_ip.trim()
+  if (!clientIP) return []
+  return clientOptions.value.filter((client) => getClientIp(client) === clientIP)
+})
+const filterNodeOptions = computed(() => {
+  const clientIP = taskFilters.client_ip.trim()
   if (!clientIP) return []
   return clientOptions.value.filter((client) => getClientIp(client) === clientIP)
 })
@@ -570,9 +651,21 @@ watch(() => taskFilters.keyword, () => {
   scheduleFilterSearch()
 })
 
-watch(() => [taskFilters.created_time_range, taskFilters.enabled], () => {
+watch(() => [
+  taskFilters.workflow_id,
+  taskFilters.client_ip,
+  taskFilters.node_id,
+  taskFilters.created_time_range,
+  taskFilters.enabled,
+  taskFilters.schedule_type,
+  taskFilters.dispatch_mode,
+], () => {
   clearFilterSearchTimer()
   reloadFirstTaskPage()
+})
+
+watch(() => taskFilters.client_ip, () => {
+  taskFilters.node_id = ''
 })
 
 watch(taskPage, () => {
@@ -593,9 +686,14 @@ async function loadTasks() {
     const [startTime, endTime] = getCreatedTimeRange()
     const data = await listTasks({
       keyword: taskFilters.keyword.trim(),
+      workflow_id: taskFilters.workflow_id,
+      client_ip: taskFilters.client_ip,
+      node_id: taskFilters.node_id,
       start_time: startTime,
       end_time: endTime,
       enabled: taskFilters.enabled,
+      schedule_type: taskFilters.schedule_type,
+      dispatch_mode: taskFilters.dispatch_mode,
       page_num: taskPage.value,
       page_size: taskPageSize.value,
     })
@@ -632,6 +730,12 @@ async function loadWorkflowOptions() {
     workflowOptions.value = normalizeList(data, 'workflows').filter((item) => !item.is_deleted)
   } finally {
     workflowLoading.value = false
+  }
+}
+
+function handleWorkflowFilterVisible(visible) {
+  if (visible && workflowOptions.value.length === 0) {
+    loadWorkflowOptions()
   }
 }
 
@@ -1168,8 +1272,13 @@ function resetTaskForm() {
 
 function resetTaskFilters() {
   taskFilters.keyword = ''
+  taskFilters.workflow_id = ''
+  taskFilters.client_ip = ''
+  taskFilters.node_id = ''
   taskFilters.created_time_range = []
   taskFilters.enabled = ''
+  taskFilters.schedule_type = ''
+  taskFilters.dispatch_mode = ''
 }
 
 function isTaskStatusUpdating(row) {
@@ -1397,20 +1506,8 @@ function getClientId(row) {
   return getClientNodeId(row) || row?.client_id || row?.clientId || row?.id || ''
 }
 
-function getClientNodeId(row) {
-  return row?.node_id || row?.nodeId || ''
-}
-
-function getClientNodeName(row) {
-  return row?.node_name || row?.nodeName || ''
-}
-
 function getClientMachineId(row) {
   return row?.machine_id || row?.machineId || ''
-}
-
-function getClientIp(row) {
-  return row?.client_ip || row?.ip || row?.remote_ip || row?.last_ip || row?.source_ip || ''
 }
 
 function getClientName(row) {
@@ -1459,11 +1556,39 @@ function getTaskNodeId(row) {
   return String(row?.node_id || row?.nodeId || '').trim() || '自动匹配'
 }
 
+function getTaskTargetText(row) {
+  const clientIP = getTaskClientIpValue(row)
+  const nodeID = String(row?.node_id || row?.nodeId || '').trim()
+  if (clientIP && nodeID) return `${clientIP} / ${nodeID}`
+  if (clientIP) return `${clientIP} / 自动匹配`
+  if (nodeID) return `自动匹配 / ${nodeID}`
+  return '自由调度'
+}
+
 function getTaskDispatchMode(row) {
   if (row?.node_id) return 'node'
   if (row?.target_group_id) return 'group'
   if (row?.client_ip) return 'ip'
   return 'auto'
+}
+
+function getDispatchModeText(row) {
+  const texts = {
+    auto: '自由调度',
+    ip: '指定客户端',
+    node: '指定节点',
+    group: '指定分组',
+  }
+  return texts[row?.dispatch_mode || row?.dispatchMode || getTaskDispatchMode(row)] || ''
+}
+
+function getQueuePolicyText(value) {
+  const texts = {
+    queue: '等待可用',
+    fail: '直接失败',
+    skip: '跳过本次',
+  }
+  return texts[String(value || 'queue').trim()] || ''
 }
 
 function getScheduleText(row) {
@@ -1513,53 +1638,11 @@ function createEmptyTaskForm() {
   display: flex;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 10px 20px;
+  gap: 8px 14px;
 }
 
 .task-filter-fields {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  flex: 1 1 auto;
-  gap: 10px 20px;
-  width: 100%;
-  min-width: 0;
-}
-
-.filter-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-item--keyword {
-  width: 360px;
-  min-width: 0;
-}
-
-.filter-item--created-time {
-  width: 420px;
-  min-width: 0;
-}
-
-.filter-item--enabled {
-  width: 188px;
-  min-width: 0;
-}
-
-.filter-item--created-time :deep(.el-date-editor) {
-  width: 100%;
-}
-
-.filter-item :deep(.el-input),
-.filter-item :deep(.el-select) {
-  flex: 1;
-  min-width: 0;
-}
-
-.filter-label {
-  flex-shrink: 0;
-  color: #606266;
+  gap: 8px 14px;
 }
 
 .task-config-form :deep(.el-form-item__label) {
@@ -1745,36 +1828,12 @@ function createEmptyTaskForm() {
   }
 }
 
-@media (max-width: 1280px) {
-  .filter-item--keyword {
-    width: 320px;
-  }
-
-  .filter-item--created-time {
-    width: 380px;
-  }
-
-  .filter-item--enabled {
-    width: 168px;
-  }
-}
-
 @media (max-width: 640px) {
   .page-actions,
-  .task-filters,
-  .filter-item {
+  .task-filters {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .task-filter-fields {
-    width: 100%;
-  }
-
-  .filter-item--keyword,
-  .filter-item--created-time,
-  .filter-item--enabled {
-    width: 100%;
-  }
 }
 </style>

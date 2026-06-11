@@ -1,9 +1,5 @@
 <template>
-  <AppDialog
-    v-model="visible"
-    title="客户端维护"
-    width="min(1560px, calc(100vw - 16px))"
-  >
+  <AppDialog v-model="visible" title="客户端维护" width="min(1760px, calc(100vw - 16px))">
     <div class="maintenance-dialog">
       <el-tabs v-model="activeView" @tab-change="handleViewChange">
         <el-tab-pane label="服务端工作流" name="server" />
@@ -11,50 +7,18 @@
       </el-tabs>
 
       <div class="maintenance-toolbar">
-        <el-select
-          v-model="selectedClientIp"
-          class="client-ip-select"
-          clearable
-          filterable
-          :loading="clientLoading"
-          placeholder="选择客户端 IP"
-          @visible-change="handleClientSelectVisible"
-          @change="handleClientIpChange"
-          @clear="handleClientIpClear"
-        >
-          <el-option
-            v-for="clientIp in onlineClientIps"
-            :key="clientIp"
-            :label="clientIp"
-            :value="clientIp"
-          />
+        <el-select v-model="selectedClientIp" class="client-ip-select" clearable filterable :loading="clientLoading"
+          placeholder="选择客户端" @visible-change="handleClientSelectVisible" @change="handleClientIpChange"
+          @clear="handleClientIpClear">
+          <el-option v-for="clientIp in onlineClientIps" :key="clientIp" :label="clientIp" :value="clientIp" />
         </el-select>
-        <el-select
-          v-model="selectedNodeIds"
-          class="node-select"
-          clearable
-          filterable
-          multiple
-          collapse-tags
-          collapse-tags-tooltip
-          :disabled="!selectedClientIp"
-          placeholder="选择执行节点"
-          @change="handleNodeChange"
-          @clear="handleNodeClear"
-        >
-          <el-option
-            v-for="node in selectedClientNodes"
-            :key="node.node_id"
-            :label="node.node_id"
-            :value="node.node_id"
-          />
+        <el-select v-model="selectedNodeIds" class="node-select" clearable filterable multiple collapse-tags
+          collapse-tags-tooltip :disabled="!selectedClientIp" placeholder="选择执行节点" @change="handleNodeChange"
+          @clear="handleNodeClear">
+          <el-option v-for="node in selectedClientNodes" :key="node.node_id" :label="node.node_id"
+            :value="node.node_id" />
         </el-select>
-        <el-input
-          v-model="keyword"
-          class="keyword-input"
-          clearable
-          :placeholder="keywordPlaceholder"
-        />
+        <el-input v-model="keyword" class="keyword-input" clearable :placeholder="keywordPlaceholder" />
         <el-button :disabled="!canQuery" :loading="refreshing" @click="refreshNodeWorkflows">
           刷新节点清单
         </el-button>
@@ -63,46 +27,57 @@
 
       <div class="maintenance-actions">
         <AppSelectionSummary :count="selectedIds.length" unit="工作流" />
-        <el-button
-          v-if="activeView === 'server'"
-          type="primary"
-          :disabled="!canSubmit"
-          :loading="submitting"
-          @click="handleInstall"
-        >
+        <el-button v-if="activeView === 'server'" type="primary" :disabled="!canInstallOrUpdate" :loading="submitting"
+          @click="handleInstall">
           安装到节点
         </el-button>
-        <el-button
-          v-if="activeView === 'server'"
-          type="warning"
-          :disabled="!canSubmit"
-          :loading="submitting"
-          @click="handleUpdate"
-        >
+        <el-button v-if="activeView === 'server'" type="warning" :disabled="!canInstallOrUpdate" :loading="submitting"
+          @click="handleUpdate">
           更新到节点
         </el-button>
-        <el-button
-          type="danger"
-          :disabled="!canSubmit"
-          :loading="submitting"
-          @click="handleDelete"
-        >
+        <el-button type="danger" :disabled="!canSubmit" :loading="submitting" @click="handleDelete">
           从节点删除
         </el-button>
       </div>
 
-      <el-table
-        ref="tableRef"
-        v-loading="loading || serverWorkflowLoading"
-        class="maintenance-table adaptive-table"
-        :data="pagedRows"
-        border
-        height="460"
-        row-key="automa_id"
-        empty-text="请选择客户端 IP 和执行节点"
-        @selection-change="handleSelectionChange"
-      >
+      <el-table ref="tableRef" v-loading="loading || serverWorkflowLoading" class="maintenance-table adaptive-table"
+        :data="pagedRows" border height="100%" row-key="automa_id" empty-text="请选择客户端和执行节点"
+        @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" reserve-selection />
+        <el-table-column type="expand" width="40">
+          <template #default="{ row }">
+            <div class="node-detail-panel">
+              <div class="node-detail-grid node-detail-grid--header">
+                <span>执行节点</span>
+                <span>安装状态</span>
+                <span>节点状态</span>
+                <span>同步状态</span>
+                <span>客户端更新时间</span>
+                <span>数据库更新时间</span>
+              </div>
+              <div v-for="detail in getNodeDetailRows(row)" :key="detail.node_id" class="node-detail-grid">
+                <span class="node-detail-text" :title="detail.node_id">{{ detail.node_id }}</span>
+                <span>
+                  <el-tag :type="detail.installed ? 'success' : 'info'" effect="plain">
+                    {{ detail.installed ? '已安装' : '未安装' }}
+                  </el-tag>
+                </span>
+                <span>
+                  <el-tag :type="getNodeDetailStatusTagType(detail)" effect="plain">
+                    {{ getNodeDetailStatusText(detail) }}
+                  </el-tag>
+                </span>
+                <span>
+                  <el-tag :type="getSyncStatusTagType(detail.sync_status)" effect="plain">
+                    {{ getSyncStatusText(detail.sync_status) }}
+                  </el-tag>
+                </span>
+                <span class="node-detail-text">{{ formatOptionalDate(detail.client_updated_at) }}</span>
+                <span class="node-detail-text">{{ formatOptionalDate(detail.server_updated_at) }}</span>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column :label="nameColumnLabel" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.name || row.server_name || '' }}
@@ -113,9 +88,23 @@
             {{ row.automa_name || row.automa_id || '' }}
           </template>
         </el-table-column>
-        <el-table-column label="安装节点数" width="120" show-overflow-tooltip>
+        <el-table-column label="节点覆盖" min-width="190">
           <template #default="{ row }">
-            <span :title="getNodeCoverageTitle(row)">{{ getNodeCoverageText(row) }}</span>
+            <el-tooltip placement="top" effect="dark">
+              <template #content>
+                <div class="node-coverage-tooltip">{{ getNodeCoverageTitle(row) }}</div>
+              </template>
+              <div class="node-coverage">
+                <div>
+                  <em>安装节点</em>
+                  <span>{{ formatNodeList(getInstalledNodeIds(row)) }}</span>
+                </div>
+                <div>
+                  <em>未安装节点</em>
+                  <span>{{ formatNodeList(getMissingNodeIds(row)) }}</span>
+                </div>
+              </div>
+            </el-tooltip>
           </template>
         </el-table-column>
         <el-table-column label="数据来源" width="98" align="center">
@@ -145,13 +134,9 @@
       </el-table>
 
       <div class="maintenance-footer">
-        <AppPagination
-          v-if="filteredRows.length > 0"
-          v-model:current-page="currentPage"
-          v-model:page-size="currentPageSize"
-          :page-sizes="pageSizes"
-          :total="filteredRows.length"
-        />
+        <AppPagination class="maintenance-pagination"
+          :class="{ 'maintenance-pagination--hidden': filteredRows.length <= 0 }" v-model:current-page="currentPage"
+          v-model:page-size="currentPageSize" :page-sizes="pageSizes" :total="filteredRows.length" />
       </div>
     </div>
 
@@ -169,12 +154,13 @@ import AppDialog from '@/components/AppDialog.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import AppSelectionSummary from '@/components/AppSelectionSummary.vue'
 import { usePagedTableSelection } from '@/composables/usePagedTableSelection'
-import { listClients } from '@/services/client'
+import { listAllClients } from '@/services/client'
 import {
   listAutomaWorkflows,
   listAutomaSyncCandidates,
   maintainClientAutomaWorkflows,
 } from '@/services/automa'
+import { getClientIp } from '@/utils/clientNode'
 import { formatDate } from '@/utils/format'
 import { DEFAULT_PAGE_SIZES, normalizeList, normalizeText } from '@/utils/list'
 
@@ -232,11 +218,12 @@ const selectedClientNodes = computed(() => {
 const canQuery = computed(() => Boolean(normalizeText(selectedClientIp.value) && selectedNodeIds.value.length > 0))
 const canSubmit = computed(() => canQuery.value && selectedIds.value.length > 0)
 const selectedNodeCount = computed(() => selectedNodeIds.value.length)
-const selectedServerIds = computed(() => selectedRows.value.filter((row) => !row.client_only).map(getWorkflowId).filter(Boolean))
-const selectedClientOnlyCount = computed(() => selectedRows.value.filter((row) => row.client_only).length)
+const selectedServerIds = computed(() => selectedRows.value.filter((row) => !hasClientOnlyNode(row)).map(getWorkflowId).filter(Boolean))
+const selectedClientOnlyCount = computed(() => selectedRows.value.filter(hasClientOnlyNode).length)
+const canInstallOrUpdate = computed(() => canSubmit.value && selectedClientOnlyCount.value === 0)
 const serverWorkflows = computed(() => serverWorkflowRows.value.length > 0 ? serverWorkflowRows.value : props.workflows)
 const keywordPlaceholder = computed(() => {
-  return activeView.value === 'server' ? '检索服务端工作流名称 / ID' : '检索客户端工作流名称 / ID'
+  return activeView.value === 'server' ? '服务端工作流名称、ID等' : '客户端工作流名称、ID等'
 })
 const nameColumnLabel = computed(() => activeView.value === 'server' ? '自定义工作流名称' : '工作流名称')
 const filteredRows = computed(() => {
@@ -270,8 +257,7 @@ const {
 
 watch(visible, (nextVisible) => {
   if (nextVisible) {
-    loadOnlineClients()
-    loadServerWorkflows()
+    loadOnlineClients(true)
     return
   }
   resetDialog()
@@ -304,14 +290,16 @@ watch(filteredRows, (rows) => {
   restoreSelection(tableRef)
 })
 
-async function loadOnlineClients() {
+async function loadOnlineClients(force = false) {
+  if (!force && onlineClients.value.length > 0) return
+
   clientLoading.value = true
   try {
-    const data = await listClients({ status: 'online' })
+    const data = await listAllClients({ status: 'online' })
     const seen = new Set()
     onlineClients.value = normalizeList(data, 'clients')
       .map((client) => {
-        const sourceIp = client?.client_ip || client?.ip || client?.remote_ip || client?.last_ip || client?.source_ip || ''
+        const sourceIp = getClientIp(client)
         const nodeId = normalizeNodeId(sourceIp, client?.node_id || client?.nodeId)
         const identity = buildNodeIdentity(sourceIp, nodeId)
         return {
@@ -332,6 +320,8 @@ async function loadOnlineClients() {
 }
 
 async function loadServerWorkflows() {
+  if (serverWorkflowRows.value.length > 0) return
+
   serverWorkflowLoading.value = true
   try {
     const rows = []
@@ -421,7 +411,7 @@ async function loadNodeCandidates(refresh = false) {
   }
   loading.value = true
   try {
-    if (serverWorkflowRows.value.length === 0 && !serverWorkflowLoading.value) {
+    if (activeView.value === 'server' && serverWorkflowRows.value.length === 0 && !serverWorkflowLoading.value) {
       await loadServerWorkflows()
     }
     const candidates = await loadAllNodeCandidates(refresh)
@@ -446,13 +436,15 @@ function buildServerRows(candidateMap) {
   return serverWorkflows.value.map((workflow) => {
     const workflowId = getWorkflowId(workflow)
     const candidate = candidateMap.get(workflowId) || {}
+    const nodeDetails = buildNodeDetails(candidate, workflow)
     return {
       ...workflow,
       automa_id: workflow.automa_id || workflowId,
       client_only: false,
-      node_status: resolveNodeStatus(candidate),
+      node_status: resolveNodeSummaryStatus(nodeDetails),
       client_updated_at: candidate.updated_at_automa || candidate.updatedAt || candidate.updated_at || '',
       node_ids: candidate.node_ids || [candidate.node_id].filter(Boolean),
+      node_details: nodeDetails,
       server_updated_at: workflow.updated_at,
       sync_status: candidate.sync_status || 'client_missing',
     }
@@ -464,6 +456,7 @@ function mergeCandidate(current = null, next = {}) {
     return {
       ...next,
       node_ids: [next.node_id].filter(Boolean),
+      node_items: [next],
     }
   }
   const nodeIds = new Set([...(current.node_ids || []), current.node_id, next.node_id].filter(Boolean))
@@ -471,6 +464,7 @@ function mergeCandidate(current = null, next = {}) {
     ...current,
     ...next,
     node_ids: Array.from(nodeIds),
+    node_items: [...(current.node_items || []), next],
     sync_status: mergeSyncStatus(current.sync_status, next.sync_status),
     synced: Boolean(current.synced && next.synced),
     updated_at_automa: Math.max(Number(current.updated_at_automa || 0), Number(next.updated_at_automa || 0)),
@@ -490,7 +484,8 @@ function mergeSyncStatus(current = '', next = '') {
 function buildClientRows(candidateMap) {
   const rows = []
   candidateMap.forEach((candidate, workflowId) => {
-    const clientOnly = candidate.sync_status === 'not_synced' || !candidate.server_id
+    const nodeDetails = buildNodeDetails(candidate, candidate)
+    const clientOnly = nodeDetails.some((detail) => detail.client_only)
     rows.push({
       id: candidate.server_id || '',
       automa_id: workflowId,
@@ -501,9 +496,10 @@ function buildClientRows(candidateMap) {
       automa_name: candidate.automa_name || candidate.name || workflowId,
       automa_description: candidate.automa_description || candidate.description || '',
       client_only: clientOnly,
-      node_status: clientOnly ? 'client_only' : resolveNodeStatus(candidate),
+      node_status: clientOnly ? 'client_only' : resolveNodeSummaryStatus(nodeDetails),
       client_updated_at: candidate.updated_at_automa || candidate.updatedAt || candidate.updated_at || '',
       node_ids: candidate.node_ids || [candidate.node_id].filter(Boolean),
+      node_details: nodeDetails,
       server_updated_at: candidate.server_updated_at || '',
       sync_status: candidate.sync_status || 'not_synced',
     })
@@ -513,25 +509,45 @@ function buildClientRows(candidateMap) {
 
 async function loadAllNodeCandidates(refresh = false) {
   const rows = []
+  let pageNum = 1
+  let total = 0
+  do {
+    const data = await listAutomaSyncCandidates(selectedClientIp.value, {
+      source_node_ids: selectedNodeIds.value,
+      page_num: pageNum,
+      page_size: fetchPageSize,
+      refresh: refresh && pageNum === 1 ? 1 : 0,
+    })
+    const list = normalizeList(data, 'workflows')
+    rows.push(...list)
+    total = Number(data?.total || rows.length)
+    pageNum += 1
+    if (list.length === 0) break
+  } while (rows.length < total)
+
+  if (rows.length > 0 || selectedNodeIds.value.length <= 1) {
+    return rows
+  }
+
   for (const nodeId of selectedNodeIds.value) {
-    let pageNum = 1
-    let total = 0
+    let fallbackPageNum = 1
+    let fallbackTotal = 0
     do {
       const data = await listAutomaSyncCandidates(selectedClientIp.value, {
         source_node_id: nodeId,
-        page_num: pageNum,
+        page_num: fallbackPageNum,
         page_size: fetchPageSize,
-        refresh: refresh && pageNum === 1 ? 1 : 0,
+        refresh: refresh && fallbackPageNum === 1 ? 1 : 0,
       })
       const list = normalizeList(data, 'workflows')
       rows.push(...list.map((item) => ({
         ...item,
         node_id: item.node_id || nodeId,
       })))
-      total = Number(data?.total || rows.length)
-      pageNum += 1
+      fallbackTotal = Number(data?.total || rows.length)
+      fallbackPageNum += 1
       if (list.length === 0) break
-    } while (rows.filter((item) => item.node_id === nodeId).length < total)
+    } while (rows.filter((item) => item.node_id === nodeId).length < fallbackTotal)
   }
   return rows
 }
@@ -635,14 +651,44 @@ function resetViewStateCache() {
   viewStateCache.client = createViewState()
 }
 
-function resolveNodeStatus(candidate = {}) {
-  if (candidate.sync_status === 'client_missing' || !candidate.automa_id) return 'missing'
-  if (candidate.synced) return 'synced'
+function buildNodeDetails(candidate = {}, workflow = {}) {
+  const nodeItems = Array.isArray(candidate.node_items) ? candidate.node_items : []
+  const nodeMap = new Map()
+  nodeItems.forEach((item) => {
+    const nodeId = normalizeNodeId(selectedClientIp.value, item.node_id)
+    if (!nodeId) return
+    nodeMap.set(nodeId, item)
+  })
+
+  return selectedNodeIds.value.map((nodeId) => {
+    const item = nodeMap.get(nodeId)
+    const syncStatus = item?.sync_status || 'client_missing'
+    return {
+      node_id: nodeId,
+      installed: Boolean(item && syncStatus !== 'client_missing'),
+      sync_status: syncStatus,
+      synced: Boolean(item?.synced),
+      client_only: Boolean(item && (syncStatus === 'not_synced' || !item.server_id)),
+      client_updated_at: item?.updated_at_automa || item?.updatedAt || item?.updated_at || '',
+      server_updated_at: item?.server_updated_at || workflow?.server_updated_at || workflow?.updated_at || '',
+    }
+  })
+}
+
+function resolveNodeSummaryStatus(details = []) {
+  if (details.length === 0) return 'missing'
+
+  const installedCount = details.filter((detail) => detail.installed).length
+  if (installedCount === 0) return 'missing'
+  if (details.some((detail) => detail.client_only)) return 'client_only'
+  if (installedCount < details.length) return 'partial_missing'
+  if (details.every((detail) => detail.synced)) return 'synced'
   return 'different'
 }
 
 function getNodeStatusText(row) {
   if (row.node_status === 'missing') return '未安装'
+  if (row.node_status === 'partial_missing') return '部分未安装'
   if (row.node_status === 'synced') return '一致'
   if (row.node_status === 'client_only') return '节点独有'
   return '有差异'
@@ -655,38 +701,75 @@ function getDataSourceText(row) {
 
 function getNodeStatusTagType(row) {
   if (row.node_status === 'missing') return 'info'
+  if (row.node_status === 'partial_missing') return 'warning'
   if (row.node_status === 'synced') return 'success'
   if (row.node_status === 'client_only') return 'danger'
   return 'warning'
 }
 
-function getNodeCoverageText(row) {
-  const nodeIds = getRowNodeIds(row)
-  const total = selectedNodeCount.value
-  return `${nodeIds.length} / ${total}`
+function getNodeDetailRows(row) {
+  return Array.isArray(row?.node_details) ? row.node_details : buildNodeDetails({}, row)
+}
+
+function hasClientOnlyNode(row) {
+  return getNodeDetailRows(row).some((detail) => detail.client_only)
+}
+
+function getNodeDetailStatusText(detail) {
+  if (!detail.installed) return '未安装'
+  if (detail.client_only) return '节点独有'
+  if (detail.synced) return '一致'
+  return '有差异'
+}
+
+function getNodeDetailStatusTagType(detail) {
+  if (!detail.installed) return 'info'
+  if (detail.client_only) return 'danger'
+  if (detail.synced) return 'success'
+  return 'warning'
+}
+
+function getSyncStatusText(status) {
+  if (status === 'client_missing') return '客户端缺失'
+  if (status === 'not_synced') return '未同步'
+  if (status === 'client_newer') return '客户端较新'
+  if (status === 'server_newer') return '数据库较新'
+  if (status === 'synced') return '已同步'
+  if (status === 'has_update') return '有更新'
+  return ''
+}
+
+function getSyncStatusTagType(status) {
+  if (status === 'synced') return 'success'
+  if (status === 'server_newer') return 'danger'
+  if (status === 'client_newer' || status === 'has_update') return 'warning'
+  return 'info'
 }
 
 function getNodeCoverageTitle(row) {
-  const nodeIds = getRowNodeIds(row)
-  if (nodeIds.length === 0) return row.node_status === 'missing' ? '所选节点均未安装' : ''
-  return nodeIds.join('、')
+  const installed = getInstalledNodeIds(row)
+  const missing = getMissingNodeIds(row)
+  return `安装节点：${formatNodeList(installed)}\n未安装节点：${formatNodeList(missing)}`
 }
 
 function getWorkflowId(row) {
   return row?.automa_id || row?.workflow_id || row?.workflowId || row?.id || ''
 }
 
-function getRowNodeIds(row) {
-  const values = Array.isArray(row?.node_ids) ? row.node_ids : [row?.node_id]
-  const seen = new Set()
-  const result = []
-  values.forEach((nodeId) => {
-    const normalized = normalizeNodeId(selectedClientIp.value, nodeId)
-    if (!normalized || seen.has(normalized)) return
-    seen.add(normalized)
-    result.push(normalized)
-  })
-  return result
+function getInstalledNodeIds(row) {
+  return getNodeDetailRows(row)
+    .filter((detail) => detail.installed)
+    .map((detail) => detail.node_id)
+}
+
+function getMissingNodeIds(row) {
+  return getNodeDetailRows(row)
+    .filter((detail) => !detail.installed)
+    .map((detail) => detail.node_id)
+}
+
+function formatNodeList(nodeIds) {
+  return nodeIds.length > 0 ? nodeIds.join('、') : ''
 }
 
 function buildNodeIdentity(clientIp, nodeId) {
@@ -739,6 +822,8 @@ function showSuccessMessage(message) {
 .maintenance-dialog {
   display: flex;
   flex-direction: column;
+  height: 608px;
+  min-height: 0;
   gap: 14px;
 }
 
@@ -746,6 +831,7 @@ function showSuccessMessage(message) {
 .maintenance-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -754,23 +840,91 @@ function showSuccessMessage(message) {
 }
 
 .node-select {
-  width: 260px;
+  width: 180px;
 }
 
 .keyword-input {
-  width: 260px;
+  width: 220px;
 }
 
 .maintenance-actions {
   justify-content: flex-end;
+  min-height: 32px;
 }
 
 .maintenance-table {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
 }
 
 .maintenance-table :deep(.nowrap-column .cell) {
+  padding-inline: 8px;
   white-space: nowrap;
+}
+
+.node-detail-panel {
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #ebeef5;
+}
+
+.node-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) 88px 96px 96px 150px 150px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: #303133;
+  font-size: 13px;
+  line-height: 24px;
+}
+
+.node-detail-grid--header {
+  color: #909399;
+  font-weight: 600;
+}
+
+.node-detail-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-coverage {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.node-coverage div {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  line-height: 18px;
+}
+
+.node-coverage em {
+  color: #909399;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.node-coverage span {
+  min-width: 0;
+  overflow: hidden;
+  color: #303133;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-coverage-tooltip {
+  white-space: pre-line;
 }
 
 .maintenance-footer {
@@ -778,6 +932,7 @@ function showSuccessMessage(message) {
   align-items: center;
   justify-content: flex-end;
   gap: 16px;
+  min-height: 32px;
 }
 
 .maintenance-footer :deep(.app-pagination) {
@@ -785,11 +940,17 @@ function showSuccessMessage(message) {
   margin-top: 0;
 }
 
+.maintenance-pagination--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 :global(.app-dialog:has(.maintenance-empty-footer) .el-dialog__footer) {
   display: none;
 }
 
 @media (max-width: 720px) {
+
   .maintenance-toolbar,
   .maintenance-actions {
     align-items: stretch;

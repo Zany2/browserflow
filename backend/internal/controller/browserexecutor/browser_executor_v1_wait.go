@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorWait waits for page or element. BrowserExecutorWait 缁涘绶熸い鐢告桨閹存牕鍘撶槐鐘偓?
+// BrowserExecutorWait waits for page or element. 等待页面或元素状态。
 func (c *ControllerV1) BrowserExecutorWait(ctx context.Context, req *v1.BrowserExecutorWaitReq) (res *v1.BrowserExecutorWaitRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

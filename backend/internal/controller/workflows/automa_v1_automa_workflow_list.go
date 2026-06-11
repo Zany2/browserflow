@@ -23,6 +23,8 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 	keyword := strings.ToLower(strings.TrimSpace(req.Keyword))
 	sourceIP := strings.TrimSpace(req.SourceIP)
 	sourceNodeID := strings.TrimSpace(req.SourceNodeID)
+	startTimeText := strings.TrimSpace(req.StartTime)
+	endTimeText := strings.TrimSpace(req.EndTime)
 	sourceNodeIDs := splitWorkflowListFilter(req.SourceNodeIDs)
 	sourceNodeIDSet := make(map[string]struct{}, len(sourceNodeIDs))
 	for _, nodeID := range sourceNodeIDs {
@@ -64,6 +66,12 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		}
 		if req.Syncable == 2 {
 			dbModel = dbModel.Where(columns.IsProtected, true)
+		}
+		if startTimeText != "" {
+			dbModel = dbModel.WhereGTE(columns.CreatedAt, startTimeText)
+		}
+		if endTimeText != "" {
+			dbModel = dbModel.WhereLTE(columns.CreatedAt, endTimeText)
 		}
 		if customKeyword != "" {
 			likeKeyword := "%" + customKeyword + "%"
@@ -124,6 +132,9 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 			if item.UpdatedAt != nil && !item.UpdatedAt.IsZero() {
 				listItem.UpdatedAt = item.UpdatedAt
 			}
+			if item.LastSyncedAt != nil && !item.LastSyncedAt.IsZero() {
+				listItem.LastSyncedAt = item.LastSyncedAt
+			}
 			list = append(list, listItem)
 		}
 		return &v1.WorkflowListRes{List: list, Total: total}, nil
@@ -153,6 +164,8 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 			return nil, err
 		}
 	}
+	startTime := gtime.NewFromStr(startTimeText)
+	endTime := gtime.NewFromStr(endTimeText)
 	filtered := make([]*model.AutomaWorkflowRecord, 0, len(records))
 	for _, record := range records {
 		if req.Source > 0 && record.Source != req.Source {
@@ -173,6 +186,18 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		}
 		if req.Syncable == 2 && !record.IsProtected {
 			continue
+		}
+		if startTimeText != "" {
+			createdAt := gtime.NewFromTime(record.CreatedAt)
+			if createdAt == nil || startTime == nil || createdAt.Before(startTime) {
+				continue
+			}
+		}
+		if endTimeText != "" {
+			createdAt := gtime.NewFromTime(record.CreatedAt)
+			if createdAt == nil || endTime == nil || createdAt.After(endTime) {
+				continue
+			}
 		}
 		if keyword != "" {
 			text := strings.ToLower(strings.Join([]string{record.AutomaID, record.Name, record.Description, record.AutomaName, record.AutomaDescription, record.SourceIP, record.SourceNodeID}, " "))
@@ -215,6 +240,9 @@ func (c *ControllerV1) WorkflowList(ctx context.Context, req *v1.WorkflowListReq
 		}
 		if !record.UpdatedAt.IsZero() {
 			item.UpdatedAt = gtime.NewFromTime(record.UpdatedAt)
+		}
+		if !record.LastSyncedAt.IsZero() {
+			item.LastSyncedAt = gtime.NewFromTime(record.LastSyncedAt)
 		}
 		list = append(list, item)
 	}

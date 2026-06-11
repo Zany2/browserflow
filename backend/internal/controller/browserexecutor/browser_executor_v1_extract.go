@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorExtract extracts data from page. BrowserExecutorExtract 閹绘劕褰囨い鐢告桨閺佺増宓侀妴?
+// BrowserExecutorExtract extracts data from page. 从页面提取数据。
 func (c *ControllerV1) BrowserExecutorExtract(ctx context.Context, req *v1.BrowserExecutorExtractReq) (res *v1.BrowserExecutorExtractRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

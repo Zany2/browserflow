@@ -11,6 +11,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model/do"
 	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	"github.com/Zany2/browserflow/backend/utility/llm"
+	"github.com/Zany2/browserflow/backend/utility/rr"
 	"github.com/Zany2/browserflow/backend/utility/state"
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/gogf/gf/v2/frame/g"
@@ -24,10 +25,12 @@ func (c *ControllerV1) WorkflowProtected(ctx context.Context, req *v1.WorkflowPr
 			return nil, err
 		}
 		if item.Id <= 0 {
-			return nil, fmt.Errorf("automa workflow not found")
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "工作流不存在")
+			return nil, nil
 		}
 		if req.Revision > 0 && item.Revision != req.Revision {
-			return nil, fmt.Errorf("鐗堟湰宸插彉鍖栵紝璇峰埛鏂板悗閲嶈瘯")
+			rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "版本已变化，请刷新后重试")
+			return nil, nil
 		}
 		if _, err = dao.AutomaWorkflows.Ctx(ctx).WherePri(req.ID).Data(do.AutomaWorkflows{IsProtected: req.IsProtected, Revision: item.Revision + 1}).Update(); err != nil {
 			return nil, err
@@ -58,7 +61,8 @@ func (c *ControllerV1) WorkflowProtected(ctx context.Context, req *v1.WorkflowPr
 		return nil, err
 	}
 	if req.Revision > 0 && record.Revision != req.Revision {
-		return nil, fmt.Errorf("版本已变化，请刷新后重试")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "版本已变化，请刷新后重试")
+		return nil, nil
 	}
 	record.IsProtected = req.IsProtected
 	record.Revision++

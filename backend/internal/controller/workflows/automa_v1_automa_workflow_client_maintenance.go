@@ -35,13 +35,22 @@ func (c *ControllerV1) WorkflowClientMaintenance(ctx context.Context, req *v1.Wo
 	}
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if sourceIP == "" || len(sourceNodeIDs) == 0 {
-		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "请选择客户端 IP 和执行节点")
+		rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), "请选择客户端和执行节点")
 		return nil, nil
+	}
+
+	sourceIdentities := make([]string, 0, len(sourceNodeIDs))
+	for _, sourceNodeID := range sourceNodeIDs {
+		sourceIdentities = append(sourceIdentities, websockets.NodeConnectionID(sourceIP, sourceNodeID))
+	}
+	onlineSet, onlineErr := workflowcache.GetOnlineClientSet(ctx, sourceIdentities)
+	if onlineErr != nil {
+		return nil, onlineErr
 	}
 	offlineNodes := make([]string, 0)
 	for _, sourceNodeID := range sourceNodeIDs {
 		sourceIdentity := websockets.NodeConnectionID(sourceIP, sourceNodeID)
-		if sourceIdentity == "" || !workflowcache.IsClientOnline(ctx, sourceIdentity) {
+		if _, ok := onlineSet[sourceIdentity]; sourceIdentity == "" || !ok {
 			offlineNodes = append(offlineNodes, firstNonEmpty(sourceIdentity, sourceNodeID))
 		}
 	}
@@ -63,13 +72,22 @@ func (c *ControllerV1) WorkflowClientMaintenance(ctx context.Context, req *v1.Wo
 	if action == "install" || action == "update" {
 		workflowPayloads := make([]map[string]any, 0, len(workflowIDs))
 		columns := dao.AutomaWorkflows.Columns()
+		items := make([]entity.AutomaWorkflows, 0, len(workflowIDs))
+		if err = dao.AutomaWorkflows.Ctx(ctx).WhereIn(columns.AutomaId, workflowIDs).Scan(&items); err != nil {
+			return nil, err
+		}
+		workflowMap := make(map[string]entity.AutomaWorkflows, len(items))
+		for _, item := range items {
+			workflowMap[item.AutomaId] = item
+		}
 		for _, workflowID := range workflowIDs {
-			item := entity.AutomaWorkflows{}
-			if err = dao.AutomaWorkflows.Ctx(ctx).Where(columns.AutomaId, workflowID).Scan(&item); err != nil {
-				return nil, err
-			}
-			if item.Id <= 0 {
+			item, ok := workflowMap[workflowID]
+			if !ok || item.Id <= 0 {
 				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("服务端工作流不存在：%s", workflowID))
+				return nil, nil
+			}
+			if item.IsProtected {
+				rr.FailedJsonWithMessageExitAll(g.RequestFromCtx(ctx), fmt.Sprintf("该工作流不允许客户端同步到本地：%s", firstNonEmpty(item.Name, item.AutomaName, workflowID)))
 				return nil, nil
 			}
 			workflowPayload := map[string]any{}

@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorObserve returns compact page context. BrowserExecutorObserve 鏉╂柨娲栫槐褍鍣炬い鐢告桨娑撳﹣绗呴弬鍥モ偓?
+// BrowserExecutorObserve returns compact page context. 返回紧凑页面上下文。
 func (c *ControllerV1) BrowserExecutorObserve(ctx context.Context, req *v1.BrowserExecutorObserveReq) (res *v1.BrowserExecutorObserveRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

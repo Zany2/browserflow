@@ -1,7 +1,7 @@
 <template>
   <AppDialog
     v-model="visible"
-    title="导入"
+    title="导入 ZIP"
     width="680px"
     confirm-text="导入"
     :loading="loading"

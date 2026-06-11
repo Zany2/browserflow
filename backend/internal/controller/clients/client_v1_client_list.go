@@ -9,6 +9,7 @@ import (
 	"github.com/Zany2/browserflow/backend/internal/model/entity"
 	websockets "github.com/Zany2/browserflow/backend/utility/websocket"
 	"github.com/Zany2/browserflow/backend/utility/workflowcache"
+	"github.com/gogf/gf/v2/database/gdb"
 )
 
 // ClientList returns registered client nodes. 返回已注册客户端节点列表
@@ -69,7 +70,21 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 		pageSize = 0
 	}
 
-	filterByRuntimeStatus := strings.TrimSpace(req.Status) == "online" || strings.TrimSpace(req.Status) == "offline"
+	runtimeStatus := strings.TrimSpace(req.Status)
+	filterByRuntimeStatus := runtimeStatus == "online" || runtimeStatus == "offline"
+	var onlineSet map[string]struct{}
+	if filterByRuntimeStatus {
+		onlineClients, listErr := workflowcache.ListOnlineClients(ctx)
+		if listErr != nil {
+			return nil, listErr
+		}
+		onlineSet = buildOnlineClientSet(onlineClients)
+		if runtimeStatus == "online" && len(onlineSet) == 0 {
+			return &v1.ClientListRes{List: []entity.Clients{}, Total: 0}, nil
+		}
+		gModel = applyRuntimeStatusFilter(gModel, columns.ClientIp, columns.NodeId, onlineSet, runtimeStatus)
+	}
+
 	total, err := gModel.Count()
 	if err != nil {
 		return nil, err
@@ -80,45 +95,100 @@ func (c *ControllerV1) ClientList(ctx context.Context, req *v1.ClientListReq) (r
 
 	clients := []entity.Clients{}
 	queryModel := gModel.OrderDesc(columns.CreatedAt).OrderDesc(columns.Id)
-	if pageSize > 0 && !filterByRuntimeStatus {
+	if pageSize > 0 {
 		queryModel = queryModel.Limit((pageNum-1)*pageSize, pageSize)
 	}
 	if err = queryModel.Scan(&clients); err != nil {
 		return nil, err
 	}
-	markClientRuntimeStatus(ctx, clients)
-	if filterByRuntimeStatus {
-		filteredClients := make([]entity.Clients, 0, len(clients))
-		for _, client := range clients {
-			if client.Status == strings.TrimSpace(req.Status) {
-				filteredClients = append(filteredClients, client)
-			}
+	if onlineSet != nil {
+		markClientRuntimeStatusWithSet(clients, onlineSet)
+	} else {
+		if onlineSet, err = onlineSetForClients(ctx, clients); err != nil {
+			return nil, err
 		}
-		clients = filteredClients
-		total = len(clients)
-		if pageSize > 0 {
-			start := (pageNum - 1) * pageSize
-			if start >= len(clients) {
-				clients = []entity.Clients{}
-			} else {
-				end := start + pageSize
-				if end > len(clients) {
-					end = len(clients)
-				}
-				clients = clients[start:end]
-			}
-		}
+		markClientRuntimeStatusWithSet(clients, onlineSet)
 	}
 
 	return &v1.ClientListRes{List: clients, Total: total}, nil
 }
 
-func markClientRuntimeStatus(ctx context.Context, clients []entity.Clients) {
+func onlineSetForClients(ctx context.Context, clients []entity.Clients) (map[string]struct{}, error) {
+	identities := make([]string, 0, len(clients))
+	for _, client := range clients {
+		identities = append(identities, clientRuntimeIdentity(client))
+	}
+	return workflowcache.GetOnlineClientSet(ctx, identities)
+}
+
+func buildOnlineClientSet(onlineClients []string) map[string]struct{} {
+	onlineSet := make(map[string]struct{}, len(onlineClients))
+	for _, client := range onlineClients {
+		if client = strings.TrimSpace(client); client != "" {
+			onlineSet[client] = struct{}{}
+		}
+	}
+	return onlineSet
+}
+
+func markClientRuntimeStatusWithSet(clients []entity.Clients, onlineSet map[string]struct{}) {
 	for i := range clients {
-		if workflowcache.IsClientOnline(ctx, websockets.NodeConnectionID(clients[i].ClientIp, clients[i].NodeId)) {
+		if _, ok := onlineSet[clientRuntimeIdentity(clients[i])]; ok {
 			clients[i].Status = "online"
 			continue
 		}
 		clients[i].Status = "offline"
 	}
+}
+
+func clientRuntimeIdentity(client entity.Clients) string {
+	return websockets.NodeConnectionID(client.ClientIp, client.NodeId)
+}
+
+func applyRuntimeStatusFilter(model *gdb.Model, clientIPColumn string, nodeIDColumn string, onlineSet map[string]struct{}, status string) *gdb.Model {
+	if len(onlineSet) == 0 {
+		return model
+	}
+
+	conditions := make([]string, 0, len(onlineSet))
+	args := make([]any, 0, len(onlineSet)*2)
+	for identity := range onlineSet {
+		clientIP, nodeID := splitRuntimeIdentity(identity)
+		if clientIP == "" && nodeID == "" {
+			continue
+		}
+		if clientIP != "" && nodeID != "" {
+			conditions = append(conditions, "("+clientIPColumn+" = ? AND "+nodeIDColumn+" = ?)")
+			args = append(args, clientIP, nodeID)
+			continue
+		}
+		if clientIP != "" {
+			conditions = append(conditions, "("+clientIPColumn+" = ? AND ("+nodeIDColumn+" IS NULL OR "+nodeIDColumn+" = '' OR "+nodeIDColumn+" = ?))")
+			args = append(args, clientIP, clientIP)
+			continue
+		}
+		conditions = append(conditions, "("+nodeIDColumn+" = ?)")
+		args = append(args, nodeID)
+	}
+	if len(conditions) == 0 {
+		return model
+	}
+
+	condition := "(" + strings.Join(conditions, " OR ") + ")"
+	if status == "offline" {
+		condition = "NOT " + condition
+	}
+	return model.Where(condition, args...)
+}
+
+func splitRuntimeIdentity(identity string) (string, string) {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return "", ""
+	}
+	if strings.Contains(identity, "|") {
+		parts := strings.SplitN(identity, "|", 2)
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	}
+	return identity, ""
 }

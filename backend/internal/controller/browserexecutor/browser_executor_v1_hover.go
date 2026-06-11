@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorHover hovers an element. BrowserExecutorHover 鎮仠鍏冪礌銆?
+// BrowserExecutorHover hovers an element. 悬停元素。
 func (c *ControllerV1) BrowserExecutorHover(ctx context.Context, req *v1.BrowserExecutorHoverReq) (res *v1.BrowserExecutorHoverRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

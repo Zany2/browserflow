@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorGetText gets element text. BrowserExecutorGetText 閼惧嘲褰囬崗鍐閺傚洦婀伴妴?
+// BrowserExecutorGetText gets element text. 获取元素文本。
 func (c *ControllerV1) BrowserExecutorGetText(ctx context.Context, req *v1.BrowserExecutorGetTextReq) (res *v1.BrowserExecutorGetTextRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

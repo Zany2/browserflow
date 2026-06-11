@@ -103,7 +103,7 @@ func buildDispatchTargets(ctx context.Context, workflowID string, dispatchMode s
 	switch dispatchMode {
 	case "node":
 		if clientIP == "" || nodeID == "" {
-			return nil, "指定节点调度必须同时选择客户端 IP 和执行节点", nil
+			return nil, "指定节点调度必须同时选择客户端和执行节点", nil
 		}
 		targetIdentity := nodeConnectionIdentity(clientIP, nodeID)
 		if !workflowcache.IsClientOnline(ctx, targetIdentity) {
@@ -117,7 +117,7 @@ func buildDispatchTargets(ctx context.Context, workflowID string, dispatchMode s
 		return []dispatchTarget{{ClientIP: clientIP, NodeID: nodeID}}, "", nil
 	case "ip":
 		if clientIP == "" {
-			return nil, "指定 IP 调度必须选择客户端 IP", nil
+			return nil, "指定客户端调度必须选择客户端", nil
 		}
 		targets, err := listWorkflowTargets(ctx, workflowID, func(item workflowcache.WorkflowItem) bool {
 			return strings.TrimSpace(item.SourceIp) == clientIP
@@ -126,7 +126,7 @@ func buildDispatchTargets(ctx context.Context, workflowID string, dispatchMode s
 			return nil, "", err
 		}
 		if len(targets) == 0 {
-			return nil, "该客户端 IP 下没有在线且拥有该工作流的执行节点", nil
+			return nil, "该客户端下没有在线且拥有该工作流的执行节点", nil
 		}
 		return targets, "", nil
 	case "group":

@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Zany2/browserflow/backend/api/workflows/v1"
@@ -16,7 +17,6 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/storage"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
-	"github.com/gogf/gf/v2/util/gconv"
 )
 
 // WorkflowDetail returns one local workflow detail 返回单个本地工作流详情
@@ -25,7 +25,7 @@ func (c *ControllerV1) WorkflowDetail(ctx context.Context, req *v1.WorkflowDetai
 	if consts.ResolveRuntimeMode(ctx) == consts.RuntimeModeServer {
 		columns := dao.AutomaWorkflows.Columns()
 		item := entity.AutomaWorkflows{}
-		if primaryID := gconv.Int64(req.ID); primaryID > 0 {
+		if primaryID, ok := parseWorkflowPrimaryID(req.ID); ok {
 			if err = dao.AutomaWorkflows.Ctx(ctx).WherePri(primaryID).Scan(&item); err != nil {
 				return nil, err
 			}
@@ -129,4 +129,18 @@ func (c *ControllerV1) WorkflowDetail(ctx context.Context, req *v1.WorkflowDetai
 	res.ContentHash = record.ContentHash
 	res.Revision = record.Revision
 	return res, nil
+}
+
+func parseWorkflowPrimaryID(id string) (int64, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return 0, false
+	}
+	for _, item := range id {
+		if item < '0' || item > '9' {
+			return 0, false
+		}
+	}
+	primaryID, err := strconv.ParseInt(id, 10, 64)
+	return primaryID, err == nil && primaryID > 0
 }

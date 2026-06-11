@@ -622,7 +622,7 @@ export function createAgentSocket({
     )
   }
 
-  // updateCurrentClientIp stores backend observed ip 保存后端识别到的客户端 IP
+  // updateCurrentClientIp stores backend observed ip 保存后端识别到的客户端
   const updateCurrentClientIp = (payload) => {
     const nextClientIp = payload?.client_ip || payload?.ip || payload?.client?.ip || payload?.remote_ip || ''
     if (nextClientIp) currentClientIp = nextClientIp

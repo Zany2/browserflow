@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorResize changes viewport size. BrowserExecutorResize 璋冩暣瑙嗗彛澶у皬銆?
+// BrowserExecutorResize changes viewport size. 调整视口大小。
 func (c *ControllerV1) BrowserExecutorResize(ctx context.Context, req *v1.BrowserExecutorResizeReq) (res *v1.BrowserExecutorResizeRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

@@ -7,7 +7,7 @@ import (
 	"github.com/Zany2/browserflow/backend/utility/browserexecutor"
 )
 
-// BrowserExecutorPageInfo gets active page info. BrowserExecutorPageInfo 閼惧嘲褰囪ぐ鎾冲妞ょ敻娼版穱鈩冧紖閵?
+// BrowserExecutorPageInfo gets active page info. 获取当前页面信息。
 func (c *ControllerV1) BrowserExecutorPageInfo(ctx context.Context, req *v1.BrowserExecutorPageInfoReq) (res *v1.BrowserExecutorPageInfoRes, err error) {
 	executor, err := browserexecutor.Current(ctx)
 	if err != nil {

@@ -266,6 +266,44 @@ func ListOnlineClients(ctx context.Context) ([]string, error) {
 	return clients, nil
 }
 
+// GetOnlineClientSet checks several node identities in one Redis round trip.
+func GetOnlineClientSet(ctx context.Context, clientIDs []string) (map[string]struct{}, error) {
+	seen := make(map[string]struct{}, len(clientIDs))
+	ids := make([]string, 0, len(clientIDs))
+	keys := make([]any, 0, len(clientIDs))
+	for _, clientID := range clientIDs {
+		clientID = strings.TrimSpace(clientID)
+		if clientID == "" {
+			continue
+		}
+		if _, ok := seen[clientID]; ok {
+			continue
+		}
+		seen[clientID] = struct{}{}
+		ids = append(ids, clientID)
+		keys = append(keys, clientOnlineKey(clientID))
+	}
+	if len(keys) == 0 {
+		return map[string]struct{}{}, nil
+	}
+
+	result, err := g.Redis().Do(ctx, "MGET", keys...)
+	if err != nil {
+		return nil, err
+	}
+
+	online := make(map[string]struct{}, len(ids))
+	for index, value := range result.Array() {
+		if index >= len(ids) {
+			break
+		}
+		if strings.TrimSpace(gconv.String(value)) != "" {
+			online[ids[index]] = struct{}{}
+		}
+	}
+	return online, nil
+}
+
 // ListClientNodes lists online node identities under one client IP.
 func ListClientNodes(ctx context.Context, clientIP string) ([]string, error) {
 	clientIP = strings.TrimSpace(clientIP)

@@ -1,4 +1,5 @@
 import request from '@/api/request'
+import { normalizeList } from '@/utils/list'
 
 export function listClients(params = {}) {
   return request({
@@ -6,6 +7,31 @@ export function listClients(params = {}) {
     params,
     showSuccessMessage: false,
   })
+}
+
+export async function listAllClients(params = {}) {
+  const rows = []
+  let pageNum = 1
+  let total = 0
+
+  do {
+    const data = await listClients({
+      ...params,
+      page_num: pageNum,
+      page_size: 60,
+    })
+    const list = normalizeList(data, 'clients')
+    rows.push(...list)
+    total = Number(data?.total || rows.length)
+    pageNum += 1
+    if (list.length === 0) break
+  } while (rows.length < total)
+
+  return {
+    list: rows,
+    clients: rows,
+    total: rows.length,
+  }
 }
 
 export function getClientDetail(id) {

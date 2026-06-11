@@ -23,7 +23,7 @@ import (
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
-// TaskExecute executes task 鎵ц浠诲姟
+// TaskExecute executes task 执行任务。
 func (c *ControllerV1) TaskExecute(ctx context.Context, req *v1.TaskExecuteReq) (res *v1.TaskExecuteRes, err error) {
 	taskID := gconv.Int64(req.ID)
 	taskColumns := dao.Tasks.Columns()
